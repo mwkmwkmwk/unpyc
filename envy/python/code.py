@@ -1,6 +1,8 @@
-from envy.format.marshal import MarshalCode
+from envy.format.marshal import MarshalCode, MarshalDict, MarshalString, MarshalInt
+from envy.python.bytecode import parse_lnotab
 
 from .expr import from_marshal
+from .helpers import PythonError
 
 from enum import Enum, IntEnum
 
@@ -56,6 +58,26 @@ class CodeType(Enum):
 
     The exact type of comprehension or genexp can be determined by looking
     at the source of the returned value.
+
+    There are also two kinds of code objects that you won't find in pyc files:
+    eval and single.  They are created by compile() function with mode set to
+    'eval' and 'single, respectively (passing 'exec' as mode creates an ordinary
+    module).  Confusingly, they all have name set to '<module>'.  Eval is like
+    lambda for modules: it's an unoptimized code object, and basically consists
+    of a single return statement (as opposed to normal modules, which always
+    return None).  Single is used for interactive mode: it consists of a single
+    source statement (though ; can be used to cheat that), and if the top-level
+    statement(s) merely compute an expression, they're changed to special print
+    statements (PRINT_EXPR opcode, impossible to come by in any other way).
+    Otherwise, it behaves like 'exec' mode.
+
+    If we were to support non-pyc sources of bytecode, eval is easy to tell
+    apart from exec/single: exec has multiple statments and synthetic "return
+    None" at the end, eval is single return statement.  The exception is that
+    empty exec can't be distinguished from 'None' eval.  Exec can be
+    distinguished from single iff there was a top-level expression statement
+    (PRINT_EXPR vs POP_TOP), or if there are multiple top-level statements
+    and they're not on the same line (can only happen for exec).
     """
     module = ()
 
@@ -86,6 +108,35 @@ class CodeFlag(IntEnum):
     future_unicode_literals = 1 << 17
     future_barry_as_flufl = 1 << 18
 
+
+class CodeDict:
+    """Special class for dicts found in consts tab.
+
+    They, as mutable objects, aren't ever emitted directly for user
+    expressions - thus we don't map them to ExprDict.  However, ancient pythons
+    use them as arguments for RESERVE_FAST.
+    """
+    __slots__ = 'val',
+
+    def __init__(self, val):
+        self.val = []
+        for k, v in val:
+            if not isinstance(k, MarshalString):
+                raise PythonError("CodeDict key not string")
+            if not isinstance(v, MarshalInt):
+                raise PythonError("CodeDict value not int")
+            self.val.append((k.val.decode('ascii'), v.val))
+
+    def show(self, level):
+        return 'DICT\n{}'.format(
+            ''.join(
+                '{}{}: {}\n'.format(
+                    '\t' * (level + 1),
+                    key, val
+                )
+                for key, val in self.val
+            )
+        )
 
 class Code:
     __slots__ = (
@@ -134,30 +185,11 @@ class Code:
             raise PythonError("Unk flags {:x}".format(obj.flags & ~reflags))
         # varnames
         self.varnames = obj.varnames
-        if obj.nlocals != len(obj.varnames):
-            raise PythonError("Strange nlocals")
+        # XXX flag behavior noticed on 2.1.3 - wtf?
+        if CodeFlag.newlocals in self.flags and obj.nlocals != len(obj.varnames):
+            raise PythonError("Strange nlocals: {} {}".format(obj.nlocals, obj.varnames))
         # args
-        if obj.argcount + obj.kwonlyargcount > obj.nlocals:
-            raise PythonError("More args than locals")
-        argidx = 0
-        self.args = self.varnames[argidx:argidx + obj.argcount]
-        argidx += obj.argcount
-        self.kwargs = self.varnames[argidx:argidx + obj.kwonlyargcount]
-        argidx += obj.kwonlyargcount
-        if CodeFlag.varargs in self.flags:
-            if argidx == obj.nlocals:
-                raise PythonError("More args than locals")
-            self.varargs = self.varnames[argidx]
-            argidx += 1
-        else:
-            self.varargs = None
-        if CodeFlag.varkeywords in self.flags:
-            if argidx == obj.nlocals:
-                raise PythonError("More args than locals")
-            self.varkw = self.varnames[argidx]
-            argidx += 1
-        else:
-            self.varkw = None
+        self._init_args(obj)
         # freevars & cellvars
         self.freevars = obj.freevars
         self.cellvars = obj.cellvars
@@ -168,21 +200,59 @@ class Code:
         for const in obj.consts:
             if isinstance(const, MarshalCode):
                 self.consts.append(Code(const, version))
+            elif isinstance(const, MarshalDict):
+                self.consts.append(CodeDict(const.val))
             else:
                 self.consts.append(from_marshal(const))
         # names
         self.names = obj.names
-        # XXX
-        self.code = obj.code
+        # firstlineno is not the same as the first line of code, store it separately
         self.firstlineno = obj.firstlineno
-        self.lnotab = obj.lnotab
+        # line numbers
+        if self.firstlineno is None:
+            self.lnotab = None
+        else:
+            self.lnotab = parse_lnotab(obj.firstlineno, obj.lnotab, len(obj.code))
         # XXX code
-        # XXX line numbers
+        self.code = obj.code
+
+    def _init_args(self, obj):
+        if obj.argcount is None:
+            # python < 1.3
+            self.args = []
+            self.kwargs = []
+            self.varargs = None
+            self.varkw = None
+        else:
+            if obj.argcount + obj.kwonlyargcount > obj.nlocals:
+                raise PythonError("More args than locals")
+            argidx = 0
+            self.args = self.varnames[argidx:argidx + obj.argcount]
+            argidx += obj.argcount
+            self.kwargs = self.varnames[argidx:argidx + obj.kwonlyargcount]
+            argidx += obj.kwonlyargcount
+            if CodeFlag.varargs in self.flags:
+                if argidx == obj.nlocals:
+                    raise PythonError("More args than locals")
+                self.varargs = self.varnames[argidx]
+                argidx += 1
+            else:
+                self.varargs = None
+            if CodeFlag.varkeywords in self.flags:
+                if argidx == obj.nlocals:
+                    raise PythonError("More args than locals")
+                self.varkw = self.varnames[argidx]
+                argidx += 1
+            else:
+                self.varkw = None
 
     def show(self, level):
         res = []
+        # name
         res.append('name: {} from {}'.format(self.name, self.filename))
+        # flags
         res.append('flags: {}'.format(', '.join(flag.name for flag in self.flags)))
+        # args
         args = self.args[:]
         if self.varargs is not None:
             args.append('*{}'.format(self.varargs))
@@ -194,23 +264,28 @@ class Code:
             args.append('**{}'.format(self.varkw))
         if args:
             res.append('args: {}'.format(', '.join(args)))
+        # vars
         if self.varnames:
             res.append('vars: {}'.format(', '.join(self.varnames)))
         if self.freevars:
             res.append('freevars: {}'.format(', '.join(self.freevars)))
         if self.cellvars:
             res.append('cellvars: {}'.format(', '.join(self.cellvars)))
+        # consts
         res.append('consts:')
         for idx, const in enumerate(self.consts):
-            if isinstance(const, Code):
+            if isinstance(const, (Code, CodeDict)):
                 res.append('\t{}: {}'.format(idx, const.show(level+2)))
             else:
                 res.append('\t{}: {}'.format(idx, const.show(self.version, None)))
+        # and the actual bytecode
         import binascii
         if self.names:
             res.append('names: {}'.format(', '.join(self.names)))
         res.append("code: {} {}".format(self.stacksize, binascii.hexlify(self.code).decode('ascii')))
-        res.append("line: {} {}".format(self.firstlineno, binascii.hexlify(self.lnotab).decode('ascii')))
+        if self.firstlineno is not None:
+            res.append("line: {} {}".format(self.firstlineno, self.lnotab))
+        # put it all together
         return 'CODE\n{}'.format(
             ''.join(
                 '{}{}\n'.format(

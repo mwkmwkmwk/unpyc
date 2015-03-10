@@ -149,7 +149,7 @@ class MarshalDict(MarshalNode):
         self.val = val
 
     def __str__(self):
-        return '{{{}}}'.format(', '.join('{}: {}'.format(k, v) for k, v in self.val.items()))
+        return '{{{}}}'.format(', '.join('{}: {}'.format(k, v) for k, v in self.val))
 
 
 class MarshalSet(MarshalNode):
@@ -214,10 +214,14 @@ class MarshalCode(MarshalNode):
         print("{}cellvars: {}".format(pref, ', '.join(self.cellvars)))
         print("{}filename: {}".format(pref, self.filename))
         print("{}name: {}".format(pref, self.name))
-        print("{}lines: {} then {}".format(pref, self.firstlineno, binascii.b2a_hex(self.lnotab)))
+        if self.firstlineno is not None:
+            print("{}lines: {} then {}".format(pref, self.firstlineno, binascii.b2a_hex(self.lnotab)))
 
 
 # reader
+
+def load_null(ctx, flag):
+    return MarshalNull()
 
 def load_none(ctx, flag):
     return MarshalNone()
@@ -250,14 +254,25 @@ def load_long(ctx, flag):
         type_ = MarshalLong
     return ctx.ref(type_(res), flag)
 
+def load_float(ctx, flag):
+    len_ = ctx.byte()
+    res = float(ctx.bytes(len_).decode('ascii'))
+    return ctx.ref(MarshalFloat(res), flag)
+
+def load_complex(ctx, flag):
+    len_ = ctx.byte()
+    re = float(ctx.bytes(len_).decode('ascii'))
+    len_ = ctx.byte()
+    im = float(ctx.bytes(len_).decode('ascii'))
+    return ctx.ref(MarshalComplex(complex(re, im)), flag)
+
 def load_bin_float(ctx, flag):
     res, = struct.unpack('<d', ctx.bytes(8))
     return ctx.ref(MarshalFloat(res), flag)
 
 def load_bin_complex(ctx, flag):
-    r, = struct.unpack('<d', ctx.bytes(8))
-    i, = struct.unpack('<d', ctx.bytes(8))
-    return ctx.ref(MarshalFloat(complex(r, i)), flag)
+    re, im = struct.unpack('<dd', ctx.bytes(16))
+    return ctx.ref(MarshalComplex(complex(re, im)), flag)
 
 def load_string(ctx, flag):
     len_ = ctx.le4()
@@ -300,27 +315,85 @@ def load_small_tuple(ctx, flag):
 def load_tuple(ctx, flag):
     return _load_raw_tuple(ctx, flag, ctx.le4())
 
+def load_list(ctx, flag):
+    len_ = ctx.le4()
+    res = MarshalList([])
+    ctx.ref(res, flag)
+    for x in range(len_):
+        res.val.append(ctx.load_object())
+    return res
+
+def load_frozenset(ctx, flag):
+    len_ = ctx.le4()
+    res = MarshalFrozenset([])
+    ctx.ref(res, flag)
+    for x in range(len_):
+        res.val.append(ctx.load_object())
+    return res
+
+def load_dict(ctx, flag):
+    res = MarshalDict([])
+    ctx.ref(res, flag)
+    while True:
+        key = ctx.load_object()
+        if isinstance(key, MarshalNull):
+            break
+        val = ctx.load_object()
+        res.val.append((key, val))
+    return res
+
+def load_ancient_code(ctx, flag):
+    res = MarshalCode()
+    ctx.ref(res, flag)
+    res.argcount = None
+    res.kwonlyargcount = 0
+    res.nlocals = 0
+    res.stacksize = None
+    res.flags = 0
+    res.code = ctx.load_bytes()
+    res.consts = ctx.load_tuple()
+    res.names = ctx.load_str_tuple()
+    res.varnames = []
+    res.freevars = []
+    res.cellvars = []
+    res.filename = ctx.load_str()
+    res.name = ctx.load_str(True)
+    res.firstlineno = None
+    res.lnotab = None
+    return res
+
 def load_code(ctx, flag):
     res = MarshalCode()
     ctx.ref(res, flag)
-    res.argcount = ctx.le4()
+    res.argcount = ctx.lea()
     if ctx.version.py3k:
         res.kwonlyargcount = ctx.le4()
     else:
         res.kwonlyargcount = 0
-    res.nlocals = ctx.le4()
-    res.stacksize = ctx.le4()
-    res.flags = ctx.le4()
+    res.nlocals = ctx.lea()
+    if ctx.version.has_stacksize:
+        res.stacksize = ctx.lea()
+    else:
+        res.stacksize = None
+    res.flags = ctx.lea()
     res.code = ctx.load_bytes()
     res.consts = ctx.load_tuple()
     res.names = ctx.load_str_tuple()
     res.varnames = ctx.load_str_tuple()
-    res.freevars = ctx.load_str_tuple()
-    res.cellvars = ctx.load_str_tuple()
+    if ctx.version.has_closure:
+        res.freevars = ctx.load_str_tuple()
+        res.cellvars = ctx.load_str_tuple()
+    else:
+        res.freevars = []
+        res.cellvars = []
     res.filename = ctx.load_str()
     res.name = ctx.load_str()
-    res.firstlineno = ctx.le4()
-    res.lnotab = ctx.load_bytes()
+    if ctx.version.has_stacksize:
+        res.firstlineno = ctx.lea()
+        res.lnotab = ctx.load_bytes()
+    else:
+        res.firstlineno = None
+        res.lnotab = None
     return res
 
 def load_ref(ctx, flag):
@@ -333,10 +406,10 @@ def load_ref(ctx, flag):
 
 MARSHAL_CODES = {
     # not supported:
-    # '0' (NULL)
     # 'S' (StopIteration)
-    # 'f', 'x' (string float and complex)
-    # '[', '{', '<', '>' (list, dict, set, frozenset)
+    # '<', '>' (list, dict, set, frozenset)
+
+    ord('0'): load_null,
 
     ord('N'): load_none,
     ord('T'): load_true,
@@ -346,7 +419,9 @@ MARSHAL_CODES = {
     ord('i'): load_int,
     ord('I'): load_int64,
     ord('l'): load_long,
+    ord('f'): load_float,
     ord('g'): load_bin_float,
+    ord('x'): load_complex,
     ord('y'): load_bin_complex,
 
     ord('s'): load_string,
@@ -360,7 +435,11 @@ MARSHAL_CODES = {
 
     ord(')'): load_small_tuple,
     ord('('): load_tuple,
+    ord('['): load_list,
+    ord('>'): load_frozenset,
+    ord('{'): load_dict,
 
+    ord('C'): load_ancient_code,
     ord('c'): load_code,
     ord('r'): load_ref,
 }
@@ -387,8 +466,12 @@ class MarshalContext:
 
     def load_tuple(self):
         obj = self.load_object()
-        if not isinstance(obj, MarshalTuple):
-            raise MarshalError("tuple expected, got {}".format(type(obj)))
+        if self.version.consts_is_list:
+            typ = MarshalList
+        else:
+            typ = MarshalTuple
+        if not isinstance(obj, typ):
+            raise MarshalError("{} expected, got {}".format(typ, type(obj)))
         return obj.val
 
     def load_bytes(self):
@@ -397,7 +480,9 @@ class MarshalContext:
             raise MarshalError("bytes expected, got {}".format(type(obj)))
         return obj.val
 
-    def pass_str(self, obj):
+    def pass_str(self, obj, nullable=False):
+        if isinstance(obj, MarshalNone) and nullable:
+            return None
         if self.version.py3k:
             if not isinstance(obj, MarshalUnicode):
                 raise MarshalError("string expected, got {}".format(type(obj)))
@@ -407,17 +492,17 @@ class MarshalContext:
                 raise MarshalError("string expected, got {}".format(type(obj)))
             return obj.val.decode('ascii')
 
-    def load_str(self):
-        return self.pass_str(self.load_object())
+    def load_str(self, nullable=False):
+        return self.pass_str(self.load_object(), nullable)
 
     def load_str_tuple(self):
-        obj = self.load_object()
-        if not isinstance(obj, MarshalTuple):
-            raise MarshalError("tuple expected, got {}".format(type(obj)))
-        return [self.pass_str(x) for x in obj.val]
+        return [self.pass_str(x) for x in self.load_tuple()]
 
     def le2(self):
         return read_le(self.fp, 2)
+
+    def lea(self):
+        return read_le(self.fp, 4 if self.version.has_le4 else 2)
 
     def le4(self):
         return read_le(self.fp, 4)

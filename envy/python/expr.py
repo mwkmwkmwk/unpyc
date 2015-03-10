@@ -9,6 +9,7 @@ from envy.format.marshal import (
     MarshalString,
     MarshalUnicode,
     MarshalTuple,
+    MarshalFrozenset,
 )
 
 from .helpers import PythonError
@@ -115,6 +116,17 @@ class ExprTuple(Expr):
         return '({}{})'.format(', '.join(v.show(version, ctx) for v in self.val), ',' if len(self.val) == 1 else '')
 
 
+class ExprFrozenset(Expr):
+    __slots__ = 'val',
+
+    def __init__(self, val):
+        self.val = val
+
+    def show(self, version, ctx):
+        # XXX
+        return '$frozenset([{}])'.format(', '.join(v.show(version, ctx) for v in self.val))
+
+
 def from_marshal(obj):
     if isinstance(obj, MarshalNone):
         return ExprNone()
@@ -136,4 +148,6 @@ def from_marshal(obj):
         return ExprUnicode(obj.val)
     if isinstance(obj, MarshalTuple):
         return ExprTuple([from_marshal(sub) for sub in obj.val])
+    if isinstance(obj, MarshalFrozenset):
+        return ExprFrozenset([from_marshal(sub) for sub in obj.val])
     raise PythonError("can't map {} to expression".format(type(obj)))

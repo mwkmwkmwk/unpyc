@@ -5,10 +5,12 @@ import sys
 from envy.format.pyc import PycFile
 from envy.python.code import Code
 
-with open(sys.argv[1], 'rb') as fp:
-    pyc = PycFile(fp)
+for fname in sys.argv[1:]:
+    print("{}...".format(fname))
+    with open(fname, 'rb') as fp:
+        pyc = PycFile(fp)
 
-#pyc.print()
+    pyc.print()
 
-code = Code(pyc.code, pyc.version)
-sys.stdout.write(code.show(0))
+    code = Code(pyc.code, pyc.version)
+    sys.stdout.write(code.show(0))

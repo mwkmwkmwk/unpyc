@@ -14,6 +14,10 @@ from envy.format.marshal import (
 
 from .helpers import PythonError
 
+# TODO: print unicode/byte strings as appropriate for the python version
+# TODO: context-aware printing
+# TODO: nuke frozenset from load_from_marshal
+
 
 class Expr:
     __slots__ = ()

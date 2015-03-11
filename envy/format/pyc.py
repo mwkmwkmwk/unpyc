@@ -36,13 +36,21 @@ class Pyc10(PycVersion):
     code = 0x999902
     name = "Python 1.0"
 
-    has_U = False
     consts_is_list = True
-    has_size = False
-    py3k = False
+    has_new_code = False
+    has_ellipsis = False
     has_stacksize = False
-    has_le4 = False
+    has_U = False
     has_closure = False
+    has_le4 = False
+    has_str_intern = False
+    has_frozenset = False
+    has_bin_float = False
+    py3k = False
+    has_bool_literal = False
+    has_size = False
+    has_marshal_opt = False
+    has_marshal_ref = False
 
 class Pyc11(Pyc10):
     code = 0x999903
@@ -50,9 +58,9 @@ class Pyc11(Pyc10):
     consts_is_list = False
 
 class Pyc13(Pyc11):
-    """Introduces new marshal code type"""
     code = v(11913)
     name = "Python 1.3"
+    has_new_code = True
 
 class Pyc14(Pyc13):
     """Introduces complex, ellipsis, 3-arg slices, ** operator.
@@ -60,6 +68,7 @@ class Pyc14(Pyc13):
     """
     code = v(5892)
     name = "Python 1.4"
+    has_ellipsis = True
 
 class Pyc15(Pyc14):
     """Introduces stacksize and lnotab."""
@@ -98,6 +107,7 @@ class Pyc24(Pyc23):
     # 62051 used in a3
     code = v(62061)
     name = "Python 2.4"
+    has_str_intern = True
 
 class Pyc25(Pyc24):
     # 62071 used in prealpha
@@ -109,6 +119,8 @@ class Pyc25(Pyc24):
     # 62121 used in c1
     code = v(62131)
     name = "Python 2.5"
+    has_frozenset = True
+    has_bin_float = True
 
 class Pyc26(Pyc25):
     # 62151 used in prealpha
@@ -134,13 +146,21 @@ class Pyc30(PycVersion):
     code = v(3131)
     name = "Python 3.0"
 
-    has_U = False
     consts_is_list = False
-    has_size = False
-    py3k = True
+    has_new_code = True
+    has_ellipsis = True
     has_stacksize = True
-    has_le4 = True
+    has_U = False
     has_closure = True
+    has_le4 = True
+    has_str_intern = False
+    has_frozenset = True
+    has_bin_float = True
+    py3k = True
+    has_bool_literal = True
+    has_size = False
+    has_marshal_opt = False
+    has_marshal_ref = False
 
 class Pyc31(Pyc30):
     # 3141 used in prealpha
@@ -169,6 +189,8 @@ class Pyc34(Pyc33):
     # 3300 used in a4, betas, rc1
     code = v(3310)
     name = "Python 3.4"
+    has_marshal_opt = True
+    has_marshal_ref = True
 
 class Pyc35(Pyc34):
     # currently in alpha stage

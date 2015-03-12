@@ -1,5 +1,5 @@
 from envy.format.marshal import MarshalCode, MarshalDict, MarshalString, MarshalInt
-from envy.python.bytecode import parse_lnotab
+from envy.python.bytecode import parse_lnotab, Bytecode
 
 from .expr import from_marshal
 from .helpers import PythonError
@@ -161,7 +161,7 @@ class Code:
         'consts',
         'names',
 
-        # XXX
+        'rawcode',
         'code',
         'firstlineno',
         'lnotab',
@@ -213,8 +213,9 @@ class Code:
             self.lnotab = None
         else:
             self.lnotab = parse_lnotab(obj.firstlineno, obj.lnotab, len(obj.code))
-        # XXX code
-        self.code = obj.code
+        # code
+        self.rawcode = obj.code
+        self.code = Bytecode(version, self)
 
     def _init_args(self, obj):
         if obj.argcount is None:
@@ -282,7 +283,11 @@ class Code:
         import binascii
         if self.names:
             res.append('names: {}'.format(', '.join(self.names)))
-        res.append("code: {} {}".format(self.stacksize, binascii.hexlify(self.code).decode('ascii')))
+        if self.stacksize is not None:
+            res.append("stacksize: {}".format(self.stacksize))
+        res.append("code:")
+        for op in self.code.ops:
+            res.append("\t{}".format(op))
         if self.firstlineno is not None:
             res.append("line: {} {}".format(self.firstlineno, self.lnotab))
         # put it all together

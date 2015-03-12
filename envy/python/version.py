@@ -1,0 +1,210 @@
+"""The big list of Python versions, with their features relevant for
+decompilation.
+
+The pyc files start with a signature that determines the version.  Before
+Python 1.3, the signature is 0x9999XX, where XX is a serial number.  Since 1.3,
+signature has a unique number in low 16 bits, '\r\n' in high 16 bits.
+
+We support all final versions of Python since 1.0.1.  Since stackless makes
+no changes to the bytecode format, it's supported as well.  In other words, we
+*don't* support:
+
+- Python 0.9.x (good luck compiling them, the CVS history is pretty fucked up
+  for them and there are missing files)
+- alpha, beta, and rc releases (though it could be done rather easily)
+- arbitrary svn/hg revisions
+- anything that's not official CPython (or stackless): modified versions of
+  the interpreter, PyPy, Jython, any other implementation.
+
+Side note: apparently, MPW (MacOS C compiler) has \r and \n swapped.  This is,
+in fact, the reason for incorporating \r\n in the signature.  So, in theory
+there are pyc files with these bytes swapped in the header, and they differ
+by having \r and \n backwards.  Which, of course, is impossible to properly
+decompile - you have no way of knowing whether a \n in a sting is really
+a \n in the source, or \x0a used for its exact byte value.  Such files are,
+effectively, hopelessly mangled.
+
+Python 1.2, instead of incorporating these into the signature verbatim,
+considers the signature to be (0x999903L ^ (('\n'^10L)<<16) ^ (('\r'^13L)<<8)),
+so that it comes out identical to 1.1 on sane platforms.  So we could also
+come across a file with signature 0x9e9e03 - this is Python 1.2 with mangled
+newlines.  Python 1.1 and earlier don't care about this brain damage.
+
+Anyhow, it's a mess.  If you somehow happen to come across such a file, you're
+on your own.
+"""
+
+PYC_VERSIONS = {}
+
+def _v(x):
+    """Build 1.3+ signature."""
+    return x | 0x0a0d0000
+
+class PycVersion:
+    def __init__(self, name, bases, namespace):
+        for base in bases:
+            self.__dict__.update(base.__dict__)
+        self.__dict__.update(namespace)
+        if hasattr(self, 'code'):
+            PYC_VERSIONS[self.code] = self
+            if self.has_U:
+                PYC_VERSIONS[self.code + 1] = self
+
+# 0x949494 used in 0.9.8, ??? used before
+# 0x999901 used in 0.9.9
+
+# Python 1
+
+class Pyc10(metaclass=PycVersion):
+    code = 0x999902
+    name = "Python 1.0"
+
+    consts_is_list = True
+    has_new_code = False
+    has_ellipsis = False
+    has_stacksize = False
+    has_U = False
+    has_closure = False
+    has_le4 = False
+    has_str_intern = False
+    has_frozenset = False
+    has_bin_float = False
+    py3k = False
+    has_bool_literal = False
+    has_size = False
+    has_marshal_opt = False
+    has_marshal_ref = False
+
+class Pyc11(Pyc10):
+    code = 0x999903
+    name = "Python 1.1/1.2"
+    consts_is_list = False
+
+class Pyc13(Pyc11):
+    code = _v(11913)
+    name = "Python 1.3"
+    has_new_code = True
+
+class Pyc14(Pyc13):
+    """Introduces complex, ellipsis, 3-arg slices, ** operator.
+    Gets rid of access support.
+    """
+    code = _v(5892)
+    name = "Python 1.4"
+    has_ellipsis = True
+
+class Pyc15(Pyc14):
+    """Introduces stacksize and lnotab."""
+    code = _v(20121)
+    name = "Python 1.5"
+    has_stacksize = True
+
+class Pyc16(Pyc15):
+    code = _v(50428)
+    name = "Python 1.6"
+
+# Python 2
+
+class Pyc20(Pyc16):
+    code = _v(50823)
+    name = "Python 2.0"
+    has_U = True
+
+class Pyc21(Pyc20):
+    code = _v(60202)
+    name = "Python 2.1"
+    has_closure = True
+
+class Pyc22(Pyc21):
+    code = _v(60717)
+    name = "Python 2.2"
+
+class Pyc23(Pyc22):
+    # 62021 used in prealpha
+    code = _v(62011)
+    name = "Python 2.3"
+    has_le4 = True
+
+class Pyc24(Pyc23):
+    # 62041 used in a1-a2
+    # 62051 used in a3
+    code = _v(62061)
+    name = "Python 2.4"
+    has_str_intern = True
+
+class Pyc25(Pyc24):
+    # 62071 used in prealpha
+    # 62081 used in prealpha
+    # 62091 used in prealpha
+    # 62092 used in alphas and b1-b2
+    # 62101 used in unreleased beta
+    # 62111 used in b3
+    # 62121 used in c1
+    code = _v(62131)
+    name = "Python 2.5"
+    has_frozenset = True
+    has_bin_float = True
+
+class Pyc26(Pyc25):
+    # 62151 used in prealpha
+    code = _v(62161)
+    name = "Python 2.6"
+
+class Pyc27(Pyc26):
+    # 62171 used in preaplha
+    # 62181 used in preaplha
+    # 62191 used in preaplha
+    # 62201 used in preaplha
+    code = _v(62211)
+    name = "Python 2.7"
+
+# Python 3
+
+# 3000, 3010, 3020, 3030, 3040, 3050, 3060, 3061, 3071, 3081, 3091, 3101
+# used in development branch
+
+class Pyc30(Pyc27):
+    # 3103 used in a1-a3
+    # 3111 used in a4
+    code = _v(3131)
+    name = "Python 3.0"
+
+    has_U = False
+    has_str_intern = False
+    py3k = True
+    has_bool_literal = True
+
+class Pyc31(Pyc30):
+    # 3141 used in prealpha
+    code = _v(3151)
+    name = "Python 3.1"
+
+class Pyc32(Pyc31):
+    # 3160 used in prealpha
+    # 3170 used in a1
+    code = _v(3180)
+    name = "Python 3.2"
+
+class Pyc33(Pyc32):
+    # 3190 used in prealpha
+    # 3200 used in prealpha
+    # 3210 used in prealpha
+    # 3220 used in a1-a3
+    code = _v(3230)
+    name = "Python 3.3"
+    has_size = True
+
+class Pyc34(Pyc33):
+    # 3250, 3260, 3270 used in prealpha
+    # 3280 used in a1-a3
+    # 3290 used in unreleased alpha
+    # 3300 used in a4, betas, rc1
+    code = _v(3310)
+    name = "Python 3.4"
+    has_marshal_opt = True
+    has_marshal_ref = True
+
+class Pyc35(Pyc34):
+    # currently in alpha stage
+    code = _v(3320)
+    name = "Python 3.5"

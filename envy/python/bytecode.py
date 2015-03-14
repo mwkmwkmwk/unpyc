@@ -587,17 +587,23 @@ class OpcodeSetupFinally(OpcodeParamRel):
 
 class OpcodeReserveFast(Opcode):
     """Prepares fast slots. Arg is a const: dict or None."""
-    __slots__ = 'const',
+    __slots__ = 'names',
     code = 123
     name = 'RESERVE_FAST'
 
     def read_params(self, bytecode):
         # TODO
         from .code import CodeDict
-        self.const, _ = bytecode.get_const((CodeDict, ExprNone))
+        const, _ = bytecode.get_const((CodeDict, ExprNone))
+        if isinstance(const, CodeDict):
+            self.names = const.names
+        elif isinstance(const, ExprNone):
+            self.names = []
+        else:
+            assert False
 
     def print_params(self):
-        return self.const
+        return ', '.join(self.names)
 
     # TODO version_ok
 

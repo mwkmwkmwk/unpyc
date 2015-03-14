@@ -9,11 +9,11 @@ as follows:
    structures similiar to those used by Python internally at runtime.
 2. envy.python.code and .bytecode walk the structures and parse the bytecode
    embedded in code objects - we effectively get a disassembler at this point.
-3. envy.python.deco turns the opcode lists into statements, gradually merging
-   them and connecting the blocks together.  The code at this stage is in
-   a superset of Python that retains some minute detail from the bytecode.
-4. envy.python.ast converts the code into python AST and puts finishing touches
-   on it.  The AST is then printed.
+3. envy.python.deco turns the opcode lists into statements, using a funny
+   stack automaton.  The code at this stage is in a superset of Python that
+   retains some minute detail from the bytecode.
+4. envy.python.ast converts the code into proper python AST and puts finishing
+   touches on it.  The AST is then printed.
 
 While decompilation is fairly accurate, some information is irreversibly lost:
 
@@ -70,7 +70,8 @@ import sys
 
 from envy.format.pyc import PycFile
 from envy.python.code import Code
-from envy.python.deco import DecoCode
+from envy.python.deco import deco_code
+from envy.python.ast import ast_process
 
 for fname in sys.argv[1:]:
     print("{}...".format(fname))
@@ -85,6 +86,10 @@ for fname in sys.argv[1:]:
     #for line in code.show():
     #    print(line)
 
-    deco = DecoCode(code)
-    for line in deco.show():
+    deco = deco_code(code)
+    #for line in deco.show():
+    #    print(line)
+
+    ast = ast_process(deco)
+    for line in ast.show():
         print(line)

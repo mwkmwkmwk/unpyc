@@ -3,37 +3,42 @@ from collections import namedtuple
 from .helpers import PythonError
 from .stmt import *
 from .expr import *
+from .code import Code
 from .bytecode import *
 
 # TODO:
 #
 # - validate inflows
-# - nuke version from exprs
 # - clean expr
 # - clean up the stack item mess
 # - contexts for expressions dammit
-# - access
-# - try except
-# - figure out function/class descend
 # - simplify if
-# - do something about fast
-# - class body decompilation
-# - function body decompilation
-# - lambda body decompilation
 # - bump as many versions as easily possible
 # - figure out what to do about line numbers
+# - access prettyprint modes
 #
 # and for prettifier:
 #
-# - punt exec/raise None detection?
-# - merge print statements
-# - merge import statements
-# - deal with name types
-# - create elifs
-# - get rid of $loop [XXX: or move it?]
+# - names:
+#
+#   - deal with name types
+#   - stuff 'global' somewhere
+#
 # - decide same/different line
 # - get rid of return None
-# - stuff 'global' somewhere
+# - clean statements:
+#
+#   - raise/exec None detection
+#   - punt exec/raise None detection?
+#   - create elifs
+#   - get rid of $loop
+#   - get rid of $single
+#
+# - merge statements:
+#
+#   - import
+#   - access
+#   - print
 
 # dummy opcode for inflow
 
@@ -49,6 +54,8 @@ FromImport = namedtuple('FromImport', ['name', 'items'])
 MultiAssign = namedtuple('MultiAssign', ['src', 'dsts'])
 MultiAssignDup = namedtuple('MultiAssignDup', ['src', 'dsts'])
 UnpackSlot = namedtuple('UnpackSlot', ['expr', 'idx'])
+UnpackArgSlot = namedtuple('UnpackArgSlot', ['args', 'idx'])
+UnpackVarargSlot = namedtuple('UnpackVarargSlot', ['args'])
 JumpIfFalse = namedtuple('JumpIfFalse', ['expr', 'target'])
 JumpIfTrue = namedtuple('JumpIfTrue', ['expr', 'target'])
 IfStart = namedtuple('IfStart', ['expr', 'target'])
@@ -65,12 +72,25 @@ WantRotTwo = namedtuple('WantRotTwo', [])
 WantInflow = namedtuple('WantInflow', [])
 SetupLoop = namedtuple('SetupLoop', ['end'])
 SetupFinally = namedtuple('SetupFinally', ['pos', 'end'])
-Loop = namedtuple('Loop', ['src', 'dst'])
+SetupExcept = namedtuple('SetupExcept', ['pos', 'end'])
+Loop = namedtuple('Loop', ['src', 'dst', 'cont'])
 While = namedtuple('While', ['expr', 'end', 'block'])
 ForStart = namedtuple('ForStart', ['expr', 'loop', 'end'])
 ForLoop = namedtuple('ForLoop', ['expr', 'dst', 'loop', 'end'])
 TryFinallyPending = namedtuple('TryFinallyPending', ['body', 'pos', 'end'])
 TryFinally = namedtuple('TryFinally', ['body'])
+TryExceptEndTry = namedtuple('TryExceptEndTry', ['setup', 'body'])
+TryExceptPending = namedtuple('TryExceptPending', ['setup', 'end', 'body'])
+TryExceptMid = namedtuple('TryExceptMid', ['end', 'body', 'items'])
+TryExceptMatchStart = namedtuple('TryExceptMatchStart', ['end', 'body', 'items'])
+TryExceptMatchMid = namedtuple('TryExceptMatchMid', ['end', 'body', 'items', 'expr'])
+TryExceptMatchOk = namedtuple('TryExceptMatchOk', ['end', 'body', 'items', 'expr', 'next'])
+TryExceptMatch = namedtuple('TryExceptMatch', ['end', 'body', 'items', 'expr', 'dst', 'next'])
+TryExceptJoin = namedtuple('TryExceptJoin', ['end', 'body', 'items', 'next'])
+TryExceptAnyPending = namedtuple('TryExceptAnyPending', ['end', 'body', 'items'])
+TryExceptAny = namedtuple('TryExceptAny', ['end', 'body', 'items', 'any'])
+UnaryCall = namedtuple('UnaryCall', ['code'])
+Locals = namedtuple('Locals', [])
 
 # visitors
 
@@ -125,7 +145,7 @@ def _store_visitor(op, *stack):
         @_stmt_visitor(op, Expr, *stack)
         def visit_store_assign(self, deco, src, *args):
             dst, extra = func(self, deco, *args)
-            return StmtAssign(deco.version, [dst], src), extra
+            return StmtAssign([dst], src), extra
 
         @_visitor(op, Block, Dup, *stack)
         def visit_store_multi_start(self, deco, block, dup, *args):
@@ -142,19 +162,41 @@ def _store_visitor(op, *stack):
         def visit_store_multi_end(self, deco, multi, *args):
             dst, extra = func(self, deco, *args)
             multi.dsts.append(dst)
-            stmt = StmtAssign(deco.version, multi.dsts, multi.src)
+            stmt = StmtAssign(multi.dsts, multi.src)
             return stmt, extra
 
         @_visitor(op, UnpackSlot, *stack)
-        def visit_store_multi_start(self, deco, slot, *args):
+        def visit_store_unpack(self, deco, slot, *args):
             dst, extra = func(self, deco, *args)
             slot.expr.exprs[slot.idx] = dst
+            return extra
+
+        @_visitor(op, UnpackArgSlot, *stack)
+        def visit_store_unpack_arg(self, deco, slot, *args):
+            dst, extra = func(self, deco, *args)
+            slot.args.args[slot.idx] = dst
+            return extra
+
+        @_visitor(op, UnpackVarargSlot, *stack)
+        def visit_store_unpack_vararg(self, deco, slot, *args):
+            dst, extra = func(self, deco, *args)
+            slot.args.vararg = dst
             return extra
 
         @_visitor(op, ForStart, *stack)
         def visit_store_multi_start(self, deco, start, *args):
             dst, extra = func(self, deco, *args)
             return [ForLoop(start.expr, dst, start.loop, start.end), Block([])] + extra
+
+        @_visitor(op, TryExceptMatchOk, *stack)
+        def _visit_except_match_store(self, deco, try_, *args):
+            dst, extra = func(self, deco, *args)
+            return [TryExceptMatch(try_.end, try_.body, try_.items, try_.expr, dst, try_.next), Block([]), WantPop()] + extra
+
+        @_stmt_visitor(op, Import, *stack)
+        def _visit_store_name_import(self, deco, import_, *args):
+            dst, extra = func(self, deco, *args)
+            return StmtImport(import_.name, dst), extra
 
         return func
     return inner
@@ -176,7 +218,7 @@ def _lsd_visitor(op_load, op_store, op_delete, *stack):
         @_stmt_visitor(op_delete, *stack)
         def visit_lsd_delete(self, deco, *args):
             dst = func(self, deco, *args)
-            return StmtDel(deco.version, dst), []
+            return StmtDel(dst), []
 
         return func
     return inner
@@ -214,7 +256,7 @@ def visit_dup_top(self, deco, expr, dup):
 def _register_unary(otype, etype):
     @_visitor(otype, Expr)
     def visit_unary(self, deco, expr):
-        return [etype(deco.version, expr)]
+        return [etype(expr)]
 
 for otype, etype in {
     OpcodeUnaryPositive: ExprPos,
@@ -230,7 +272,7 @@ for otype, etype in {
 def _register_binary(otype, etype):
     @_visitor(otype, Expr, Expr)
     def visit_binary(self, deco, expr1, expr2):
-        return [etype(deco.version, expr1, expr2)]
+        return [etype(expr1, expr2)]
 
 for otype, etype in {
     OpcodeBinaryMultiply: ExprMul,
@@ -263,18 +305,18 @@ def visit_build_tuple(self, deco):
     else:
         assert False
     if self.param:
-        res = typ(deco.version, deco.stack[-self.param:])
+        res = typ(deco.stack[-self.param:])
         for i in range(self.param):
             deco.stack.pop()
         return [res]
     else:
-        return [typ(deco.version, [])]
+        return [typ([])]
 
 @_visitor(OpcodeBuildMap)
 def visit_build_map(self, deco):
     if self.param:
         raise PythonError("Non-zero param for BUILD_MAP")
-    return [ExprDict(deco.version, [])]
+    return [ExprDict([])]
 
 @_visitor(OpcodeStoreSubscr, ABA, Expr)
 def visit_build_map_step(self, deco, aba, expr):
@@ -288,7 +330,7 @@ def visit_build_map_step(self, deco, aba, expr):
 
 @_visitor(OpcodeBinaryCall, Expr, ExprTuple)
 def visit_binary_call(self, deco, expr, params):
-    return [ExprCall(deco.version, expr, params.exprs)]
+    return [ExprCall(expr, params.exprs)]
 
 # expressions - load const
 
@@ -300,43 +342,67 @@ def visit_load_const(self, deco):
 
 @_lsd_visitor(OpcodeLoadName, OpcodeStoreName, OpcodeDeleteName)
 def visit_store_name(self, deco):
-    return ExprName(deco.version, self.param)
+    return ExprName(self.param)
+
+@_lsd_visitor(OpcodeLoadGlobal, OpcodeStoreGlobal, OpcodeDeleteGlobal)
+def visit_store_global(self, deco):
+    return ExprGlobal(self.param)
+
+@_lsd_visitor(OpcodeLoadFast, OpcodeStoreFast, OpcodeDeleteFast)
+def visit_store_fast(self, deco):
+    if deco.varnames is None:
+        raise PythonError("no fast variables")
+    if self.param not in range(len(deco.varnames)):
+        raise PythonError("fast var out of range")
+    return ExprFast(self.param, deco.varnames[self.param])
 
 @_lsd_visitor(OpcodeLoadAttr, OpcodeStoreAttr, OpcodeDeleteAttr, Expr)
 def visit_store_attr(self, deco, expr):
-    return ExprAttr(deco.version, expr, self.param)
+    return ExprAttr(expr, self.param)
 
 @_lsd_visitor(OpcodeBinarySubscr, OpcodeStoreSubscr, OpcodeDeleteSubscr, Expr, Expr)
 def visit_store_subscr(self, deco, expr, idx):
-    return ExprSubscr(deco.version, expr, idx)
+    return ExprSubscr(expr, idx)
 
 @_lsd_visitor(OpcodeSliceNN, OpcodeStoreSliceNN, OpcodeDeleteSliceNN, Expr)
 def visit_store_slice_nn(self, deco, expr):
-    return ExprSlice(deco.version, expr, None, None)
+    return ExprSlice(expr, None, None)
 
 @_lsd_visitor(OpcodeSliceEN, OpcodeStoreSliceEN, OpcodeDeleteSliceEN, Expr, Expr)
 def visit_store_slice_en(self, deco, expr, start):
-    return ExprSlice(deco.version, expr, start, None)
+    return ExprSlice(expr, start, None)
 
 @_lsd_visitor(OpcodeSliceNE, OpcodeStoreSliceNE, OpcodeDeleteSliceNE, Expr, Expr)
 def visit_store_slice_ne(self, deco, expr, end):
-    return ExprSlice(deco.version, expr, None, end)
+    return ExprSlice(expr, None, end)
 
 @_lsd_visitor(OpcodeSliceEE, OpcodeStoreSliceEE, OpcodeDeleteSliceEE, Expr, Expr, Expr)
 def visit_store_slice_ee(self, deco, expr, start, end):
-    return ExprSlice(deco.version, expr, start, end)
+    return ExprSlice(expr, start, end)
 
 # list & tuple unpacking
 
+@_stmt_visitor(OpcodeUnpackArg)
+def visit_unpack_arg(self, deco):
+    res = FunArgs([None for _ in range(self.param)], None, [], None)
+    extra = [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
+    return StmtArgs(res), extra
+
+@_stmt_visitor(OpcodeUnpackVararg)
+def visit_unpack_arg(self, deco):
+    res = FunArgs([None for _ in range(self.param)], None, [], None)
+    extra = [UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
+    return StmtArgs(res), extra
+
 @_store_visitor(OpcodeUnpackTuple)
 def visit_unpack_tuple(self, deco):
-    res = ExprTuple(deco.version, [None for _ in range(self.param)])
+    res = ExprTuple([None for _ in range(self.param)])
     extra = [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
     return res, extra
 
 @_store_visitor(OpcodeUnpackList)
 def visit_unpack_list(self, deco):
-    res = ExprList(deco.version, [None for _ in range(self.param)])
+    res = ExprList([None for _ in range(self.param)])
     extra = [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
     return res, extra
 
@@ -344,56 +410,52 @@ def visit_unpack_list(self, deco):
 
 @_stmt_visitor(OpcodePrintExpr, Expr)
 def _visit_print_expr(self, deco, expr):
-    return StmtSingle(deco.version, expr), []
+    return StmtSingle(expr), []
 
 # print statement
 
 @_stmt_visitor(OpcodePrintItem, Expr)
 def visit_print_item(self, deco, expr):
-    return StmtPrint(deco.version, [expr], False), []
+    return StmtPrint([expr], False), []
 
 @_stmt_visitor(OpcodePrintNewline)
 def visit_print_newline(self, deco):
-    return StmtPrint(deco.version, [], True), []
+    return StmtPrint([], True), []
 
 # return statement
 
 @_stmt_visitor(OpcodeReturnValue, Expr)
 def _visit_return(self, deco, expr):
-    return StmtReturn(deco.version, expr), []
+    return StmtReturn(expr), []
 
 # raise statement
 
 @_stmt_visitor(OpcodeRaise, Expr, ExprNone)
 def _visit_raise_1(self, deco, cls, _):
-    return StmtRaise(deco.version, cls), []
+    return StmtRaise(cls), []
 
 @_stmt_visitor(OpcodeRaise, Expr, Expr)
 def _visit_raise_2(self, deco, cls, val):
-    return StmtRaise(deco.version, cls, val), []
+    return StmtRaise(cls, val), []
 
 # exec statement
 
 @_stmt_visitor(OpcodeExecStmt, Expr, Dup)
 def _visit_exec_3(self, deco, code, dup):
     if isinstance(dup.expr, ExprNone):
-        return StmtExec(deco.version, code), []
+        return StmtExec(code), []
     else:
-        return StmtExec(deco.version, code, dup.expr), []
+        return StmtExec(code, dup.expr), []
 
 @_stmt_visitor(OpcodeExecStmt, Expr, Expr, Expr)
 def _visit_exec_3(self, deco, code, globals, locals):
-    return StmtExec(deco.version, code, globals, locals), []
+    return StmtExec(code, globals, locals), []
 
 # imports
 
 @_visitor(OpcodeImportName)
 def _visit_import_name(self, deco):
     return [Import(self.param)]
-
-@_stmt_visitor(OpcodeStoreName, Import)
-def _visit_store_name_import(self, deco, import_):
-    return StmtImport(deco.version, import_.name), []
 
 @_visitor(OpcodeImportFrom, Import)
 def _visit_import_from_first(self, deco, import_):
@@ -406,7 +468,7 @@ def _visit_import_from_next(self, deco, from_import):
 
 @_stmt_visitor(OpcodePopTop, FromImport)
 def _visit_import_from_end(self, deco, from_import):
-    return StmtFromImport(deco.version, from_import.name, from_import.items), []
+    return StmtFromImport(from_import.name, from_import.items), []
 
 # if
 
@@ -459,12 +521,12 @@ def _visit_and(self, deco, if_, block, expr):
     # TODO validate inflow
     if block.stmts:
         raise PythonError("extra and statements")
-    return [ExprBoolAnd(deco.version, if_.expr, expr)]
+    return [ExprBoolAnd(if_.expr, expr)]
 
 @_visitor(Inflow, OrStart, Expr)
 def _visit_or(self, deco, if_, expr):
     # TODO validate inflow
-    return [ExprBoolOr(deco.version, if_.expr, expr)]
+    return [ExprBoolOr(if_.expr, expr)]
 
 # comparisons
 
@@ -472,7 +534,7 @@ def _visit_or(self, deco, if_, expr):
 def _visit_cmp(self, deco, e1, e2):
     if self.mode is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [ExprCmp(deco.version, [e1, self.mode, e2])]
+    return [ExprCmp([e1, self.mode, e2])]
 
 @_visitor(OpcodeCompareOp, BAB)
 def _visit_cmp_start(self, deco, bab):
@@ -504,7 +566,7 @@ def _visit_cmp_last(self, deco, cmp, expr):
 
 @_visitor(OpcodeJumpForward, CompareLast)
 def _visit_cmp_last_jump(self, deco, cmp):
-    return [ExprCmp(deco.version, cmp.items), WantInflow(), WantPop(), WantRotTwo()] + [WantInflow() for x in range((len(cmp.items) - 3) // 2)]
+    return [ExprCmp(cmp.items), WantInflow(), WantPop(), WantRotTwo()] + [WantInflow() for x in range((len(cmp.items) - 3) // 2)]
 
 @_visitor(OpcodeRotThree, Compare, Dup)
 def _visit_cmp_rot(self, deco, cmp, dup):
@@ -522,16 +584,45 @@ def _visit_end_loop(self, deco, loop, inner):
         raise NoMatch
     return StmtLoop(inner), []
 
+@_visitor(Inflow, Loop)
+def _visit_cont_in(self, deco, loop):
+    if self.src <= self.dst:
+        raise NoMatch
+    loop.cont[0] += 1
+    return [loop]
+
 @_visitor(Inflow)
 def _visit_loop(self, deco):
     if self.src <= self.dst:
         raise NoMatch
-    return [Loop(self.src, self.dst)]
+    return [Loop(self.src, self.dst, [0])]
+
+# continue
+
+@_stmt_visitor(OpcodeJumpAbsolute)
+def _visit_continue(self, deco):
+    for item in reversed(deco.stack):
+        if isinstance(item, Loop):
+            loop = item
+            break
+        elif isinstance(item, ForLoop):
+            loop = item.loop
+            break
+        elif isinstance(item, (Block, IfStart, If, TryExceptMatch, TryExceptAnyPending)):
+            pass
+        else:
+            raise NoMatch
+    if not loop.cont[0]:
+        raise NoMatch
+    loop.cont[0] -= 1
+    return StmtContinue(), []
 
 # while loop
 
 @_stmt_visitor(OpcodeJumpAbsolute, Loop, IfStart, Block)
-def _visit_while(self, deco,  loop, start, inner):
+def _visit_while(self, deco, loop, start, inner):
+    if loop.cont[0]:
+        raise NoMatch
     if loop.src != self.pos or loop.dst != self.target or start.target != self.nextpos:
         raise PythonError("funny while loop")
     return StmtWhile(start.expr, inner), [WantPopBlock(), WantPop(), WantInflow()]
@@ -545,16 +636,24 @@ def _visit_for_start(self, deco, expr, zero, loop):
     return [ForStart(expr, loop, self.target)]
 
 @_stmt_visitor(OpcodeJumpAbsolute, ForLoop, Block)
-def _visit_while(self, deco, loop, inner):
+def _visit_for(self, deco, loop, inner):
+    if loop.loop.cont[0]:
+        raise NoMatch
     if loop.loop.src != self.pos or loop.loop.dst != self.target or loop.end != self.nextpos:
-        raise PythonError("funny for loop")
+        raise PythonError("mismatched for loop")
     return StmtFor(loop.expr, loop.dst, inner), [WantPopBlock(), WantInflow()]
 
 # break
 
 @_stmt_visitor(OpcodeBreakLoop)
 def _visit_break(self, deco):
-    return StmtBreak(deco.version), []
+    return StmtBreak(), []
+
+# access
+
+@_stmt_visitor(OpcodeAccessMode, ExprInt)
+def _visit_access(self, deco, mode):
+    return StmtAccess(self.param, mode.val), []
 
 # try finally
 
@@ -576,13 +675,115 @@ def _visit_finally(self, deco, try_, _):
 def _visit_finally_end(self, deco, try_, inner):
     return StmtFinally(try_.body, inner), []
 
+# try except
 
-class DecoCode:
+@_visitor(OpcodeSetupExcept)
+def _visit_setup_except(self, deco):
+    return [SetupExcept(self.pos, self.target), Block([])]
+
+@_visitor(OpcodePopBlock, SetupExcept, Block)
+def _visit_except_pop_try(self, deco, setup, block):
+    return [TryExceptEndTry(setup, block)]
+
+@_visitor(OpcodeJumpForward, TryExceptEndTry)
+def _visit_except_end_try(self, deco, try_):
+    return [TryExceptPending(try_.setup, Inflow(self.pos, self.target), try_.body)]
+
+@_visitor(Inflow, TryExceptPending)
+def _visit_except_start(self, deco, try_):
+    if self.src != try_.setup.pos or self.dst != try_.setup.end:
+        raise PythonError("funny except")
+    return [TryExceptMid(try_.end, try_.body, [])]
+
+@_visitor(OpcodeDupTop, TryExceptMid)
+def _visit_except_match_start(self, deco, try_):
+    return [TryExceptMatchStart(try_.end, try_.body, try_.items)]
+
+@_visitor(OpcodeCompareOp, TryExceptMatchStart, Expr)
+def _visit_except_match_check(self, deco, try_, expr):
+    if self.mode != CmpOp.EXC_MATCH:
+        raise PythonError("funny except match")
+    return [TryExceptMatchMid(try_.end, try_.body, try_.items, expr)]
+
+@_visitor(OpcodeJumpIfFalse, TryExceptMatchMid)
+def _visit_except_match_jump(self, deco, try_):
+    return [TryExceptMatchOk(try_.end, try_.body, try_.items, try_.expr, Inflow(self.pos, self.target)), WantPop(), WantPop()]
+
+@_visitor(OpcodePopTop, TryExceptMatchOk)
+def _visit_except_match_pop(self, deco, try_):
+    return [TryExceptMatch(try_.end, try_.body, try_.items, try_.expr, None, try_.next), Block([]), WantPop()]
+
+@_visitor(OpcodeJumpForward, TryExceptMatch, Block)
+def _visit_except_match_end(self, deco, try_, block):
+    if self.target != try_.end.dst:
+        raise PythonError("misaligned except ends")
+    return [TryExceptJoin(try_.end, try_.body, try_.items + [(try_.expr, try_.dst, block)], try_.next)]
+
+@_visitor(Inflow, TryExceptJoin)
+def _visit_except_match_join(self, deco, try_):
+    if try_.next != self:
+        raise PythonError("funny except join")
+    return [TryExceptMid(try_.end, try_.body, try_.items), WantPop()]
+
+@_visitor(OpcodePopTop, TryExceptMid)
+def _visit_except_any(self, deco, try_):
+    return [TryExceptAnyPending(try_.end, try_.body, try_.items), Block([]), WantPop(), WantPop()]
+
+@_visitor(OpcodeJumpForward, TryExceptAnyPending, Block)
+def _visit_except_any_end(self, deco, try_, block):
+    if self.target != try_.end.dst:
+        raise PythonError("misaligned except ends")
+    return [TryExceptAny(try_.end, try_.body, try_.items, block)]
+
+@_stmt_visitor(OpcodeEndFinally, TryExceptAny)
+def _visit_except_end(self, deco, try_):
+    return StmtExcept(try_.body, try_.items, try_.any), [WantInflow() for x in range(len(try_.items) + 2)]
+
+@_stmt_visitor(OpcodeEndFinally, TryExceptMid)
+def _visit_except_end(self, deco, try_):
+    return StmtExcept(try_.body, try_.items, None), [WantInflow() for x in range(len(try_.items) + 1)]
+
+# functions & classes
+
+@_visitor(OpcodeBuildFunction, Code)
+def _visit_build_function(self, deco, code):
+    return [ExprFunctionRaw(deco_code(code))]
+
+@_visitor(OpcodeUnaryCall, ExprFunctionRaw)
+def _visit_unary_call(self, deco, fun):
+    return [UnaryCall(fun.code)]
+
+@_visitor(OpcodeBuildClass, ExprString, ExprTuple, UnaryCall)
+def _visit_build_class(self, deco, name, expr, call):
+    return [ExprClassRaw(name.val.decode('ascii'), expr.exprs, call.code)]
+
+@_visitor(OpcodeLoadLocals)
+def _visit_load_locals(self, deco):
+    return [Locals()]
+
+@_stmt_visitor(OpcodeReturnValue, Locals)
+def _visit_return_locals(self, deco, _):
+    return StmtEndClass(), []
+
+@_visitor(OpcodeReserveFast)
+def _visit_reserve_fast(self, deco):
+    if deco.varnames is not None:
+        raise PythonError("duplicate RESERVE_FAST")
+
+    deco.varnames = self.names
+    return []
+
+
+class DecoCtx:
     def __init__(self, code):
         self.version = code.version
         self.stack = [Block([])]
         self.bytecode = code.code
         self.lineno = None
+        if self.version.has_new_code:
+            self.varnames = code.varnames
+        else:
+            self.varnames = None
         for op in self.bytecode.ops:
             for inflow in reversed(op.inflow):
                 self.process(Inflow(inflow, op.pos))
@@ -591,8 +792,7 @@ class DecoCode:
             raise PythonError("stack non-empty at the end")
         if not isinstance(self.stack[0], Block):
             raise PythonError("weirdness on stack at the end")
-        self.block = self.stack[0]
-
+        self.res = DecoCode(self.stack[0], code)
 
     def process(self, op):
         for visitor in _VISITORS.get(type(op), []):
@@ -604,6 +804,20 @@ class DecoCode:
                 ', '.join(type(x).__name__ for x in self.stack)
             ))
 
+
+def deco_code(code):
+    return DecoCtx(code).res
+
+
+class DecoCode:
+    __slots__ = 'block', 'code'
+
+    def __init__(self, block, code):
+        self.block = block
+        self.code = code
+
+    def subprocess(self, process):
+        return DecoCode(process(self.block), self.code)
 
     def show(self):
         return self.block.show()

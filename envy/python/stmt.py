@@ -1,29 +1,68 @@
 from envy.show import indent
 
+class FunArgs:
+    __slots__ = 'args', 'vararg', 'kwargs', 'varkw'
+
+    def __init__(self, args, vararg, kwargs, varkw):
+        self.args = args
+        self.vararg = vararg
+        self.kwargs = kwargs
+        self.varkw = varkw
+
+    def subprocess(self, process):
+        return FunArgs(
+            [process(arg) for arg in self.args],
+            process(self.vararg) if self.vararg else None,
+            [process(arg) for arg in self.kwargs],
+            process(self.varkw) if self.varkw else None,
+        )
+
+    def show(self):
+        chunks = [('', arg) for arg in self.args]
+        if self.vararg:
+            chunks.append(('*', self.vararg))
+        elif self.kwargs:
+            chunks.append(('*', None))
+        chunks.extend([('', arg) for arg in self.kwargs])
+        if self.varkw:
+            chunks.append(('**', self.varkw))
+        return ', '.join(
+            '{}{}'.format(
+                pref,
+                expr.show(None) if expr else ''
+            )
+            for pref, expr in chunks
+        )
+
+
 class Block:
     __slots__ = 'stmts',
 
     def __init__(self, stmts):
-        self.stmts = []
+        self.stmts = stmts
+
+    def subprocess(self, process):
+        return Block([process(stmt) for stmt in self.stmts])
 
     def show(self):
         for stmt in self.stmts:
             yield from stmt.show()
+        if not self.stmts:
+            yield 'pass'
 
 
 class Stmt:
-    __slots__ = 'version',
-
-    def __init__(self, version):
-        self.version = version
+    __slots__ = ()
 
 
 class StmtReturn(Stmt):
     __slots__ = 'val',
 
-    def __init__(self, version, val):
-        super().__init__(version)
+    def __init__(self, val):
         self.val = val
+
+    def subprocess(self, process):
+        return StmtReturn(process(self.val))
 
     def show(self):
         yield "return {}".format(self.val.show(None))
@@ -32,10 +71,12 @@ class StmtReturn(Stmt):
 class StmtPrint(Stmt):
     __slots__ = 'vals', 'nl'
 
-    def __init__(self, version, vals, nl=True):
-        super().__init__(version)
+    def __init__(self, vals, nl=True):
         self.vals = vals
         self.nl = nl
+
+    def subprocess(self, process):
+        return StmtPrint([process(expr) for expr in self.vals], self.nl)
 
     def show(self):
         if self.vals:
@@ -48,9 +89,11 @@ class StmtPrint(Stmt):
 class StmtSingle(Stmt):
     __slots__ = 'val',
 
-    def __init__(self, version, val):
-        super().__init__(version)
+    def __init__(self, val):
         self.val = val
+
+    def subprocess(self, process):
+        return StmtSingle(process(self.val))
 
     def show(self):
         yield "$single {}".format(self.val.show(None))
@@ -59,10 +102,12 @@ class StmtSingle(Stmt):
 class StmtAssign(Stmt):
     __slots__ = 'dests', 'expr'
 
-    def __init__(self, version, dests, expr):
-        super().__init__(version)
+    def __init__(self, dests, expr):
         self.dests = dests
         self.expr = expr
+
+    def subprocess(self, process):
+        return StmtAssign([process(dst) for dst in self.dests], process(self.expr))
 
     def show(self):
         yield '{}{}'.format(
@@ -77,9 +122,11 @@ class StmtAssign(Stmt):
 class StmtDel(Stmt):
     __slots__ = 'val',
 
-    def __init__(self, version, val):
-        super().__init__(version)
+    def __init__(self, val):
         self.val = val
+
+    def subprocess(self, process):
+        return StmtDel(process(self.val))
 
     def show(self):
         yield "del {}".format(self.val.show(None))
@@ -88,10 +135,15 @@ class StmtDel(Stmt):
 class StmtRaise(Stmt):
     __slots__ = 'cls', 'val'
 
-    def __init__(self, version, cls, val=None):
-        super().__init__(version)
+    def __init__(self, cls, val=None):
         self.cls = cls
         self.val = val
+
+    def subprocess(self, process):
+        return StmtRaise(
+            process(self.cls),
+            process(self.val) if self.val else None,
+        )
 
     def show(self):
         if self.val is None:
@@ -101,23 +153,31 @@ class StmtRaise(Stmt):
 
 
 class StmtImport(Stmt):
-    __slots__ = 'name',
+    __slots__ = 'name', 'as_'
 
-    def __init__(self, version, name):
-        super().__init__(version)
+    def __init__(self, name, as_):
         self.name = name
+        self.as_ = as_
+
+    def subprocess(self, process):
+        return StmtImport(
+            self.name,
+            process(self.as_)
+        )
 
     def show(self):
-        yield "import {}".format(self.name)
+        yield "import {} as {}".format(self.name, self.as_.show(None))
 
 
 class StmtFromImport(Stmt):
     __slots__ = 'name', 'items'
 
-    def __init__(self, version, name, items):
-        super().__init__(version)
+    def __init__(self, name, items):
         self.name = name
         self.items = items
+
+    def subprocess(self, process):
+        return self
 
     def show(self):
         yield "from {} import {}".format(
@@ -129,11 +189,17 @@ class StmtFromImport(Stmt):
 class StmtExec(Stmt):
     __slots__ = 'code', 'globals', 'locals'
 
-    def __init__(self, version, code, globals=None, locals=None):
-        super().__init__(version)
+    def __init__(self, code, globals=None, locals=None):
         self.code = code
         self.globals = globals
         self.locals = locals
+
+    def subprocess(self, process):
+        return StmtExec(
+            process(self.code),
+            process(self.globals) if self.globals else None,
+            process(self.locals) if self.locals else None,
+        )
 
     def show(self):
         if self.globals is None:
@@ -160,12 +226,22 @@ class StmtIf(Stmt):
         self.items = items
         self.else_ = else_
 
+    def subprocess(self, process):
+        return StmtIf(
+            [
+                (process(expr), process(block))
+                for expr, block in self.items
+            ],
+            process(self.else_) if self.else_ else None
+        )
+
     def show(self):
         for idx, (expr, block) in enumerate(self.items):
             yield "{} {}:".format('if' if idx == 0 else 'elif', expr.show(None))
             yield from indent(block.show())
-        yield "else:"
-        yield from indent(self.else_.show())
+        if self.else_:
+            yield "else:"
+            yield from indent(self.else_.show())
 
 
 class StmtLoop(Stmt):
@@ -173,6 +249,9 @@ class StmtLoop(Stmt):
 
     def __init__(self, body):
         self.body = body
+
+    def subprocess(self, process):
+        return StmtLoop(process(self.body))
 
     def show(self):
         yield "$loop:"
@@ -185,6 +264,9 @@ class StmtWhile(Stmt):
     def __init__(self, expr, body):
         self.expr = expr
         self.body = body
+
+    def subprocess(self, process):
+        return StmtWhile(process(self.expr), process(self.body))
 
     def show(self):
         yield "$while {}:".format(self.expr.show(None))
@@ -199,6 +281,9 @@ class StmtFor(Stmt):
         self.dst = dst
         self.body = body
 
+    def subprocess(self, process):
+        return StmtFor(process(self.expr), process(self.dst), process(self.body))
+
     def show(self):
         yield "$for {} in {}:".format(self.dst.show(None), self.expr.show(None))
         yield from indent(self.body.show())
@@ -211,6 +296,12 @@ class StmtFinally(Stmt):
         self.try_ = try_
         self.finally_ = finally_
 
+    def subprocess(self, process):
+        return StmtFinally(
+            process(self.try_),
+            process(self.finally_),
+        )
+
     def show(self):
         yield "try:"
         yield from indent(self.try_.show())
@@ -218,8 +309,148 @@ class StmtFinally(Stmt):
         yield from indent(self.finally_.show())
 
 
+class StmtExcept(Stmt):
+    __slots__ = 'try_', 'items', 'any'
+
+    def __init__(self, try_, items, any):
+        self.try_ = try_
+        self.items = items
+        self.any = any
+
+    def subprocess(self, process):
+        return StmtExcept(
+            process(self.try_),
+            [
+                (
+                    process(expr),
+                    process(dst) if dst else None,
+                    process(body),
+                )
+                for expr, dst, body in self.items
+            ],
+            process(self.any) if self.any else None,
+        )
+
+    def show(self):
+        yield "try:"
+        yield from indent(self.try_.show())
+        for expr, dst, body in self.items:
+            if dst is None:
+                yield 'except {}:'.format(expr.show(None))
+            else:
+                # TODO as
+                yield 'except {}, {}:'.format(expr.show(None), dst.show(None))
+            yield from indent(body.show())
+        if self.any is not None:
+            yield "except:"
+            yield from indent(self.any.show())
+
+
 class StmtBreak(Stmt):
     __slots__ = ()
 
+    def subprocess(self, process):
+        return self
+
     def show(self):
         yield 'break'
+
+
+class StmtContinue(Stmt):
+    __slots__ = ()
+
+    def subprocess(self, process):
+        return self
+
+    def show(self):
+        yield 'continue'
+
+
+class StmtAccess(Stmt):
+    __slots__ = 'name', 'mode'
+
+    # TODO: decode that crap
+    def __init__(self, name, mode):
+        self.name = name
+        self.mode = mode
+
+    def subprocess(self, process):
+        return self
+
+    def show(self):
+        yield 'access {}: {:o}'.format(self.name, self.mode)
+
+
+class StmtArgs(Stmt):
+    __slots__ = 'args'
+
+    def __init__(self, args):
+        self.args = args
+
+    def subprocess(self, process):
+        return StmtArgs(process(self.args))
+
+    def show(self):
+        yield "$args {}".format(self.args.show())
+
+
+class StmtClass(Stmt):
+    __slots__ = 'name', 'bases', 'body'
+
+    def __init__(self, name, bases, body):
+        self.name = name
+        self.bases = bases
+        self.body = body
+
+    def subprocess(self, process):
+        return StmtClass(
+            self.name,
+            [process(base) for base in self.bases],
+            process(self.body)
+        )
+
+    def show(self):
+        if self.bases:
+            yield 'class {}({}):'.format(
+                self.name,
+                ', '.join(
+                    base.show(None)
+                    for base in self.bases
+                )
+            )
+        else:
+            yield 'class {}:'.format(self.name)
+        yield from indent(self.body.show())
+
+
+class StmtEndClass(Stmt):
+    __slots__ = ()
+
+    def subprocess(self, process):
+        return self
+
+    def show(self):
+        yield '$endclass'
+
+
+class StmtDef(Stmt):
+    __slots__ = 'name', 'args', 'body'
+
+    def __init__(self, name, args, body):
+        self.name = name
+        self.args = args
+        self.body = body
+
+    def subprocess(self, process):
+        return StmtDef(
+            self.name,
+            process(self.args),
+            process(self.body)
+        )
+
+    def show(self):
+        yield 'def {}({}):'.format(
+            self.name,
+            self.args.show()
+        )
+        yield from indent(self.body.show())

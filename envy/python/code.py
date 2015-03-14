@@ -117,21 +117,27 @@ class CodeDict:
     expressions - thus we don't map them to ExprDict.  However, ancient pythons
     use them as arguments for RESERVE_FAST.
     """
-    __slots__ = 'val',
+    __slots__ = 'names',
 
     def __init__(self, val):
-        self.val = []
+        self.names = [None for x in range(len(val))]
+        if not val:
+            raise PythonError("empty CodeDict")
         for k, v in val:
             if not isinstance(k, MarshalString):
                 raise PythonError("CodeDict key not string")
             if not isinstance(v, MarshalInt):
                 raise PythonError("CodeDict value not int")
-            self.val.append((k.val.decode('ascii'), v.val))
+            if v.val not in range(len(val)):
+                raise PythonError("funny var index in CodeDict")
+            if self.names[v.val] is not None:
+                raise PythonError("duplicate var index in CodeDict")
+            self.names[v.val] = k.val.decode('ascii')
 
     def show(self):
         yield "DICT"
-        for key, val in self.val:
-            yield '\t{}: {}\n'.format(key, val)
+        for idx, name in enumerate(self.names):
+            yield '\t{}: {}\n'.format(idx, name)
 
 class Code:
     __slots__ = (

@@ -48,7 +48,7 @@ Inflow = namedtuple('Inflow', ['src', 'dst'])
 
 Dup = namedtuple('Dup', ['expr'])
 ABA = namedtuple('ABA', ['a', 'b'])
-BAB = namedtuple('ABA', ['a', 'b'])
+BAB = namedtuple('BAB', ['a', 'b'])
 Import = namedtuple('Import', ['name'])
 FromImport = namedtuple('FromImport', ['name', 'items'])
 MultiAssign = namedtuple('MultiAssign', ['src', 'dsts'])

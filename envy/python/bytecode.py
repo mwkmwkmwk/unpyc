@@ -1,20 +1,5 @@
-from enum import IntEnum
-
 from .helpers import PythonError
-from .expr import Expr, ExprNone
-
-class CmpOp(IntEnum):
-    LT = 0
-    LE = 1
-    EQ = 2
-    NE = 3
-    GT = 4
-    GE = 5
-    IN = 6
-    NOT_IN = 7
-    IS = 8
-    IS_NOT = 9
-    EXC_MATCH = 10
+from .expr import Expr, ExprNone, CmpOp
 
 OPCODES = {}
 
@@ -40,10 +25,7 @@ class Opcode(metaclass=OpcodeMeta):
         self.inflow = []
         self.version = bytecode.version
         self.read_params(bytecode)
-        if not self.end:
-            self.nextpos = bytecode.pos
-        else:
-            self.nextpos = None
+        self.nextpos = bytecode.pos
 
     def read_params(self, bytecode):
         pass
@@ -397,7 +379,7 @@ class OpcodePopBlock(Opcode):
     code = 87
     name = 'POP_BLOCK'
 
-class OpcodePopBlock(Opcode):
+class OpcodeEndFinally(Opcode):
     code = 88
     name = 'END_FINALLY'
 
@@ -477,19 +459,22 @@ class OpcodeUnpackVararg(OpcodeParamNum):
 
 class OpcodeLoadConst(Opcode):
     """$push(const)"""
-    __slots__ = 'const',
+    __slots__ = 'const', 'idx'
     code = 100
     name = 'LOAD_CONST'
 
     def read_params(self, bytecode):
         from .code import Code
-        self.const = bytecode.get_const((Expr, Code))
+        self.const, self.idx = bytecode.get_const((Expr, Code))
 
     def print_params(self):
+        from .code import Code
         if isinstance(self.const, Expr):
-            return self.const.show(self.version, None)
+            return self.const.show(None)
+        elif isinstance(self.const, Code):
+            return "<code {}>".format(self.idx)
         else:
-            return "<code {}>".format(self.const)
+            raise TypeError("unknown const")
 
 
 class OpcodeLoadName(OpcodeParamName):
@@ -609,7 +594,7 @@ class OpcodeReserveFast(Opcode):
     def read_params(self, bytecode):
         # TODO
         from .code import CodeDict
-        self.const = bytecode.get_const((CodeDict, ExprNone))
+        self.const, _ = bytecode.get_const((CodeDict, ExprNone))
 
     def print_params(self):
         return self.const
@@ -641,8 +626,6 @@ class OpcodeDeleteFast(OpcodeParamFast):
 class OpcodeSetLineno(OpcodeParamNum):
     code = 127
     name = "SET_LINENO"
-
-    # TODO version_ok
 
 
 class Bytecode:
@@ -693,10 +676,7 @@ class Bytecode:
         res = self.consts[idx]
         if not isinstance(res, cls):
             raise PythonError("Const of type {} expected, got {}".format(cls, type(res)))
-        from .code import Code
-        if isinstance(res, Code):
-            return idx
-        return res
+        return res, idx
 
 
 def parse_lnotab(firstlineno, lnotab, codelen):

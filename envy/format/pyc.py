@@ -30,8 +30,8 @@ class PycFile:
         self.code = load_marshal(fp, self.version)
         read_eof(fp)
 
-    def print(self):
-        print("pyc version {} ({}) {}".format(self.version.code, self.version.name, datetime.datetime.fromtimestamp(self.timestamp)))
+    def show(self):
+        yield "pyc version {} ({}) {}".format(self.version.code, self.version.name, datetime.datetime.fromtimestamp(self.timestamp))
         if self.size is not None:
-            print("source size {}".format(self.size))
-        self.code.print(0)
+            yield "source size {}".format(self.size)
+        yield from self.code.show()

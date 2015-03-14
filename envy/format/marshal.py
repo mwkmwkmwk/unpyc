@@ -153,6 +153,7 @@ import struct
 import binascii
 
 from .helpers import read_byte, read_le, read_bytes, FormatError
+from envy.show import preindent, indent
 
 class MarshalError(FormatError):
     pass
@@ -165,8 +166,8 @@ class MarshalNode:
     by a None instead."""
     __slots__ = ()
 
-    def print(self, level):
-        print(str(self))
+    def show(self):
+        yield str(self)
 
 
 # singletons
@@ -373,25 +374,23 @@ class MarshalCode(MarshalNode):
     def __str__(self):
         return '<code>'
 
-    def print(self, level):
-        print("CODE")
-        pref = (level + 1) * '\t'
-        print("{}args: {} + {}, locals: {}, stacksize: {}".format(pref, self.argcount, self.kwonlyargcount, self.nlocals, self.stacksize))
-        print("{}flags: {:x}".format(pref, self.flags))
-        print("{}code: {}".format(pref, binascii.b2a_hex(self.code)))
-        print("{}consts:".format(pref))
+    def show(self):
+        yield "CODE"
+        yield "args: {} + {}, locals: {}, stacksize: {}".format(self.argcount, self.kwonlyargcount, self.nlocals, self.stacksize)
+        yield "flags: {:x}".format(self.flags)
+        yield "code: {}".format(binascii.b2a_hex(self.code))
+        yield "consts:"
         for idx, const in enumerate(self.consts):
-            print("{}\t{}:".format(pref, idx), end=' ')
-            const.print(level+2)
-        print("{}names: {}".format(pref, ', '.join(self.names)))
+            yield from indent(preindent(idx, const.show()))
+        yield "names: {}".format(', '.join(self.names))
         if self.varnames is not None:
-            print("{}varnames: {}".format(pref, ', '.join(self.varnames)))
-        print("{}freevars: {}".format(pref, ', '.join(self.freevars)))
-        print("{}cellvars: {}".format(pref, ', '.join(self.cellvars)))
-        print("{}filename: {}".format(pref, self.filename))
-        print("{}name: {}".format(pref, self.name))
+            yield "\tvarnames: {}".format(', '.join(self.varnames))
+        yield "freevars: {}".format(', '.join(self.freevars))
+        yield "cellvars: {}".format(', '.join(self.cellvars))
+        yield "filename: {}".format(self.filename)
+        yield "name: {}".format(self.name)
         if self.firstlineno is not None:
-            print("{}lines: {} then {}".format(pref, self.firstlineno, binascii.b2a_hex(self.lnotab)))
+            yield "lines: {} then {}".format(self.firstlineno, binascii.b2a_hex(self.lnotab))
 
 # A marshal stream is basically a tree of objects: you read a single object
 # from the stream, and each object can contain inner objects.  Every object

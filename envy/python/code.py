@@ -1,5 +1,6 @@
 from envy.format.marshal import MarshalCode, MarshalDict, MarshalString, MarshalInt
 from envy.python.bytecode import parse_lnotab, Bytecode
+from envy.show import preindent, indent
 
 from .expr import from_marshal
 from .helpers import PythonError
@@ -127,16 +128,10 @@ class CodeDict:
                 raise PythonError("CodeDict value not int")
             self.val.append((k.val.decode('ascii'), v.val))
 
-    def show(self, level):
-        return 'DICT\n{}'.format(
-            ''.join(
-                '{}{}: {}\n'.format(
-                    '\t' * (level + 1),
-                    key, val
-                )
-                for key, val in self.val
-            )
-        )
+    def show(self):
+        yield "DICT"
+        for key, val in self.val:
+            yield '\t{}: {}\n'.format(key, val)
 
 class Code:
     __slots__ = (
@@ -203,7 +198,7 @@ class Code:
             elif isinstance(const, MarshalDict):
                 self.consts.append(CodeDict(const.val))
             else:
-                self.consts.append(from_marshal(const))
+                self.consts.append(from_marshal(const, version))
         # names
         self.names = obj.names
         # firstlineno is not the same as the first line of code, store it separately
@@ -247,12 +242,12 @@ class Code:
             else:
                 self.varkw = None
 
-    def show(self, level):
-        res = []
+    def show(self):
+        yield 'CODE'
         # name
-        res.append('name: {} from {}'.format(self.name, self.filename))
+        yield 'name: {} from {}'.format(self.name, self.filename)
         # flags
-        res.append('flags: {}'.format(', '.join(flag.name for flag in self.flags)))
+        yield 'flags: {}'.format(', '.join(flag.name for flag in self.flags))
         # args
         args = self.args[:]
         if self.varargs is not None:
@@ -264,39 +259,29 @@ class Code:
         if self.varkw is not None:
             args.append('**{}'.format(self.varkw))
         if args:
-            res.append('args: {}'.format(', '.join(args)))
+            yield 'args: {}'.format(', '.join(args))
         # vars
         if self.varnames:
-            res.append('vars: {}'.format(', '.join(self.varnames)))
+            yield 'vars: {}'.format(', '.join(self.varnames))
         if self.freevars:
-            res.append('freevars: {}'.format(', '.join(self.freevars)))
+            yield 'freevars: {}'.format(', '.join(self.freevars))
         if self.cellvars:
-            res.append('cellvars: {}'.format(', '.join(self.cellvars)))
+            yield 'cellvars: {}'.format(', '.join(self.cellvars))
         # consts
-        res.append('consts:')
+        yield 'consts:'
         for idx, const in enumerate(self.consts):
             if isinstance(const, (Code, CodeDict)):
-                res.append('\t{}: {}'.format(idx, const.show(level+2)))
+                yield from indent(preindent(idx, const.show()))
             else:
-                res.append('\t{}: {}'.format(idx, const.show(self.version, None)))
+                yield '\t{}: {}'.format(idx, const.show(None))
         # and the actual bytecode
         import binascii
         if self.names:
-            res.append('names: {}'.format(', '.join(self.names)))
+            yield 'names: {}'.format(', '.join(self.names))
         if self.stacksize is not None:
-            res.append("stacksize: {}".format(self.stacksize))
-        res.append("code:")
+            yield "stacksize: {}".format(self.stacksize)
+        yield "code:"
         for op in self.code.ops:
-            res.append("\t{}".format(op))
+            yield "\t{}".format(op)
         if self.firstlineno is not None:
-            res.append("line: {} {}".format(self.firstlineno, self.lnotab))
-        # put it all together
-        return 'CODE\n{}'.format(
-            ''.join(
-                '{}{}\n'.format(
-                    '\t' * (level + 1),
-                    line
-                )
-                for line in res
-            )
-        )
+            yield "line: {} {}".format(self.firstlineno, self.lnotab)

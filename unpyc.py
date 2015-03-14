@@ -11,7 +11,7 @@ as follows:
    embedded in code objects - we effectively get a disassembler at this point.
 3. envy.python.deco turns the opcode lists into statements, gradually merging
    them and connecting the blocks together.  The code at this stage is in
-   a superset of Python that allows describing all opcodes on their own.
+   a superset of Python that retains some minute detail from the bytecode.
 4. envy.python.ast converts the code into python AST and puts finishing touches
    on it.  The AST is then printed.
 
@@ -70,13 +70,21 @@ import sys
 
 from envy.format.pyc import PycFile
 from envy.python.code import Code
+from envy.python.deco import DecoCode
 
 for fname in sys.argv[1:]:
     print("{}...".format(fname))
+
     with open(fname, 'rb') as fp:
         pyc = PycFile(fp)
 
-    pyc.print()
+    #for line in pyc.show():
+    #    print(line)
 
     code = Code(pyc.code, pyc.version)
-    sys.stdout.write(code.show(0))
+    #for line in code.show():
+    #    print(line)
+
+    deco = DecoCode(code)
+    for line in deco.show():
+        print(line)

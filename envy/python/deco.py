@@ -17,11 +17,13 @@ from .bytecode import *
 # - access prettyprint modes
 # - make a test suite
 # - find a way to print nested code objects after stage 3
+# - clean up import mess
 #
 # and for prettifier:
 #
 # - names:
 #
+#   - verify optimized/not
 #   - deal with name types
 #   - stuff 'global' somewhere
 #   - verify used names don't collide with keywords
@@ -36,6 +38,9 @@ from .bytecode import *
 #   - import
 #   - access
 #   - print
+#
+# - deal with class/top __doc__ assignments
+# - verify function docstrings
 
 # funny intermediate stuff to put on stack
 

@@ -18,6 +18,7 @@ class OpcodeMeta(type):
 class Opcode(metaclass=OpcodeMeta):
     __slots__ = 'pos', 'nextpos', 'version', 'outflow', 'inflow'
     end = False
+    flag = None
 
     def __init__(self, bytecode, pos):
         self.pos = pos
@@ -45,8 +46,14 @@ class Opcode(metaclass=OpcodeMeta):
     def print_params(self):
         return None
 
-    def version_ok(self):
-        return True
+    @classmethod
+    def version_ok(cls, version):
+        if cls.flag is None:
+            return True
+        elif cls.flag.startswith('!'):
+            return not getattr(version, cls.flag[1:])
+        else:
+            return getattr(version, cls.flag)
 
 
 class OpcodeParamNum(Opcode):
@@ -569,6 +576,11 @@ class OpcodeLoadGlobal(OpcodeParamName):
     code = 116
     name = "LOAD_GLOBAL"
 
+class OpcodeSetFuncArgs(OpcodeParamNum):
+    code = 117
+    name = "SET_FUNC_ARGS"
+    flag = 'has_def_args'
+
 
 class OpcodeSetupLoop(OpcodeParamRel):
     code = 120
@@ -614,6 +626,8 @@ class OpcodeReserveFast(Opcode):
                 self.names = None
 
     def print_params(self):
+        if self.names is None:
+            return 'None'
         return ', '.join(self.names)
 
     # TODO version_ok

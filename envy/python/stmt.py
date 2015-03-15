@@ -1,10 +1,13 @@
+from itertools import zip_longest
+
 from envy.show import indent
 
 class FunArgs:
-    __slots__ = 'args', 'vararg', 'kwargs', 'varkw'
+    __slots__ = 'args', 'defargs', 'vararg', 'kwargs', 'varkw'
 
-    def __init__(self, args, vararg, kwargs, varkw):
+    def __init__(self, args, defargs, vararg, kwargs, varkw):
         self.args = args
+        self.defargs = defargs
         self.vararg = vararg
         self.kwargs = kwargs
         self.varkw = varkw
@@ -12,26 +15,40 @@ class FunArgs:
     def subprocess(self, process):
         return FunArgs(
             [process(arg) for arg in self.args],
+            [process(arg) for arg in self.defargs],
             process(self.vararg) if self.vararg else None,
             [process(arg) for arg in self.kwargs],
             process(self.varkw) if self.varkw else None,
         )
 
+    def setdefs(self, defargs):
+        return FunArgs(
+            self.args,
+            defargs,
+            self.vararg,
+            self.kwargs,
+            self.varkw
+        )
+
     def show(self):
-        chunks = [('', arg) for arg in self.args]
+        chunks = [
+            ('', arg, defarg)
+            for arg, defarg in zip_longest(self.args, self.defargs)
+        ]
         if self.vararg:
-            chunks.append(('*', self.vararg))
+            chunks.append(('*', self.vararg, None))
         elif self.kwargs:
-            chunks.append(('*', None))
-        chunks.extend([('', arg) for arg in self.kwargs])
+            chunks.append(('*', None, None))
+        chunks.extend([('', arg, None) for arg in self.kwargs])
         if self.varkw:
-            chunks.append(('**', self.varkw))
+            chunks.append(('**', self.varkw, None))
         return ', '.join(
-            '{}{}'.format(
+            '{}{}{}'.format(
                 pref,
-                expr.show(None) if expr else ''
+                arg.show(None) if arg else '',
+                "={}".format(defarg.show(None)) if defarg else ''
             )
-            for pref, expr in chunks
+            for pref, arg, defarg in chunks
         )
 
 

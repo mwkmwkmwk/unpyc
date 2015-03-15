@@ -17,6 +17,7 @@ from .bytecode import *
 # - figure out what to do about line numbers
 # - access prettyprint modes
 # - make a test suite
+# - find a way to print nested code objects after stage 3
 #
 # and for prettifier:
 #
@@ -24,9 +25,9 @@ from .bytecode import *
 #
 #   - deal with name types
 #   - stuff 'global' somewhere
+#   - verify used names don't collide with keywords
 #
 # - decide same/different line
-# - get rid of return None
 # - clean statements:
 #
 #   - import: get rid of as
@@ -97,13 +98,16 @@ class NoMatch(Exception):
 _VISITORS = {}
 
 class _Visitor:
-    __slots__ = 'func', 'stack'
+    __slots__ = 'func', 'stack', 'flag'
 
-    def __init__(self, func, stack):
+    def __init__(self, func, stack, flag=None):
         self.func = func
         self.stack = stack
+        self.flag = flag
 
     def visit(self, opcode, deco):
+        if not self.version_ok(deco.version):
+            return False
         if len(deco.stack) < len(self.stack):
             return False
         current = deco.stack[-len(self.stack):] if self.stack else []
@@ -119,16 +123,24 @@ class _Visitor:
         deco.stack.extend(res)
         return True
 
+    def version_ok(self, version):
+        if self.flag is None:
+            return True
+        elif self.flag.startswith('!'):
+            return not getattr(version, self.flag[1:])
+        else:
+            return getattr(version, self.flag)
 
-def _visitor(op, *stack):
+
+def _visitor(op, *stack, **kwargs):
     def inner(func):
-        _VISITORS.setdefault(op, []).append(_Visitor(func, stack))
+        _VISITORS.setdefault(op, []).append(_Visitor(func, stack, **kwargs))
         return func
     return inner
 
-def _stmt_visitor(op, *stack):
+def _stmt_visitor(op, *stack, **kwargs):
     def inner(func):
-        @_visitor(op, Block, *stack)
+        @_visitor(op, Block, *stack, **kwargs)
         def visit_stmt(self, deco, block, *args):
             stmt, extra = func(self, deco, *args)
             block.stmts.append(stmt)
@@ -381,13 +393,13 @@ def visit_store_slice_ee(self, deco, expr, start, end):
 
 @_stmt_visitor(OpcodeUnpackArg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], None, [], None)
+    res = FunArgs([None for _ in range(self.param)], [], None, [], None)
     extra = [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
     return StmtArgs(res), extra
 
 @_stmt_visitor(OpcodeUnpackVararg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], None, [], None)
+    res = FunArgs([None for _ in range(self.param)], [], None, [], None)
     extra = [UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
     return StmtArgs(res), extra
 
@@ -408,6 +420,10 @@ def visit_unpack_list(self, deco):
 @_stmt_visitor(OpcodePrintExpr, Expr)
 def _visit_print_expr(self, deco, expr):
     return StmtPrintExpr(expr), []
+
+@_stmt_visitor(OpcodePopTop, Expr, flag='!always_print_expr')
+def _visit_single_expr(self, deco, expr):
+    return StmtSingle(expr), []
 
 # print statement
 
@@ -744,7 +760,12 @@ def _visit_except_end(self, deco, try_):
 
 @_visitor(OpcodeBuildFunction, Code)
 def _visit_build_function(self, deco, code):
-    return [ExprFunctionRaw(deco_code(code))]
+    return [ExprFunctionRaw(deco_code(code), [])]
+
+@_visitor(OpcodeSetFuncArgs, ExprTuple, ExprFunctionRaw)
+def _visit_set_func_args(self, deco, args, fun):
+    # bug alert: def f(a, b=1) is compiled as def f(a=1, b)
+    return [ExprFunctionRaw(fun.code, args.exprs)]
 
 @_visitor(OpcodeUnaryCall, ExprFunctionRaw)
 def _visit_unary_call(self, deco, fun):

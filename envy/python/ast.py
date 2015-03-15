@@ -42,11 +42,15 @@ def ast_process(deco, version):
             raise PythonError("no $endclass in class def")
         return Block(block.stmts[:-1])
 
-    def process_fun_body(code):
-        block = code.block
+    def process_fun_body(node):
+        block = node.code.block
         if not block.stmts or not isinstance(block.stmts[0], StmtArgs):
             raise PythonError("no $args in function def")
-        return ExprFunction(code.code.name, block.stmts[0].args, Block(block.stmts[1:]))
+        return ExprFunction(
+            node.code.code.name,
+            block.stmts[0].args.setdefs(node.defargs),
+            Block(block.stmts[1:])
+        )
 
     def isfunction(subnode):
         return isinstance(subnode, ExprFunction)
@@ -111,7 +115,7 @@ def ast_process(deco, version):
         if isinstance(node, ExprClassRaw):
             return ExprClass(node.name, node.bases, process_class_body(node.code, node.name))
         if isinstance(node, ExprFunctionRaw):
-            return process_fun_body(node.code)
+            return process_fun_body(node)
         if isinstance(node, StmtAssign):
             return process_def(node)
         if isinstance(node, StmtIf):

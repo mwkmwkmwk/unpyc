@@ -447,16 +447,22 @@ class ExprFast(Expr):
 # functions - to be cleaned up by prettifier
 
 class ExprFunctionRaw(Expr):
-    __slots__ = 'code',
+    __slots__ = 'code', 'defargs'
 
-    def __init__(self, code):
+    def __init__(self, code, defargs=[]):
         self.code = code
+        self.defargs = defargs
 
     def subprocess(self, process):
-        return ExprFunctionRaw(process(self.code))
+        return ExprFunctionRaw(
+            process(self.code),
+            [process(arg) for arg in self.defargs]
+        )
 
     def show(self, ctx):
         # TODO some better idea?
+        if self.defargs:
+            return '($functionraw {})'.format(', '.join(arg.show(None) for arg in self.defargs))
         return '$functionraw'
 
 

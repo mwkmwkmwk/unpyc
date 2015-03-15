@@ -64,6 +64,8 @@ class Pyc10(metaclass=PycVersion):
     # expression statements are always printed (as opposed to just
     # top-level in interactive mode)
     always_print_expr = True
+    # has default arguments
+    has_def_args = False
     # has new code marshal type, has co_varnames, doesn't have RESERVE_FAST
     has_new_code = False
     # has ellipsis (...)
@@ -103,6 +105,7 @@ class Pyc11(Pyc10):
     name = "Python 1.1/1.2"
     consts_is_list = False
     always_print_expr = False
+    has_def_args = True
 
 class Pyc13(Pyc11):
     code = _v(11913)

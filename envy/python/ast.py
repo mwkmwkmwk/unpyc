@@ -143,8 +143,8 @@ def ast_process(deco, version):
 
     def process_lambda(node):
         stmts = node.block.stmts
-        if node.name is not None:
-            raise PythonError("lambda with a name")
+        if node.name is not None and node.name != '<lambda>':
+            raise PythonError("lambda with a name: {}".format(node.name))
         if len(stmts) != 1:
             raise PythonError("lambda body too long")
         if not isinstance(stmts[0], StmtReturn):

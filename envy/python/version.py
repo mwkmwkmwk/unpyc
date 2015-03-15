@@ -106,6 +106,8 @@ class Pyc11(Pyc10):
     consts_is_list = False
     always_print_expr = False
     has_def_args = True
+    # note: there's a silent pyc-affecting change in Python 1.2 - lambdas
+    # have a name of '<lambda>' instead of None
 
 class Pyc13(Pyc11):
     code = _v(11913)

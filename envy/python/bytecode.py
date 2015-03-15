@@ -1,5 +1,9 @@
+from collections import namedtuple
+
 from .helpers import PythonError
 from .expr import Expr, ExprNone, CmpOp, ExprTuple, ExprString
+
+Flow = namedtuple('Flow', ['src', 'dst'])
 
 OPCODES = {}
 
@@ -67,27 +71,29 @@ class OpcodeParamNum(Opcode):
 
 
 class OpcodeParamAbs(Opcode):
-    __slots__ = 'target',
+    __slots__ = 'flow',
 
     def read_params(self, bytecode):
-        self.target = bytecode.word()
-        self.outflow.append(self.target)
+        target = bytecode.word()
+        self.flow = Flow(self.pos, target)
+        self.outflow.append(target)
 
     def print_params(self):
-        return str(self.target)
+        return str(self.flow.dst)
 
 
 class OpcodeParamRel(Opcode):
-    __slots__ = 'target',
+    __slots__ = 'flow',
 
     def read_params(self, bytecode):
         diff = bytecode.word()
         # importantly, bytecode.pos is *end* of the insn
-        self.target = bytecode.pos + diff
-        self.outflow.append(self.target)
+        target = bytecode.pos + diff
+        self.flow = Flow(self.pos, target)
+        self.outflow.append(target)
 
     def print_params(self):
-        return str(self.target)
+        return str(self.flow.dst)
 
 
 class OpcodeParamName(Opcode):

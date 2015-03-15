@@ -9,7 +9,6 @@ from .bytecode import *
 # TODO:
 #
 # - make a nice ast metaclass
-# - validate inflows
 # - clean expr
 # - clean up the stack item mess
 # - contexts for expressions dammit
@@ -38,10 +37,6 @@ from .bytecode import *
 #   - access
 #   - print
 
-# dummy opcode for inflow
-
-Inflow = namedtuple('Inflow', ['src', 'dst'])
-
 # funny intermediate stuff to put on stack
 
 Dup = namedtuple('Dup', ['expr'])
@@ -54,39 +49,36 @@ MultiAssignDup = namedtuple('MultiAssignDup', ['src', 'dsts'])
 UnpackSlot = namedtuple('UnpackSlot', ['expr', 'idx'])
 UnpackArgSlot = namedtuple('UnpackArgSlot', ['args', 'idx'])
 UnpackVarargSlot = namedtuple('UnpackVarargSlot', ['args'])
-JumpIfFalse = namedtuple('JumpIfFalse', ['expr', 'target'])
-JumpIfTrue = namedtuple('JumpIfTrue', ['expr', 'target'])
-IfStart = namedtuple('IfStart', ['expr', 'target'])
-If = namedtuple('If', ['expr', 'body', 'end'])
-OrStart = namedtuple('OrStart', ['expr', 'target'])
-CompareStart = namedtuple('CompareStart', ['items'])
-Compare = namedtuple('Compare', ['items', 'target'])
-CompareLast = namedtuple('CompareLast', ['items', 'target'])
-CompareNext = namedtuple('CompareNext', ['items', 'target'])
-CompareContinue = namedtuple('CompareContinue', ['items', 'target', 'next'])
+JumpIfFalse = namedtuple('JumpIfFalse', ['expr', 'flow'])
+JumpIfTrue = namedtuple('JumpIfTrue', ['expr', 'flow'])
+IfStart = namedtuple('IfStart', ['expr', 'flow'])
+IfElse = namedtuple('IfElse', ['expr', 'body', 'flow'])
+OrStart = namedtuple('OrStart', ['expr', 'flow'])
+CompareStart = namedtuple('CompareStart', ['items', 'flows'])
+Compare = namedtuple('Compare', ['items', 'flows'])
+CompareLast = namedtuple('CompareLast', ['items', 'flows'])
+CompareNext = namedtuple('CompareNext', ['items', 'flows'])
+CompareContinue = namedtuple('CompareContinue', ['items', 'flows', 'next'])
 WantPop = namedtuple('WantPop', [])
 WantPopBlock = namedtuple('WantPopBlock', [])
 WantRotTwo = namedtuple('WantRotTwo', [])
-WantInflow = namedtuple('WantInflow', [])
-SetupLoop = namedtuple('SetupLoop', ['end'])
-SetupFinally = namedtuple('SetupFinally', ['pos', 'end'])
-SetupExcept = namedtuple('SetupExcept', ['pos', 'end'])
-Loop = namedtuple('Loop', ['src', 'dst', 'cont'])
+WantFlow = namedtuple('WantFlow', ['flow'])
+SetupLoop = namedtuple('SetupLoop', ['flow'])
+SetupFinally = namedtuple('SetupFinally', ['flow'])
+SetupExcept = namedtuple('SetupExcept', ['flow'])
+Loop = namedtuple('Loop', ['flow', 'cont'])
 While = namedtuple('While', ['expr', 'end', 'block'])
-ForStart = namedtuple('ForStart', ['expr', 'loop', 'end'])
-ForLoop = namedtuple('ForLoop', ['expr', 'dst', 'loop', 'end'])
-TryFinallyPending = namedtuple('TryFinallyPending', ['body', 'pos', 'end'])
+ForStart = namedtuple('ForStart', ['expr', 'loop', 'flow'])
+ForLoop = namedtuple('ForLoop', ['expr', 'dst', 'loop', 'flow'])
+TryFinallyPending = namedtuple('TryFinallyPending', ['body', 'flow'])
 TryFinally = namedtuple('TryFinally', ['body'])
-TryExceptEndTry = namedtuple('TryExceptEndTry', ['setup', 'body'])
-TryExceptPending = namedtuple('TryExceptPending', ['setup', 'end', 'body'])
-TryExceptMid = namedtuple('TryExceptMid', ['end', 'body', 'items'])
-TryExceptMatchStart = namedtuple('TryExceptMatchStart', ['end', 'body', 'items'])
-TryExceptMatchMid = namedtuple('TryExceptMatchMid', ['end', 'body', 'items', 'expr'])
-TryExceptMatchOk = namedtuple('TryExceptMatchOk', ['end', 'body', 'items', 'expr', 'next'])
-TryExceptMatch = namedtuple('TryExceptMatch', ['end', 'body', 'items', 'expr', 'dst', 'next'])
-TryExceptJoin = namedtuple('TryExceptJoin', ['end', 'body', 'items', 'next'])
-TryExceptAnyPending = namedtuple('TryExceptAnyPending', ['end', 'body', 'items'])
-TryExceptAny = namedtuple('TryExceptAny', ['end', 'body', 'items', 'any'])
+TryExceptEndTry = namedtuple('TryExceptEndTry', ['flow', 'body'])
+TryExceptMid = namedtuple('TryExceptMid', ['else_', 'body', 'items', 'any', 'flows'])
+TryExceptMatchStart = namedtuple('TryExceptMatchStart', [])
+TryExceptMatchMid = namedtuple('TryExceptMatchMid', ['expr'])
+TryExceptMatchOk = namedtuple('TryExceptMatchOk', ['expr', 'next'])
+TryExceptMatch = namedtuple('TryExceptMatch', ['expr', 'dst', 'next'])
+TryExceptAny = namedtuple('TryExceptAny', [])
 UnaryCall = namedtuple('UnaryCall', ['code'])
 Locals = namedtuple('Locals', [])
 
@@ -195,12 +187,19 @@ def _store_visitor(op, *stack):
         @_visitor(op, ForStart, *stack)
         def visit_store_multi_start(self, deco, start, *args):
             dst, extra = func(self, deco, *args)
-            return [ForLoop(start.expr, dst, start.loop, start.end), Block([])] + extra
+            return [
+                ForLoop(start.expr, dst, start.loop, start.flow),
+                Block([])
+            ] + extra
 
         @_visitor(op, TryExceptMatchOk, *stack)
-        def _visit_except_match_store(self, deco, try_, *args):
+        def _visit_except_match_store(self, deco, match, *args):
             dst, extra = func(self, deco, *args)
-            return [TryExceptMatch(try_.end, try_.body, try_.items, try_.expr, dst, try_.next), Block([]), WantPop()] + extra
+            return [
+                TryExceptMatch(match.expr, dst, match.next),
+                Block([]),
+                WantPop()
+            ] + extra
 
         @_stmt_visitor(op, Import, *stack)
         def _visit_store_name_import(self, deco, import_, *args):
@@ -487,29 +486,30 @@ def _visit_import_from_end(self, deco, from_import):
 
 @_visitor(OpcodeJumpIfFalse, Expr)
 def _visit_jump_if_false(self, deco, expr):
-    return [JumpIfFalse(expr, self.target)]
+    return [JumpIfFalse(expr, self.flow)]
 
 @_visitor(OpcodeJumpIfTrue, Expr)
 def _visit_jump_if_false(self, deco, expr):
-    return [JumpIfTrue(expr, self.target)]
+    return [JumpIfTrue(expr, self.flow)]
 
 @_visitor(OpcodePopTop, JumpIfFalse)
 def _visit_if(self, deco, jump):
-    return [IfStart(jump.expr, jump.target), Block([])]
+    return [IfStart(jump.expr, jump.flow), Block([])]
 
 @_visitor(OpcodePopTop, JumpIfTrue)
 def _visit_if(self, deco, jump):
-    return [OrStart(jump.expr, jump.target)]
+    return [OrStart(jump.expr, jump.flow)]
 
 @_visitor(OpcodeJumpForward, IfStart, Block)
 def _visit_if_else(self, deco, if_, block):
-    if if_.target != self.nextpos:
+    if if_.flow.dst != self.nextpos:
         raise PythonError("missing if code")
-    return [If(if_.expr, block, self.target), Block([]), WantPop(), WantInflow()]
+    return [IfElse(if_.expr, block, self.flow), Block([]), WantPop(), WantFlow(if_.flow)]
 
-@_visitor(Inflow, WantInflow)
-def _visit_inflow(self, deco, want):
-    # TODO validate inflow
+@_visitor(Flow, WantFlow)
+def _visit_flow(self, deco, want):
+    if self != want.flow:
+        raise PythonError("want flow mismatch")
     return []
 
 @_visitor(OpcodePopTop, WantPop)
@@ -524,22 +524,25 @@ def _visit_want_pop_block(self, deco, want):
 def _visit_want_rot_two(self, deco, want):
     return []
 
-@_stmt_visitor(Inflow, If, Block)
+@_stmt_visitor(Flow, IfElse, Block)
 def _visit_if_end(self, deco, if_, inner):
-    # TODO validate inflow
+    if self != if_.flow:
+        raise PythonError("mismatch else flow")
     return StmtIf([(if_.expr, if_.body)], inner), []
 
-@_visitor(Inflow, IfStart, Block, Expr)
-def _visit_and(self, deco, if_, block, expr):
-    # TODO validate inflow
+@_visitor(Flow, IfStart, Block, Expr)
+def _visit_and(self, deco, start, block, expr):
+    if self != start.flow:
+        raise PythonError("funny and flow")
     if block.stmts:
         raise PythonError("extra and statements")
-    return [ExprBoolAnd(if_.expr, expr)]
+    return [ExprBoolAnd(start.expr, expr)]
 
-@_visitor(Inflow, OrStart, Expr)
-def _visit_or(self, deco, if_, expr):
-    # TODO validate inflow
-    return [ExprBoolOr(if_.expr, expr)]
+@_visitor(Flow, OrStart, Expr)
+def _visit_or(self, deco, start, expr):
+    if self != start.flow:
+        raise PythonError("funny or flow")
+    return [ExprBoolOr(start.expr, expr)]
 
 # comparisons
 
@@ -549,66 +552,75 @@ def _visit_cmp(self, deco, e1, e2):
         raise NoMatch
     return [ExprCmp([e1, self.mode, e2])]
 
+# chained comparisons
+
+# start #1
 @_visitor(OpcodeCompareOp, BAB)
 def _visit_cmp_start(self, deco, bab):
     if self.mode is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareStart([bab.a, self.mode, bab.b])]
+    return [CompareStart([bab.a, self.mode, bab.b], [])]
 
+# start #2 and middle #3
+@_visitor(OpcodeJumpIfFalse, CompareStart)
+def _visit_cmp_jump(self, deco, cmp):
+    return [Compare(cmp.items, cmp.flows + [self.flow]), WantPop()]
+
+# middle #1
+@_visitor(OpcodeRotThree, Compare, Dup)
+def _visit_cmp_rot(self, deco, cmp, dup):
+    return [CompareContinue(cmp.items, cmp.flows, dup.expr)]
+
+# middle #2
 @_visitor(OpcodeCompareOp, CompareContinue)
 def _visit_cmp_next(self, deco, cmp):
     if self.mode is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareNext(cmp.items + [self.mode, cmp.next], cmp.target)]
+    return [CompareStart(cmp.items + [self.mode, cmp.next], cmp.flows)]
 
-@_visitor(OpcodeJumpIfFalse, CompareStart)
-def _visit_cmp_jump(self, deco, cmp):
-    return [Compare(cmp.items, self.target), WantPop()]
-
-@_visitor(OpcodeJumpIfFalse, CompareNext)
-def _visit_cmp_jump(self, deco, cmp):
-    if cmp.target != self.target:
-        raise PythonError("funny chained compare")
-    return [Compare(cmp.items, cmp.target), WantPop()]
-
+# end #1
 @_visitor(OpcodeCompareOp, Compare, Expr)
 def _visit_cmp_last(self, deco, cmp, expr):
     if self.mode is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareLast(cmp.items + [self.mode, expr], cmp.target)]
+    return [CompareLast(cmp.items + [self.mode, expr], cmp.flows)]
 
+# end #2
 @_visitor(OpcodeJumpForward, CompareLast)
 def _visit_cmp_last_jump(self, deco, cmp):
-    return [ExprCmp(cmp.items), WantInflow(), WantPop(), WantRotTwo()] + [WantInflow() for x in range((len(cmp.items) - 3) // 2)]
+    return [
+        ExprCmp(cmp.items),
+        WantFlow(self.flow),
+        WantPop(),
+        WantRotTwo()
+    ] + [WantFlow(flow) for flow in cmp.flows]
 
-@_visitor(OpcodeRotThree, Compare, Dup)
-def _visit_cmp_rot(self, deco, cmp, dup):
-    return [CompareContinue(cmp.items, cmp.target, dup.expr)]
-
-# loop framing
+# $loop framing
 
 @_visitor(OpcodeSetupLoop)
 def _visit_setup_loop(self, deco):
-    return [SetupLoop(self.target), Block([])]
+    return [SetupLoop(self.flow), Block([])]
 
-@_stmt_visitor(Inflow, SetupLoop, Block)
+@_stmt_visitor(Flow, SetupLoop, Block)
 def _visit_end_loop(self, deco, loop, inner):
-    if self.dst != loop.end:
+    if self != loop.flow:
         raise NoMatch
     return StmtLoop(inner), []
 
-@_visitor(Inflow, Loop)
+# actual loops
+
+@_visitor(Flow, Loop)
 def _visit_cont_in(self, deco, loop):
     if self.src <= self.dst:
         raise NoMatch
-    loop.cont[0] += 1
+    loop.cont.append(self)
     return [loop]
 
-@_visitor(Inflow)
+@_visitor(Flow)
 def _visit_loop(self, deco):
     if self.src <= self.dst:
         raise NoMatch
-    return [Loop(self.src, self.dst, [0])]
+    return [Loop(self, [])]
 
 # continue
 
@@ -621,24 +633,27 @@ def _visit_continue(self, deco):
         elif isinstance(item, ForLoop):
             loop = item.loop
             break
-        elif isinstance(item, (Block, IfStart, If, TryExceptMatch, TryExceptAnyPending)):
+        elif isinstance(item, (Block, IfStart, IfElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
         else:
             raise NoMatch
-    if not loop.cont[0]:
+    if not loop.cont:
         raise NoMatch
-    loop.cont[0] -= 1
+    if loop.cont[-1] != self.flow:
+        raise NoMatch
+    loop.cont.pop()
     return StmtContinue(), []
 
 # while loop
 
 @_stmt_visitor(OpcodeJumpAbsolute, Loop, IfStart, Block)
 def _visit_while(self, deco, loop, start, inner):
-    if loop.cont[0]:
+    if loop.cont:
         raise NoMatch
-    if loop.src != self.pos or loop.dst != self.target or start.target != self.nextpos:
+    # TODO validate flow
+    if loop.flow != self.flow or start.flow.dst != self.nextpos:
         raise PythonError("funny while loop")
-    return StmtWhileRaw(start.expr, inner), [WantPopBlock(), WantPop(), WantInflow()]
+    return StmtWhileRaw(start.expr, inner), [WantPopBlock(), WantPop(), WantFlow(start.flow)]
 
 # for loop
 
@@ -646,15 +661,15 @@ def _visit_while(self, deco, loop, start, inner):
 def _visit_for_start(self, deco, expr, zero, loop):
     if zero.val != 0:
         raise PythonError("funny for loop start")
-    return [ForStart(expr, loop, self.target)]
+    return [ForStart(expr, loop, self.flow)]
 
 @_stmt_visitor(OpcodeJumpAbsolute, ForLoop, Block)
 def _visit_for(self, deco, loop, inner):
-    if loop.loop.cont[0]:
+    if loop.loop.cont:
         raise NoMatch
-    if loop.loop.src != self.pos or loop.loop.dst != self.target or loop.end != self.nextpos:
+    if loop.loop.flow != self.flow or loop.flow.dst != self.nextpos:
         raise PythonError("mismatched for loop")
-    return StmtForRaw(loop.expr, loop.dst, inner), [WantPopBlock(), WantInflow()]
+    return StmtForRaw(loop.expr, loop.dst, inner), [WantPopBlock(), WantFlow(loop.flow)]
 
 # break
 
@@ -672,15 +687,15 @@ def _visit_access(self, deco, mode):
 
 @_visitor(OpcodeSetupFinally)
 def _visit_setup_finally(self, deco):
-    return [SetupFinally(self.pos, self.target), Block([])]
+    return [SetupFinally(self.flow), Block([])]
 
 @_visitor(OpcodePopBlock, SetupFinally, Block)
 def _visit_finally_pop(self, deco, setup, block):
-    return [TryFinallyPending(block, setup.pos, setup.end)]
+    return [TryFinallyPending(block, setup.flow)]
 
-@_visitor(Inflow, TryFinallyPending, ExprNone)
+@_visitor(Flow, TryFinallyPending, ExprNone)
 def _visit_finally(self, deco, try_, _):
-    if try_.pos != self.src or try_.end != self.dst:
+    if try_.flow != self:
         raise PythonError("funny finally")
     return [TryFinally(try_.body), Block([])]
 
@@ -690,71 +705,102 @@ def _visit_finally_end(self, deco, try_, inner):
 
 # try except
 
+# start try except - store address of except clause
+
 @_visitor(OpcodeSetupExcept)
 def _visit_setup_except(self, deco):
-    return [SetupExcept(self.pos, self.target), Block([])]
+    return [SetupExcept(self.flow), Block([])]
+
+# finish try clause - pop block & jump to else clause, start except clause
 
 @_visitor(OpcodePopBlock, SetupExcept, Block)
 def _visit_except_pop_try(self, deco, setup, block):
-    return [TryExceptEndTry(setup, block)]
+    return [TryExceptEndTry(setup.flow, block)]
 
 @_visitor(OpcodeJumpForward, TryExceptEndTry)
 def _visit_except_end_try(self, deco, try_):
-    return [TryExceptPending(try_.setup, Inflow(self.pos, self.target), try_.body)]
+    return [TryExceptMid(self.flow, try_.body, [], None, []), WantFlow(try_.flow)]
 
-@_visitor(Inflow, TryExceptPending)
-def _visit_except_start(self, deco, try_):
-    if self.src != try_.setup.pos or self.dst != try_.setup.end:
-        raise PythonError("funny except")
-    return [TryExceptMid(try_.end, try_.body, [])]
+# except match clause:
+#
+# - dup exception type
+# - compare with expression
+# - jump to next if unmatched
+# - pop comparison result and type
+# - either pop or store value
+# - pop traceback
 
 @_visitor(OpcodeDupTop, TryExceptMid)
 def _visit_except_match_start(self, deco, try_):
-    return [TryExceptMatchStart(try_.end, try_.body, try_.items)]
+    if try_.any:
+        raise PythonError("making an except match after blanket")
+    return [try_, TryExceptMatchStart()]
 
 @_visitor(OpcodeCompareOp, TryExceptMatchStart, Expr)
-def _visit_except_match_check(self, deco, try_, expr):
+def _visit_except_match_check(self, deco, start, expr):
     if self.mode != CmpOp.EXC_MATCH:
         raise PythonError("funny except match")
-    return [TryExceptMatchMid(try_.end, try_.body, try_.items, expr)]
+    return [TryExceptMatchMid(expr)]
 
 @_visitor(OpcodeJumpIfFalse, TryExceptMatchMid)
-def _visit_except_match_jump(self, deco, try_):
-    return [TryExceptMatchOk(try_.end, try_.body, try_.items, try_.expr, Inflow(self.pos, self.target)), WantPop(), WantPop()]
+def _visit_except_match_jump(self, deco, mid):
+    return [
+        TryExceptMatchOk(mid.expr, self.flow),
+        WantPop(),
+        WantPop()
+    ]
 
 @_visitor(OpcodePopTop, TryExceptMatchOk)
 def _visit_except_match_pop(self, deco, try_):
-    return [TryExceptMatch(try_.end, try_.body, try_.items, try_.expr, None, try_.next), Block([]), WantPop()]
+    return [
+        TryExceptMatch(try_.expr, None, try_.next),
+        Block([]),
+        WantPop()
+    ]
 
-@_visitor(OpcodeJumpForward, TryExceptMatch, Block)
-def _visit_except_match_end(self, deco, try_, block):
-    if self.target != try_.end.dst:
-        raise PythonError("misaligned except ends")
-    return [TryExceptJoin(try_.end, try_.body, try_.items + [(try_.expr, try_.dst, block)], try_.next)]
-
-@_visitor(Inflow, TryExceptJoin)
-def _visit_except_match_join(self, deco, try_):
-    if try_.next != self:
-        raise PythonError("funny except join")
-    return [TryExceptMid(try_.end, try_.body, try_.items), WantPop()]
+@_visitor(OpcodeJumpForward, TryExceptMid, TryExceptMatch, Block)
+def _visit_except_match_end(self, deco, try_, match, block):
+    return [
+        TryExceptMid(
+            try_.else_,
+            try_.body,
+            try_.items + [(match.expr, match.dst, block)],
+            None,
+            try_.flows + [self.flow]
+        ),
+        WantPop(),
+        WantFlow(match.next)
+    ]
 
 @_visitor(OpcodePopTop, TryExceptMid)
 def _visit_except_any(self, deco, try_):
-    return [TryExceptAnyPending(try_.end, try_.body, try_.items), Block([]), WantPop(), WantPop()]
+    if try_.any:
+        raise PythonError("making a second except blanket")
+    return [
+        try_,
+        TryExceptAny(),
+        Block([]),
+        WantPop(),
+        WantPop()
+    ]
 
-@_visitor(OpcodeJumpForward, TryExceptAnyPending, Block)
-def _visit_except_any_end(self, deco, try_, block):
-    if self.target != try_.end.dst:
-        raise PythonError("misaligned except ends")
-    return [TryExceptAny(try_.end, try_.body, try_.items, block)]
-
-@_stmt_visitor(OpcodeEndFinally, TryExceptAny)
-def _visit_except_end(self, deco, try_):
-    return StmtExcept(try_.body, try_.items, try_.any), [WantInflow() for x in range(len(try_.items) + 2)]
+@_visitor(OpcodeJumpForward, TryExceptMid, TryExceptAny, Block)
+def _visit_except_any_end(self, deco, try_, _, block):
+    return [
+        TryExceptMid(
+            try_.else_,
+            try_.body,
+            try_.items,
+            block,
+            try_.flows + [self.flow]
+        )
+    ]
 
 @_stmt_visitor(OpcodeEndFinally, TryExceptMid)
 def _visit_except_end(self, deco, try_):
-    return StmtExcept(try_.body, try_.items, None), [WantInflow() for x in range(len(try_.items) + 1)]
+    return StmtExcept(try_.body, try_.items, try_.any), [WantFlow(try_.else_)] + [
+        WantFlow(flow) for flow in try_.flows
+    ]
 
 # functions & classes
 
@@ -804,7 +850,7 @@ class DecoCtx:
             self.varnames = None
         for op in self.bytecode.ops:
             for inflow in reversed(op.inflow):
-                self.process(Inflow(inflow, op.pos))
+                self.process(Flow(inflow, op.pos))
             self.process(op)
         if len(self.stack) != 1:
             raise PythonError("stack non-empty at the end")

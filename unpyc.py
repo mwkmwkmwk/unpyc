@@ -83,13 +83,13 @@ for fname in sys.argv[1:]:
     #    print(line)
 
     code = Code(pyc.code, pyc.version)
-    #for line in code.show():
-    #    print(line)
+    for line in code.show():
+        print(line)
 
     deco = deco_code(code)
     #for line in deco.show():
     #    print(line)
 
-    ast = ast_process(deco)
+    ast = ast_process(deco, pyc.version)
     for line in ast.show():
         print(line)

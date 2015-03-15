@@ -1,5 +1,5 @@
 from .helpers import PythonError
-from .expr import Expr, ExprNone, CmpOp
+from .expr import Expr, ExprNone, CmpOp, ExprTuple, ExprString
 
 OPCODES = {}
 
@@ -593,14 +593,25 @@ class OpcodeReserveFast(Opcode):
 
     def read_params(self, bytecode):
         # TODO
-        from .code import CodeDict
-        const, _ = bytecode.get_const((CodeDict, ExprNone))
-        if isinstance(const, CodeDict):
-            self.names = const.names
-        elif isinstance(const, ExprNone):
-            self.names = []
+        if bytecode.version.consts_is_list:
+            from .code import CodeDict
+            const, _ = bytecode.get_const((CodeDict, ExprNone))
+            if isinstance(const, CodeDict):
+                self.names = const.names
+            elif isinstance(const, ExprNone):
+                self.names = []
+            else:
+                assert False
         else:
-            assert False
+            const, _ = bytecode.get_const((ExprTuple, ExprNone))
+            if isinstance(const, ExprTuple):
+                self.names = []
+                for name in const.exprs:
+                    if not isinstance(name, ExprString):
+                        raise PythonError("funny var name")
+                    self.names.append(name.val.decode('ascii'))
+            else:
+                self.names = None
 
     def print_params(self):
         return ', '.join(self.names)

@@ -8,14 +8,15 @@ from .bytecode import *
 
 # TODO:
 #
+# - make a nice ast metaclass
 # - validate inflows
 # - clean expr
 # - clean up the stack item mess
 # - contexts for expressions dammit
-# - simplify if
 # - bump as many versions as easily possible
 # - figure out what to do about line numbers
 # - access prettyprint modes
+# - make a test suite
 #
 # and for prettifier:
 #
@@ -28,11 +29,7 @@ from .bytecode import *
 # - get rid of return None
 # - clean statements:
 #
-#   - raise/exec None detection
-#   - punt exec/raise None detection?
-#   - create elifs
-#   - get rid of $loop
-#   - get rid of $single
+#   - import: get rid of as
 #
 # - merge statements:
 #
@@ -59,7 +56,7 @@ UnpackVarargSlot = namedtuple('UnpackVarargSlot', ['args'])
 JumpIfFalse = namedtuple('JumpIfFalse', ['expr', 'target'])
 JumpIfTrue = namedtuple('JumpIfTrue', ['expr', 'target'])
 IfStart = namedtuple('IfStart', ['expr', 'target'])
-If = namedtuple('If', ['items', 'end'])
+If = namedtuple('If', ['expr', 'body', 'end'])
 OrStart = namedtuple('OrStart', ['expr', 'target'])
 CompareStart = namedtuple('CompareStart', ['items'])
 Compare = namedtuple('Compare', ['items', 'target'])
@@ -410,7 +407,7 @@ def visit_unpack_list(self, deco):
 
 @_stmt_visitor(OpcodePrintExpr, Expr)
 def _visit_print_expr(self, deco, expr):
-    return StmtSingle(expr), []
+    return StmtPrintExpr(expr), []
 
 # print statement
 
@@ -492,7 +489,7 @@ def _visit_if(self, deco, jump):
 def _visit_if_else(self, deco, if_, block):
     if if_.target != self.nextpos:
         raise PythonError("missing if code")
-    return [If([(if_.expr, block)], self.target), Block([]), WantPop(), WantInflow()]
+    return [If(if_.expr, block, self.target), Block([]), WantPop(), WantInflow()]
 
 @_visitor(Inflow, WantInflow)
 def _visit_inflow(self, deco, want):
@@ -514,7 +511,7 @@ def _visit_want_rot_two(self, deco, want):
 @_stmt_visitor(Inflow, If, Block)
 def _visit_if_end(self, deco, if_, inner):
     # TODO validate inflow
-    return StmtIf(if_.items, inner), []
+    return StmtIf([(if_.expr, if_.body)], inner), []
 
 @_visitor(Inflow, IfStart, Block, Expr)
 def _visit_and(self, deco, if_, block, expr):
@@ -625,7 +622,7 @@ def _visit_while(self, deco, loop, start, inner):
         raise NoMatch
     if loop.src != self.pos or loop.dst != self.target or start.target != self.nextpos:
         raise PythonError("funny while loop")
-    return StmtWhile(start.expr, inner), [WantPopBlock(), WantPop(), WantInflow()]
+    return StmtWhileRaw(start.expr, inner), [WantPopBlock(), WantPop(), WantInflow()]
 
 # for loop
 
@@ -641,7 +638,7 @@ def _visit_for(self, deco, loop, inner):
         raise NoMatch
     if loop.loop.src != self.pos or loop.loop.dst != self.target or loop.end != self.nextpos:
         raise PythonError("mismatched for loop")
-    return StmtFor(loop.expr, loop.dst, inner), [WantPopBlock(), WantInflow()]
+    return StmtForRaw(loop.expr, loop.dst, inner), [WantPopBlock(), WantInflow()]
 
 # break
 
@@ -792,7 +789,7 @@ class DecoCtx:
             raise PythonError("stack non-empty at the end")
         if not isinstance(self.stack[0], Block):
             raise PythonError("weirdness on stack at the end")
-        self.res = DecoCode(self.stack[0], code)
+        self.res = DecoCode(self.stack[0], code, self.varnames)
 
     def process(self, op):
         for visitor in _VISITORS.get(type(op), []):
@@ -810,14 +807,15 @@ def deco_code(code):
 
 
 class DecoCode:
-    __slots__ = 'block', 'code'
+    __slots__ = 'block', 'code', 'varnames'
 
-    def __init__(self, block, code):
+    def __init__(self, block, code, varnames):
         self.block = block
         self.code = code
+        self.varnames = varnames
 
     def subprocess(self, process):
-        return DecoCode(process(self.block), self.code)
+        return DecoCode(process(self.block), self.code, self.varnames)
 
     def show(self):
         return self.block.show()

@@ -96,7 +96,20 @@ class StmtSingle(Stmt):
         return StmtSingle(process(self.val))
 
     def show(self):
-        yield "$single {}".format(self.val.show(None))
+        yield self.val.show(None)
+
+
+class StmtPrintExpr(Stmt):
+    __slots__ = 'val',
+
+    def __init__(self, val):
+        self.val = val
+
+    def subprocess(self, process):
+        return StmtPrintExpr(process(self.val))
+
+    def show(self):
+        yield "$print {}".format(self.val.show(None))
 
 
 class StmtAssign(Stmt):
@@ -258,7 +271,7 @@ class StmtLoop(Stmt):
         yield from indent(self.body.show())
 
 
-class StmtWhile(Stmt):
+class StmtWhileRaw(Stmt):
     __slots__ = 'expr', 'body'
 
     def __init__(self, expr, body):
@@ -266,14 +279,37 @@ class StmtWhile(Stmt):
         self.body = body
 
     def subprocess(self, process):
-        return StmtWhile(process(self.expr), process(self.body))
+        return StmtWhileRaw(process(self.expr), process(self.body))
 
     def show(self):
         yield "$while {}:".format(self.expr.show(None))
         yield from indent(self.body.show())
 
 
-class StmtFor(Stmt):
+class StmtWhile(Stmt):
+    __slots__ = 'expr', 'body', 'else_'
+
+    def __init__(self, expr, body, else_):
+        self.expr = expr
+        self.body = body
+        self.else_ = else_
+
+    def subprocess(self, process):
+        return StmtWhile(
+            process(self.expr),
+            process(self.body),
+            process(self.else_) if self.else_ else None
+        )
+
+    def show(self):
+        yield "while {}:".format(self.expr.show(None))
+        yield from indent(self.body.show())
+        if self.else_ is not None:
+            yield "else:"
+            yield from indent(self.else_.show())
+
+
+class StmtForRaw(Stmt):
     __slots__ = 'expr', 'dst', 'body'
 
     def __init__(self, expr, dst, body):
@@ -282,11 +318,36 @@ class StmtFor(Stmt):
         self.body = body
 
     def subprocess(self, process):
-        return StmtFor(process(self.expr), process(self.dst), process(self.body))
+        return StmtForRaw(process(self.expr), process(self.dst), process(self.body))
 
     def show(self):
         yield "$for {} in {}:".format(self.dst.show(None), self.expr.show(None))
         yield from indent(self.body.show())
+
+
+class StmtFor(Stmt):
+    __slots__ = 'expr', 'dst', 'body', 'else_'
+
+    def __init__(self, expr, dst, body, else_):
+        self.expr = expr
+        self.dst = dst
+        self.body = body
+        self.else_ = else_
+
+    def subprocess(self, process):
+        return StmtFor(
+            process(self.expr),
+            process(self.dst),
+            process(self.body),
+            process(self.else_) if self.else_ else None
+        )
+
+    def show(self):
+        yield "for {} in {}:".format(self.dst.show(None), self.expr.show(None))
+        yield from indent(self.body.show())
+        if self.else_ is not None:
+            yield "else:"
+            yield from indent(self.else_.show())
 
 
 class StmtFinally(Stmt):

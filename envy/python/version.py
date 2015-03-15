@@ -59,26 +59,50 @@ class Pyc10(metaclass=PycVersion):
     code = 0x999902
     name = "Python 1.0"
 
+    # co_consts and co_names are lists instead of tuples
     consts_is_list = True
+    # expression statements are always printed (as opposed to just
+    # top-level in interactive mode)
+    always_print_expr = True
+    # has new code marshal type, has co_varnames, doesn't have RESERVE_FAST
     has_new_code = False
+    # has ellipsis (...)
     has_ellipsis = False
+    # has stacksize and lnotab
     has_stacksize = False
+    # has -U option to interpreter
     has_U = False
+    # has nested functions with closures
     has_closure = False
+    # numeric fields in code are 32-bit instead of 16-bit
     has_le4 = False
+    # has SET_LIENENO
+    has_set_lineno = True
+    # has peephole optimier
+    has_peephole = False
+    # has interned bytestrings in marshal
     has_str_intern = False
+    # has sets and frozensets
+    # TODO rename
     has_frozenset = False
+    # has binary float format in marshal
     has_bin_float = False
+    # generic py3k flag - unicode strings, kw-only args, ...
     py3k = False
+    # has True/False as compile-time literals (as opposed to builtins)
     has_bool_literal = False
+    # has source size in pyc
     has_size = False
+    # has marshal optimized formats
     has_marshal_opt = False
+    # has marshal reference support
     has_marshal_ref = False
 
 class Pyc11(Pyc10):
     code = 0x999903
     name = "Python 1.1/1.2"
     consts_is_list = False
+    always_print_expr = False
 
 class Pyc13(Pyc11):
     code = _v(11913)
@@ -124,6 +148,8 @@ class Pyc23(Pyc22):
     code = _v(62011)
     name = "Python 2.3"
     has_le4 = True
+    has_set_lineno = False
+    has_peephole = True
 
 class Pyc24(Pyc23):
     # 62041 used in a1-a2

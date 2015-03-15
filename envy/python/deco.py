@@ -798,7 +798,7 @@ def _visit_except_any_end(self, deco, try_, _, block):
 
 @_stmt_visitor(OpcodeEndFinally, TryExceptMid)
 def _visit_except_end(self, deco, try_):
-    return StmtExcept(try_.body, try_.items, try_.any), [WantFlow(try_.else_)] + [
+    return StmtExcept(try_.body, try_.items, try_.any, None), [WantFlow(try_.else_)] + [
         WantFlow(flow) for flow in try_.flows
     ]
 

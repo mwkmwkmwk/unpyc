@@ -388,12 +388,13 @@ class StmtFinally(Stmt):
 
 
 class StmtExcept(Stmt):
-    __slots__ = 'try_', 'items', 'any'
+    __slots__ = 'try_', 'items', 'any', 'else_'
 
-    def __init__(self, try_, items, any):
+    def __init__(self, try_, items, any, else_):
         self.try_ = try_
         self.items = items
         self.any = any
+        self.else_ = else_
 
     def subprocess(self, process):
         return StmtExcept(
@@ -407,6 +408,7 @@ class StmtExcept(Stmt):
                 for expr, dst, body in self.items
             ],
             process(self.any) if self.any else None,
+            process(self.else_) if self.else_ else None,
         )
 
     def show(self):
@@ -422,6 +424,9 @@ class StmtExcept(Stmt):
         if self.any is not None:
             yield "except:"
             yield from indent(self.any.show())
+        if self.else_ is not None:
+            yield "else:"
+            yield from indent(self.else_.show())
 
 
 class StmtBreak(Stmt):

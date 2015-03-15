@@ -79,6 +79,7 @@ TryExceptMatchMid = namedtuple('TryExceptMatchMid', ['expr'])
 TryExceptMatchOk = namedtuple('TryExceptMatchOk', ['expr', 'next'])
 TryExceptMatch = namedtuple('TryExceptMatch', ['expr', 'dst', 'next'])
 TryExceptAny = namedtuple('TryExceptAny', [])
+TryExceptElse = namedtuple('TryExceptElse', ['body', 'items', 'any', 'flows'])
 UnaryCall = namedtuple('UnaryCall', ['code'])
 Locals = namedtuple('Locals', [])
 
@@ -509,7 +510,7 @@ def _visit_if_else(self, deco, if_, block):
 @_visitor(Flow, WantFlow)
 def _visit_flow(self, deco, want):
     if self != want.flow:
-        raise PythonError("want flow mismatch")
+        raise NoMatch
     return []
 
 @_visitor(OpcodePopTop, WantPop)
@@ -633,7 +634,7 @@ def _visit_continue(self, deco):
         elif isinstance(item, ForLoop):
             loop = item.loop
             break
-        elif isinstance(item, (Block, IfStart, IfElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
+        elif isinstance(item, (Block, IfStart, IfElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptElse)):
             pass
         else:
             raise NoMatch
@@ -796,10 +797,20 @@ def _visit_except_any_end(self, deco, try_, _, block):
         )
     ]
 
-@_stmt_visitor(OpcodeEndFinally, TryExceptMid)
+@_visitor(OpcodeEndFinally, TryExceptMid)
 def _visit_except_end(self, deco, try_):
-    return StmtExcept(try_.body, try_.items, try_.any, None), [WantFlow(try_.else_)] + [
-        WantFlow(flow) for flow in try_.flows
+    return [
+        TryExceptElse(try_.body, try_.items, try_.any, try_.flows),
+        Block([]),
+        WantFlow(try_.else_)
+    ]
+
+@_stmt_visitor(Flow, TryExceptElse, Block)
+def _visit_except_end(self, deco, try_, block):
+    if self != try_.flows[-1]:
+        raise NoMatch
+    return StmtExcept(try_.body, try_.items, try_.any, block), [
+        WantFlow(flow) for flow in try_.flows[:-1]
     ]
 
 # functions & classes
@@ -849,9 +860,27 @@ class DecoCtx:
         else:
             self.varnames = None
         for op in self.bytecode.ops:
-            for inflow in reversed(op.inflow):
-                self.process(Flow(inflow, op.pos))
-            self.process(op)
+            flows = [Flow(inflow, op.pos) for inflow in reversed(op.inflow)]
+            while flows:
+                for idx, flow in enumerate(flows):
+                    try:
+                        self.process(flow)
+                    except NoMatch:
+                        continue
+                    flows.pop(idx)
+                    break
+                else:
+                    raise PythonError("no visitors matched for {}, [{}]".format(
+                        ', '.join(str(flow) for flow in flows),
+                        ', '.join(type(x).__name__ for x in self.stack)
+                    ))
+            try:
+                self.process(op)
+            except NoMatch:
+                raise PythonError("no visitors matched: {}, [{}]".format(
+                    type(op).__name__,
+                    ', '.join(type(x).__name__ for x in self.stack)
+                ))
         if len(self.stack) != 1:
             raise PythonError("stack non-empty at the end")
         if not isinstance(self.stack[0], Block):
@@ -863,10 +892,7 @@ class DecoCtx:
             if visitor.visit(op, self):
                 break
         else:
-            raise PythonError("no visitors matched: {}, [{}]".format(
-                type(op).__name__,
-                ', '.join(type(x).__name__ for x in self.stack)
-            ))
+            raise NoMatch
 
 
 def deco_code(code):

@@ -29,6 +29,7 @@ def ast_process(deco, version):
     # - makes class/function expressions, and cleans their bodies from relevant stuff
     # - cleans if statements: empty else suites are discarded, else suites consisting
     #   of a single if statement are changed into elif
+    # - get rid of empty else suites on try except statements
     # - converts $loop and $for/$while into proper for/while
     # - for Python 1.0, convert all $print to expression statements
 
@@ -94,6 +95,11 @@ def ast_process(deco, version):
                 return StmtIf(node.items + subif.items, subif.else_)
         return node
 
+    def process_except(node):
+        if not node.else_ or not node.else_.stmts:
+            return StmtExcept(node.try_, node.items, node.any, None)
+        return node
+
     def process_loop(node):
         stmts = node.body.stmts
         if not stmts:
@@ -120,6 +126,8 @@ def ast_process(deco, version):
             return process_def(node)
         if isinstance(node, StmtIf):
             return process_if(node)
+        if isinstance(node, StmtExcept):
+            return process_except(node)
         if isinstance(node, StmtLoop):
             return process_loop(node)
         if version.always_print_expr and isinstance(node, StmtPrintExpr):

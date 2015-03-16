@@ -52,12 +52,7 @@ class Opcode(metaclass=OpcodeMeta):
 
     @classmethod
     def version_ok(cls, version):
-        if cls.flag is None:
-            return True
-        elif cls.flag.startswith('!'):
-            return not getattr(version, cls.flag[1:])
-        else:
-            return getattr(version, cls.flag)
+        return version.match(cls.flag)
 
 
 class OpcodeParamNum(Opcode):
@@ -443,8 +438,7 @@ class OpcodeUnpackArg(OpcodeParamNum):
     """$push, $push, $push, [... times arg] = $args"""
     code = 94
     name = "UNPACK_ARG"
-
-    # TODO version_ok
+    flag = '!has_new_code'
 
 
 class OpcodeStoreAttr(OpcodeParamName):
@@ -475,8 +469,7 @@ class OpcodeUnpackVararg(OpcodeParamNum):
     """$push, $push, $push, [... times arg], *$push = $args"""
     code = 99
     name = "UNPACK_VARARG"
-
-    # TODO version_ok
+    flag = '!has_new_code'
 
 
 class OpcodeLoadConst(Opcode):
@@ -595,7 +588,7 @@ class OpcodeLoadGlobal(OpcodeParamName):
 class OpcodeSetFuncArgs(OpcodeParamNum):
     code = 117
     name = "SET_FUNC_ARGS"
-    flag = 'has_def_args'
+    flag = 'has_def_args', '!has_new_code'
 
 
 class OpcodeSetupLoop(OpcodeParamRel):

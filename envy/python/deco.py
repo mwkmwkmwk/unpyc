@@ -20,6 +20,7 @@ from .bytecode import *
 # - make a test suite
 # - find a way to print nested code objects after stage 3
 # - clean up import mess
+# - make sure signed/unsigned numbers are right
 # - py 1.3:
 #
 #   - raise
@@ -31,6 +32,44 @@ from .bytecode import *
 #
 #   - new slices
 #   - mangling
+#
+# - py 1.5:
+#
+#   - assert
+#
+# - py 1.6:
+#
+#   - var calls
+#   - zero-arg raise
+#   - unicode
+#
+# - py 2.0:
+#
+#   - inplace
+#   - print to
+#   - import star
+#   - unpack sequence
+#   - wide
+#   - import as
+#   - list comprehensions
+#
+# - py 2.1:
+#
+#   - closures
+#   - proper continue
+#   - future
+#
+# - py 2.2:
+#
+#   - floor/true divide
+#   - iterator-based for
+#   - generators
+#
+# - py 2.3:
+#
+#   - deal with optimizer
+#   - encoding...
+#   - SET_LINENO no more
 #
 # and for prettifier:
 #
@@ -117,7 +156,7 @@ class _Visitor:
         self.flag = flag
 
     def visit(self, opcode, deco):
-        if not self.version_ok(deco.version):
+        if not deco.version.match(self.flag):
             return False
         if len(deco.stack) < len(self.stack):
             return False
@@ -133,14 +172,6 @@ class _Visitor:
             deco.stack.pop()
         deco.stack.extend(res)
         return True
-
-    def version_ok(self, version):
-        if self.flag is None:
-            return True
-        elif self.flag.startswith('!'):
-            return not getattr(version, self.flag[1:])
-        else:
-            return getattr(version, self.flag)
 
 
 def _visitor(op, *stack, **kwargs):

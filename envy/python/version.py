@@ -50,6 +50,21 @@ class PycVersion:
             if self.has_U:
                 PYC_VERSIONS[self.code + 1] = self
 
+    def match(self, flags):
+        if flags is None:
+            flags = []
+        if not isinstance(flags, (list, tuple)):
+            flags = [flags]
+        ok = True
+        for flag in flags:
+            if flag.startswith('!'):
+                if getattr(self, flag[1:]):
+                    return False
+            else:
+                if not getattr(self, flag):
+                    return False
+        return True
+
 # 0x949494 used in 0.9.8, ??? used before
 # 0x999901 used in 0.9.9
 

@@ -739,17 +739,7 @@ class _MarshalContext:
         else:
             ref = False
         for fun, flags in MARSHAL_CODES.get(code, []):
-            if flags is None:
-                flags = []
-            if not isinstance(flags, list):
-                flags = [flags]
-            ok = True
-            for flag in flags:
-                if flag.startswith('!'):
-                    ok = ok and not getattr(self.version, flag[1:])
-                else:
-                    ok = ok and getattr(self.version, flag)
-            if ok:
+            if self.version.match(flags):
                 res = fun(self, ref)
                 break
         else:

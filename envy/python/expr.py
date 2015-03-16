@@ -395,15 +395,18 @@ class ExprCall(Expr):
     def subprocess(self, process):
         return ExprCall(
             process(self.expr),
-            [process(param) for param in self.params]
+            [(how, process(param)) for how, param in self.params]
         )
 
     def show(self, ctx):
         return '{}({})'.format(
             self.expr.show(ctx),
             ', '.join(
-                param.show(ctx)
-                for param in self.params
+                "{}{}".format(
+                    how if how in ('', '*', '**') else how + '=',
+                    param.show(ctx)
+                )
+                for how, param in self.params
             )
         )
 

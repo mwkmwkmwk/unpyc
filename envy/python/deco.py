@@ -22,7 +22,6 @@ from .bytecode import *
 # - py 1.3:
 #
 #   - building functions
-#   - calling functions
 #   - making classes
 #   - tuple arguments
 #
@@ -139,7 +138,7 @@ Locals = namedtuple('Locals', [])
 
 # a special marker to put in stack want lists - will match getattr(opcode, attr)
 # expressions and pass a list
-Exprs = namedtuple('Exprs', ['attr'])
+Exprs = namedtuple('Exprs', ['attr', 'factor'])
 
 # visitors
 
@@ -166,10 +165,14 @@ class _Visitor:
                 num = getattr(opcode, want.attr)
                 arg = []
                 for _ in range(num):
-                    expr = stack.pop()
-                    if not isinstance(expr, Expr):
-                        return False
-                    arg.append(expr)
+                    exprs = []
+                    for _ in range(want.factor):
+                        expr = stack.pop()
+                        if not isinstance(expr, Expr):
+                            return False
+                        exprs.append(expr)
+                    exprs.reverse()
+                    arg.append(expr if want.factor == 1 else exprs)
                 arg.reverse()
             else:
                 arg = stack.pop()
@@ -360,11 +363,11 @@ for otype, etype in {
 
 # expressions - build container
 
-@_visitor(OpcodeBuildTuple, Exprs('param'))
+@_visitor(OpcodeBuildTuple, Exprs('param', 1))
 def visit_build_tuple(self, deco, exprs):
     return [ExprTuple(exprs)]
 
-@_visitor(OpcodeBuildList, Exprs('param'))
+@_visitor(OpcodeBuildList, Exprs('param', 1))
 def visit_build_list(self, deco, exprs):
     return [ExprList(exprs)]
 
@@ -386,7 +389,14 @@ def visit_build_map_step(self, deco, aba, expr):
 
 @_visitor(OpcodeBinaryCall, Expr, ExprTuple)
 def visit_binary_call(self, deco, expr, params):
-    return [ExprCall(expr, params.exprs)]
+    return [ExprCall(expr, [('', arg) for arg in params.exprs])]
+
+@_visitor(OpcodeCallFunction, Expr, Exprs('args', 1), Exprs('kwargs', 2))
+def visit_call_function(self, deco, fun, args, kwargs):
+    for name, arg in kwargs:
+        if not isinstance(name, ExprString):
+            raise PythonError("kwarg not a string")
+    return [ExprCall(fun, [('', arg) for arg in args] + [(name.val.decode('ascii'), arg) for name, arg in kwargs])]
 
 # expressions - load const
 
@@ -500,7 +510,7 @@ def _visit_raise_2(self, deco, cls, val):
     return StmtRaise(cls, val), []
 
 # Python 1.3+
-@_stmt_visitor(OpcodeRaiseVarargs, Exprs('param'))
+@_stmt_visitor(OpcodeRaiseVarargs, Exprs('param', 1))
 def _visit_raise_varargs(self, deco, exprs):
     if len(exprs) > 3:
         raise PythonError("too many args to raise")

@@ -2,7 +2,8 @@ from envy.format.marshal import MarshalCode, MarshalDict, MarshalString, Marshal
 from envy.python.bytecode import parse_lnotab, Bytecode
 from envy.show import preindent, indent
 
-from .expr import from_marshal
+from .stmt import FunArgs
+from .expr import from_marshal, ExprFast
 from .helpers import PythonError
 
 from enum import Enum, IntEnum
@@ -221,32 +222,30 @@ class Code:
     def _init_args(self, obj):
         if obj.argcount is None:
             # python < 1.3
-            self.args = []
-            self.kwargs = []
-            self.varargs = None
-            self.varkw = None
+            self.args = None
         else:
             if obj.argcount + obj.kwonlyargcount > obj.nlocals:
                 raise PythonError("More args than locals")
             argidx = 0
-            self.args = self.varnames[argidx:argidx + obj.argcount]
+            args = [ExprFast(idx, self.varnames[idx]) for idx in range(argidx, argidx+obj.argcount)]
             argidx += obj.argcount
-            self.kwargs = self.varnames[argidx:argidx + obj.kwonlyargcount]
+            kwargs = [ExprFast(idx, self.varnames[idx]) for idx in range(argidx, argidx+obj.kwonlyargcount)]
             argidx += obj.kwonlyargcount
             if CodeFlag.varargs in self.flags:
                 if argidx == obj.nlocals:
                     raise PythonError("More args than locals")
-                self.varargs = self.varnames[argidx]
+                vararg = ExprFast(argidx, self.varnames[argidx])
                 argidx += 1
             else:
-                self.varargs = None
+                vararg = None
             if CodeFlag.varkeywords in self.flags:
                 if argidx == obj.nlocals:
                     raise PythonError("More args than locals")
-                self.varkw = self.varnames[argidx]
+                varkw = ExprFast(argidx, self.varnames[argidx])
                 argidx += 1
             else:
-                self.varkw = None
+                varkw = None
+            self.args = FunArgs(args, [], vararg, kwargs, varkw)
 
     def show(self):
         yield 'CODE'
@@ -255,17 +254,8 @@ class Code:
         # flags
         yield 'flags: {}'.format(', '.join(flag.name for flag in self.flags))
         # args
-        args = self.args[:]
-        if self.varargs is not None:
-            args.append('*{}'.format(self.varargs))
-        elif self.kwargs:
-            args.append('*')
-        if self.kwargs:
-            args += self.kwargs
-        if self.varkw is not None:
-            args.append('**{}'.format(self.varkw))
-        if args:
-            yield 'args: {}'.format(', '.join(args))
+        if self.args:
+            yield 'args: {}'.format(self.args.show())
         # vars
         if self.varnames:
             yield 'vars: {}'.format(', '.join(self.varnames))

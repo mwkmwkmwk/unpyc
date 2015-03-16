@@ -8,8 +8,6 @@ from .bytecode import *
 
 # TODO:
 #
-# - variadic stack args
-# - make Code use FunArgs
 # - make a nice ast metaclass
 # - clean expr
 # - clean up the stack item mess
@@ -23,10 +21,10 @@ from .bytecode import *
 # - make sure signed/unsigned numbers are right
 # - py 1.3:
 #
-#   - raise
 #   - building functions
 #   - calling functions
 #   - making classes
+#   - tuple arguments
 #
 # - py 1.4:
 #
@@ -40,7 +38,6 @@ from .bytecode import *
 # - py 1.6:
 #
 #   - var calls
-#   - zero-arg raise
 #   - unicode
 #
 # - py 2.0:
@@ -493,6 +490,7 @@ def _visit_return(self, deco, expr):
 
 # raise statement
 
+# Python 1.0 - 1.2
 @_stmt_visitor(OpcodeRaiseException, Expr, ExprNone)
 def _visit_raise_1(self, deco, cls, _):
     return StmtRaise(cls), []
@@ -500,6 +498,15 @@ def _visit_raise_1(self, deco, cls, _):
 @_stmt_visitor(OpcodeRaiseException, Expr, Expr)
 def _visit_raise_2(self, deco, cls, val):
     return StmtRaise(cls, val), []
+
+# Python 1.3+
+@_stmt_visitor(OpcodeRaiseVarargs, Exprs('param'))
+def _visit_raise_varargs(self, deco, exprs):
+    if len(exprs) > 3:
+        raise PythonError("too many args to raise")
+    if len(exprs) == 0 and not deco.version.has_reraise:
+        raise PythonError("too few args to raise")
+    return StmtRaise(*exprs), []
 
 # exec statement
 

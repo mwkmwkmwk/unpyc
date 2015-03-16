@@ -97,6 +97,8 @@ class Pyc10(metaclass=PycVersion):
     has_complex = False
     # has stacksize and lnotab
     has_stacksize = False
+    # has zero-argument raise (aka reraise) statement
+    has_reraise = False
     # has -U option to interpreter
     has_U = False
     # has nested functions with closures
@@ -161,6 +163,7 @@ class Pyc15(Pyc14):
 class Pyc16(Pyc15):
     code = _v(50428)
     name = "Python 1.6"
+    has_reraise = True
 
 # Python 2
 

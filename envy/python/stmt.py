@@ -163,23 +163,29 @@ class StmtDel(Stmt):
 
 
 class StmtRaise(Stmt):
-    __slots__ = 'cls', 'val'
+    __slots__ = 'cls', 'val', 'tb'
 
-    def __init__(self, cls, val=None):
+    def __init__(self, cls=None, val=None, tb=None):
         self.cls = cls
         self.val = val
+        self.tb = tb
 
     def subprocess(self, process):
         return StmtRaise(
-            process(self.cls),
+            process(self.cls) if self.cls else None,
             process(self.val) if self.val else None,
+            process(self.tb) if self.tb else None,
         )
 
     def show(self):
-        if self.val is None:
+        if self.cls is None:
+            yield "raise"
+        elif self.val is None:
             yield "raise {}".format(self.cls.show(None))
-        else:
+        elif self.tb is None:
             yield "raise {}, {}".format(self.cls.show(None), self.val.show(None))
+        else:
+            yield "raise {}, {}, {}".format(self.cls.show(None), self.val.show(None), self.tb.show(None))
 
 
 class StmtImport(Stmt):

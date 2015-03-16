@@ -140,6 +140,10 @@ TryExceptElse = namedtuple('TryExceptElse', ['body', 'items', 'any', 'flows'])
 UnaryCall = namedtuple('UnaryCall', ['code'])
 Locals = namedtuple('Locals', [])
 
+# a special marker to put in stack want lists - will match getattr(opcode, attr)
+# expressions and pass a list
+Exprs = namedtuple('Exprs', ['attr'])
+
 # visitors
 
 class NoMatch(Exception):
@@ -148,30 +152,40 @@ class NoMatch(Exception):
 _VISITORS = {}
 
 class _Visitor:
-    __slots__ = 'func', 'stack', 'flag'
+    __slots__ = 'func', 'wanted', 'flag'
 
-    def __init__(self, func, stack, flag=None):
+    def __init__(self, func, wanted, flag=None):
         self.func = func
-        self.stack = stack
+        self.wanted = wanted
         self.flag = flag
 
     def visit(self, opcode, deco):
         if not deco.version.match(self.flag):
             return False
-        if len(deco.stack) < len(self.stack):
-            return False
-        current = deco.stack[-len(self.stack):] if self.stack else []
-        for have, want in zip(current, self.stack):
-            if not isinstance(have, want):
-                return False
+        stack = deco.stack[:]
+        args = []
+        for want in reversed(self.wanted):
+            if isinstance(want, Exprs):
+                num = getattr(opcode, want.attr)
+                arg = []
+                for _ in range(num):
+                    expr = stack.pop()
+                    if not isinstance(expr, Expr):
+                        return False
+                    arg.append(expr)
+                arg.reverse()
+            else:
+                arg = stack.pop()
+                if not isinstance(arg, want):
+                    return False
+            args.append(arg)
+        args.reverse()
         try:
-            res = self.func(opcode, deco, *current)
+            stack += self.func(opcode, deco, *args)
+            deco.stack = stack
+            return True
         except NoMatch:
             return False
-        for _ in current:
-            deco.stack.pop()
-        deco.stack.extend(res)
-        return True
 
 
 def _visitor(op, *stack, **kwargs):
@@ -349,27 +363,13 @@ for otype, etype in {
 
 # expressions - build container
 
-@_visitor(OpcodeBuildTuple)
-@_visitor(OpcodeBuildList)
-def visit_build_tuple(self, deco):
-    if len(deco.stack) < self.param:
-        raise NoMatch
-    for i in range(-self.param, 0):
-        if not isinstance(deco.stack[i], Expr):
-            raise NoMatch
-    if isinstance(self, OpcodeBuildTuple):
-        typ = ExprTuple
-    elif isinstance(self, OpcodeBuildList):
-        typ = ExprList
-    else:
-        assert False
-    if self.param:
-        res = typ(deco.stack[-self.param:])
-        for i in range(self.param):
-            deco.stack.pop()
-        return [res]
-    else:
-        return [typ([])]
+@_visitor(OpcodeBuildTuple, Exprs('param'))
+def visit_build_tuple(self, deco, exprs):
+    return [ExprTuple(exprs)]
+
+@_visitor(OpcodeBuildList, Exprs('param'))
+def visit_build_list(self, deco, exprs):
+    return [ExprList(exprs)]
 
 @_visitor(OpcodeBuildMap)
 def visit_build_map(self, deco):

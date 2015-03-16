@@ -66,10 +66,20 @@ class Pyc10(metaclass=PycVersion):
     always_print_expr = True
     # has default arguments
     has_def_args = False
-    # has new code marshal type, has co_varnames, doesn't have RESERVE_FAST
+    # has new code marshal type, has co_varnames, doesn't have RESERVE_FAST - all for kwargs
     has_new_code = False
+    # has 3-argument raise
+    has_new_raise = False
     # has ellipsis (...)
     has_ellipsis = False
+    # has access statement
+    has_access = True
+    # has power operator (**)
+    has_power = False
+    # has new slices (a[b:c:d])
+    has_new_slice = False
+    # has complex numbers
+    has_complex = False
     # has stacksize and lnotab
     has_stacksize = False
     # has -U option to interpreter
@@ -113,6 +123,7 @@ class Pyc13(Pyc11):
     code = _v(11913)
     name = "Python 1.3"
     has_new_code = True
+    has_new_raise = True
 
 class Pyc14(Pyc13):
     """Introduces complex, ellipsis, 3-arg slices, ** operator.
@@ -121,6 +132,10 @@ class Pyc14(Pyc13):
     code = _v(5892)
     name = "Python 1.4"
     has_ellipsis = True
+    has_access = False
+    has_power = True
+    has_new_slice = True
+    has_complex = True
 
 class Pyc15(Pyc14):
     """Introduces stacksize and lnotab."""

@@ -8,6 +8,8 @@ from .bytecode import *
 
 # TODO:
 #
+# - variadic stack args
+# - make Code use FunArgs
 # - make a nice ast metaclass
 # - clean expr
 # - clean up the stack item mess
@@ -18,6 +20,17 @@ from .bytecode import *
 # - make a test suite
 # - find a way to print nested code objects after stage 3
 # - clean up import mess
+# - py 1.3:
+#
+#   - raise
+#   - building functions
+#   - calling functions
+#   - making classes
+#
+# - py 1.4:
+#
+#   - new slices
+#   - mangling
 #
 # and for prettifier:
 #
@@ -289,6 +302,7 @@ def _register_binary(otype, etype):
         return [etype(expr1, expr2)]
 
 for otype, etype in {
+    OpcodeBinaryPower: ExprPow,
     OpcodeBinaryMultiply: ExprMul,
     OpcodeBinaryDivide: ExprDiv,
     OpcodeBinaryModulo: ExprMod,
@@ -448,11 +462,11 @@ def _visit_return(self, deco, expr):
 
 # raise statement
 
-@_stmt_visitor(OpcodeRaise, Expr, ExprNone)
+@_stmt_visitor(OpcodeRaiseException, Expr, ExprNone)
 def _visit_raise_1(self, deco, cls, _):
     return StmtRaise(cls), []
 
-@_stmt_visitor(OpcodeRaise, Expr, Expr)
+@_stmt_visitor(OpcodeRaiseException, Expr, Expr)
 def _visit_raise_2(self, deco, cls, val):
     return StmtRaise(cls, val), []
 

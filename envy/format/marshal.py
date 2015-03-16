@@ -528,7 +528,7 @@ def load_float(ctx, flag):
     res = float(ctx.bytes(len_).decode('ascii'))
     return ctx.ref(MarshalFloat(res), flag)
 
-@_code('x', '!has_bin_float')
+@_code('x', ('has_complex', '!has_bin_float'))
 def load_complex(ctx, flag):
     len_ = ctx.byte()
     re = float(ctx.bytes(len_).decode('ascii'))
@@ -738,13 +738,17 @@ class _MarshalContext:
             code &= 0x7f
         else:
             ref = False
-        for fun, flag in MARSHAL_CODES.get(code, []):
-            if flag is None:
-                ok = True
-            elif flag.startswith('!'):
-                ok = not getattr(self.version, flag[1:])
-            else:
-                ok = getattr(self.version, flag)
+        for fun, flags in MARSHAL_CODES.get(code, []):
+            if flags is None:
+                flags = []
+            if not isinstance(flags, list):
+                flags = [flags]
+            ok = True
+            for flag in flags:
+                if flag.startswith('!'):
+                    ok = ok and not getattr(self.version, flag[1:])
+                else:
+                    ok = ok and getattr(self.version, flag)
             if ok:
                 res = fun(self, ref)
                 break

@@ -188,11 +188,18 @@ class OpcodeUnaryCall(Opcode):
     """
     code = 14
     name = 'UNARY_CALL'
+    flag = '!has_new_code'
 
 class OpcodeUnaryInvert(Opcode):
     """$push ~$pop"""
     code = 15
     name = 'UNARY_INVERT'
+
+class OpcodeBinaryPower(Opcode):
+    """$push $pop ** $pop"""
+    code = 19
+    name = 'BINARY_POWER'
+    flag = 'has_power'
 
 class OpcodeBinaryMultiply(Opcode):
     """$push $pop * $pop"""
@@ -356,10 +363,11 @@ class OpcodeBreakLoop(Opcode):
     name = 'BREAK_LOOP'
     # could be end = True, but not considered as such by compiler
 
-class OpcodeRaise(Opcode):
+class OpcodeRaiseException(Opcode):
     """raise $pop, $pop"""
     code = 81
-    name = 'RAISE'
+    name = 'RAISE_EXCEPTION'
+    flag = '!has_new_raise'
     # could be end = True, but not considered as such by compiler
 
 class OpcodeLoadLocals(Opcode):
@@ -387,6 +395,7 @@ class OpcodeBuildFunction(Opcode):
     """$push function($pop)"""
     code = 86
     name = 'BUILD_FUNCTION'
+    flag = '!has_new_code'
 
 class OpcodePopBlock(Opcode):
     code = 87
@@ -551,6 +560,7 @@ class OpcodeImportFrom(OpcodeParamName):
 class OpcodeAccessMode(OpcodeParamName):
     code = 109
     name = "ACCESS_MODE"
+    flag = 'has_access'
 
 
 class OpcodeJumpForward(OpcodeParamRel):
@@ -608,6 +618,7 @@ class OpcodeReserveFast(Opcode):
     __slots__ = 'names',
     code = 123
     name = 'RESERVE_FAST'
+    flag = '!has_new_code'
 
     def read_params(self, bytecode):
         # TODO
@@ -663,6 +674,39 @@ class OpcodeDeleteFast(OpcodeParamFast):
 class OpcodeSetLineno(OpcodeParamNum):
     code = 127
     name = "SET_LINENO"
+
+
+class OpcodeRaiseVarargs(OpcodeParamNum):
+    code = 130
+    name = "RAISE_VARARGS"
+    flag = 'has_new_raise'
+
+
+class OpcodeCallFunction(Opcode):
+    __slots__ = 'args', 'kwargs'
+    code = 131
+    name = "CALL_FUNCTION"
+    flag = 'has_new_code'
+
+    def read_params(self, bytecode):
+        param = bytecode.word()
+        self.args = param & 0xff
+        self.kwargs = param >> 8 & 0xff
+
+    def print_params(self):
+        return "{}, {}".format(self.args, self.kwargs)
+
+
+class OpcodeMakeFunction(OpcodeParamNum):
+    code = 132
+    name = "MAKE_FUNCTION"
+    flag = 'has_new_code'
+
+
+class OpcodeBuildSlice(OpcodeParamNum):
+    code = 133
+    name = "BUILD_SLICE"
+    flag = 'has_new_slice'
 
 
 class Bytecode:

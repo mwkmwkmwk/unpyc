@@ -246,6 +246,11 @@ class ExprBin(Expr):
         return '({} {} {})'.format(self.e1.show(ctx), self.sign, self.e2.show(ctx))
 
 
+class ExprPow(ExprBin):
+    __slots__ = ()
+    sign = '**'
+
+
 class ExprMul(ExprBin):
     __slots__ = ()
     sign = '*'

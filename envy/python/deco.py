@@ -21,7 +21,6 @@ from .bytecode import *
 # - make sure signed/unsigned numbers are right
 # - py 1.3:
 #
-#   - building functions
 #   - making classes
 #   - tuple arguments
 #
@@ -882,6 +881,8 @@ def _visit_except_end(self, deco, try_, block):
 
 # functions & classes
 
+# make function - py 1.0 - 1.2
+
 @_visitor(OpcodeBuildFunction, Code)
 def _visit_build_function(self, deco, code):
     return [ExprFunctionRaw(deco_code(code), [])]
@@ -890,6 +891,12 @@ def _visit_build_function(self, deco, code):
 def _visit_set_func_args(self, deco, args, fun):
     # bug alert: def f(a, b=1) is compiled as def f(a=1, b)
     return [ExprFunctionRaw(fun.code, args.exprs)]
+
+# make function - py 1.3+
+
+@_visitor(OpcodeMakeFunction, Exprs('param', 1), Code)
+def _visit_make_function(self, deco, args, code):
+    return [ExprFunctionRaw(deco_code(code), args)]
 
 @_visitor(OpcodeUnaryCall, ExprFunctionRaw)
 def _visit_unary_call(self, deco, fun):

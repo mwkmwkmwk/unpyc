@@ -1,5 +1,3 @@
-from itertools import zip_longest
-
 from envy.show import indent
 
 class FunArgs:
@@ -7,6 +5,8 @@ class FunArgs:
 
     def __init__(self, args, defargs, vararg, kwargs, varkw):
         self.args = args
+        if len(defargs) < len(args):
+            defargs = [None] * (len(args) - len(defargs)) + defargs
         self.defargs = defargs
         self.vararg = vararg
         self.kwargs = kwargs
@@ -15,7 +15,7 @@ class FunArgs:
     def subprocess(self, process):
         return FunArgs(
             [process(arg) for arg in self.args],
-            [process(arg) for arg in self.defargs],
+            [process(arg) if arg else None for arg in self.defargs],
             process(self.vararg) if self.vararg else None,
             [process(arg) for arg in self.kwargs],
             process(self.varkw) if self.varkw else None,
@@ -33,7 +33,7 @@ class FunArgs:
     def show(self):
         chunks = [
             ('', arg, defarg)
-            for arg, defarg in zip_longest(self.args, self.defargs)
+            for arg, defarg in zip(self.args, self.defargs)
         ]
         if self.vararg:
             chunks.append(('*', self.vararg, None))

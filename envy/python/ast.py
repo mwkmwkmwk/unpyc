@@ -44,13 +44,18 @@ def ast_process(deco, version):
         return Block(block.stmts[:-1])
 
     def process_fun_body(node):
-        block = node.code.block
-        if not block.stmts or not isinstance(block.stmts[0], StmtArgs):
-            raise PythonError("no $args in function def")
+        stmts = node.code.block.stmts
+        if version.has_new_code:
+            args = node.code.code.args.setdefs(node.defargs)
+        else:
+            if not stmts or not isinstance(stmts[0], StmtArgs):
+                raise PythonError("no $args in function def")
+            args = stmts[0].args.setdefs(node.defargs),
+            stmts = stmts[1:]
         return ExprFunction(
             node.code.code.name,
-            block.stmts[0].args.setdefs(node.defargs),
-            Block(block.stmts[1:])
+            args,
+            Block(stmts)
         )
 
     def isfunction(subnode):

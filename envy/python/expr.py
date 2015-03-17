@@ -450,7 +450,7 @@ class ExprFast(Expr):
         return self
 
     def show(self, ctx):
-        return '$fast[{},{}]'.format(self.idx, self.name)
+        return '{}${}'.format(self.name, self.idx)
 
 # functions - to be cleaned up by prettifier
 

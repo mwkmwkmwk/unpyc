@@ -50,7 +50,7 @@ def ast_process(deco, version):
         else:
             if not stmts or not isinstance(stmts[0], StmtArgs):
                 raise PythonError("no $args in function def")
-            args = stmts[0].args.setdefs(node.defargs),
+            args = stmts[0].args.setdefs(node.defargs)
             stmts = stmts[1:]
         return ExprFunction(
             node.code.code.name,

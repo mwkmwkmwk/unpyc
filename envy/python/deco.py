@@ -21,7 +21,6 @@ from .bytecode import *
 # - make sure signed/unsigned numbers are right
 # - py 1.3:
 #
-#   - making classes
 #   - tuple arguments
 #
 # - py 1.4:
@@ -900,11 +899,24 @@ def _visit_make_function(self, deco, args, code):
 
 @_visitor(OpcodeUnaryCall, ExprFunctionRaw)
 def _visit_unary_call(self, deco, fun):
+    if fun.defargs:
+        raise PythonError("class call with a function with default arguments")
     return [UnaryCall(fun.code)]
 
 @_visitor(OpcodeBuildClass, ExprString, ExprTuple, UnaryCall)
 def _visit_build_class(self, deco, name, expr, call):
     return [ExprClassRaw(name.val.decode('ascii'), expr.exprs, call.code)]
+
+@_visitor(OpcodeBuildClass, ExprString, ExprTuple, ExprCall, flag='has_new_code')
+def _visit_build_class(self, deco, name, expr, call):
+    if call.params:
+        raise PythonError("class call with params")
+    fun = call.expr
+    if not isinstance(fun, ExprFunctionRaw):
+        raise PythonError("class call with non-function")
+    if fun.defargs:
+        raise PythonError("class call with a function with default arguments")
+    return [ExprClassRaw(name.val.decode('ascii'), expr.exprs, fun.code)]
 
 @_visitor(OpcodeLoadLocals)
 def _visit_load_locals(self, deco):

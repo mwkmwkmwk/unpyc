@@ -556,7 +556,7 @@ def load_string(ctx, flag):
 
 # A unicode string.
 
-@_code('u')
+@_code('u', 'has_unicode')
 @_code('t', 'has_marshal_ref')
 def load_unicode(ctx, flag):
     n = ctx.le4()

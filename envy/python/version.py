@@ -99,6 +99,8 @@ class Pyc10(metaclass=PycVersion):
     has_stacksize = False
     # has zero-argument raise (aka reraise) statement
     has_reraise = False
+    # has unicode type
+    has_unicode = False
     # has -U option to interpreter
     has_U = False
     # has nested functions with closures
@@ -173,6 +175,7 @@ class Pyc16(Pyc15):
     code = _v(50428)
     name = "Python 1.6"
     has_reraise = True
+    has_unicode = True
 
 # Python 2
 

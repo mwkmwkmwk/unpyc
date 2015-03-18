@@ -109,6 +109,8 @@ class Pyc10(metaclass=PycVersion):
     has_dup_topx = False
     # has ROT_FOUR opcode
     has_rot_four = False
+    # has unpack sequence (as opposed to separate tuple and list unpack)
+    has_unpack_sequence = False
     # has -U option to interpreter
     has_U = False
     # has nested functions with closures
@@ -195,6 +197,7 @@ class Pyc20(Pyc16):
     has_inplace = True
     has_dup_topx = True
     has_rot_four = True
+    has_unpack_sequence = True
 
 class Pyc21(Pyc20):
     code = _v(60202)

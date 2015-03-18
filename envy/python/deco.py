@@ -34,7 +34,6 @@ from .bytecode import *
 #
 #   - print to
 #   - import star
-#   - unpack sequence
 #   - wide
 #   - import as
 #   - list comprehensions
@@ -622,6 +621,12 @@ def visit_unpack_arg(self, deco):
 
 @_store_visitor(OpcodeUnpackTuple)
 def visit_unpack_tuple(self, deco):
+    res = ExprTuple([None for _ in range(self.param)])
+    extra = [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
+    return res, extra
+
+@_store_visitor(OpcodeUnpackSequence)
+def visit_unpack_sequence(self, deco):
     res = ExprTuple([None for _ in range(self.param)])
     extra = [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
     return res, extra

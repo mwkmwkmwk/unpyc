@@ -495,16 +495,20 @@ class OpcodeUnpackTuple(OpcodeParamNum):
     """$push, $push, $push, [... times arg] = $pop"""
     code = 92
     name = "UNPACK_TUPLE"
+    flag = "!has_unpack_sequence"
 
-    # TODO version_ok
+
+class OpcodeUnpackSequence(OpcodeParamNum):
+    code = 92
+    name = "UNPACK_SEQUENCE"
+    flag = "has_unpack_sequence"
 
 
 class OpcodeUnpackList(OpcodeParamNum):
     """[$push, $push, $push, [... times arg]] = $args"""
     code = 93
     name = "UNPACK_LIST"
-
-    # TODO version_ok
+    flag = "!has_unpack_sequence"
 
 
 class OpcodeUnpackArg(OpcodeParamNum):

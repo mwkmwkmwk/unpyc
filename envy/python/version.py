@@ -101,6 +101,8 @@ class Pyc10(metaclass=PycVersion):
     has_reraise = False
     # has unicode type
     has_unicode = False
+    # has variadic function calls (a = f(a, b, *c, **d))
+    has_var_call = False
     # has -U option to interpreter
     has_U = False
     # has nested functions with closures
@@ -176,6 +178,7 @@ class Pyc16(Pyc15):
     name = "Python 1.6"
     has_reraise = True
     has_unicode = True
+    has_var_call = True
 
 # Python 2
 

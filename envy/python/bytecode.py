@@ -687,10 +687,8 @@ class OpcodeRaiseVarargs(OpcodeParamNum):
     flag = 'has_new_raise'
 
 
-class OpcodeCallFunction(Opcode):
+class OpcodeCallFunctionBase(Opcode):
     __slots__ = 'args', 'kwargs'
-    code = 131
-    name = "CALL_FUNCTION"
     flag = 'has_new_code'
 
     def read_params(self, bytecode):
@@ -700,6 +698,12 @@ class OpcodeCallFunction(Opcode):
 
     def print_params(self):
         return "{}, {}".format(self.args, self.kwargs)
+
+
+class OpcodeCallFunction(OpcodeCallFunctionBase):
+    __slots__ = ()
+    code = 131
+    name = "CALL_FUNCTION"
 
 
 class OpcodeMakeFunction(OpcodeParamNum):
@@ -712,6 +716,27 @@ class OpcodeBuildSlice(OpcodeParamNum):
     code = 133
     name = "BUILD_SLICE"
     flag = 'has_new_slice'
+
+
+class OpcodeCallFunctionVar(OpcodeCallFunctionBase):
+    __slots__ = ()
+    code = 140
+    name = "CALL_FUNCTION_VAR"
+    flag = 'has_var_call'
+
+
+class OpcodeCallFunctionKw(OpcodeCallFunctionBase):
+    __slots__ = ()
+    code = 141
+    name = "CALL_FUNCTION_KW"
+    flag = 'has_var_call'
+
+
+class OpcodeCallFunctionVarKw(OpcodeCallFunctionBase):
+    __slots__ = ()
+    code = 142
+    name = "CALL_FUNCTION_VAR_KW"
+    flag = 'has_var_call'
 
 
 class Bytecode:

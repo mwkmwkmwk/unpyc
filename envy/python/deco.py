@@ -30,11 +30,6 @@ from .bytecode import *
 #   - loose consts don't emit stuff (incl docstrings)
 #   - tuple arguments are called '.num' instead of ''
 #
-# - py 1.6:
-#
-#   - var calls
-#   - unicode
-#
 # - py 2.0:
 #
 #   - inplace
@@ -507,6 +502,27 @@ def visit_call_function(self, deco, fun, args, kwargs):
         if not isinstance(name, ExprString):
             raise PythonError("kwarg not a string")
     return [ExprCall(fun, [('', arg) for arg in args] + [(name.val.decode('ascii'), arg) for name, arg in kwargs])]
+
+@_visitor(OpcodeCallFunctionVar, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr)
+def visit_call_function(self, deco, fun, args, kwargs, vararg):
+    for name, arg in kwargs:
+        if not isinstance(name, ExprString):
+            raise PythonError("kwarg not a string")
+    return [ExprCall(fun, [('', arg) for arg in args] + [(name.val.decode('ascii'), arg) for name, arg in kwargs] + [('*', vararg)])]
+
+@_visitor(OpcodeCallFunctionKw, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr)
+def visit_call_function(self, deco, fun, args, kwargs, varkw):
+    for name, arg in kwargs:
+        if not isinstance(name, ExprString):
+            raise PythonError("kwarg not a string")
+    return [ExprCall(fun, [('', arg) for arg in args] + [(name.val.decode('ascii'), arg) for name, arg in kwargs] + [('**', varkw)])]
+
+@_visitor(OpcodeCallFunctionVarKw, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr, Expr)
+def visit_call_function(self, deco, fun, args, kwargs, vararg, varkw):
+    for name, arg in kwargs:
+        if not isinstance(name, ExprString):
+            raise PythonError("kwarg not a string")
+    return [ExprCall(fun, [('', arg) for arg in args] + [(name.val.decode('ascii'), arg) for name, arg in kwargs] + [('*', vararg), ('**', varkw)])]
 
 # expressions - load const
 

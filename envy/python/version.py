@@ -103,6 +103,12 @@ class Pyc10(metaclass=PycVersion):
     has_unicode = False
     # has variadic function calls (a = f(a, b, *c, **d))
     has_var_call = False
+    # has inplace operators (+=, *=, ...)
+    has_inplace = False
+    # has DUP_TOPX opcode
+    has_dup_topx = False
+    # has ROT_FOUR opcode
+    has_rot_four = False
     # has -U option to interpreter
     has_U = False
     # has nested functions with closures
@@ -186,6 +192,9 @@ class Pyc20(Pyc16):
     code = _v(50823)
     name = "Python 2.0"
     has_U = True
+    has_inplace = True
+    has_dup_topx = True
+    has_rot_four = True
 
 class Pyc21(Pyc20):
     code = _v(60202)

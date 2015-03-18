@@ -156,6 +156,12 @@ class OpcodeDupTop(Opcode):
     code = 4
     name = 'DUP_TOP'
 
+
+class OpcodeRotFour(Opcode):
+    code = 5
+    name = 'ROT_FOUR'
+    flag = 'has_rot_four'
+
 class OpcodeUnaryPositive(Opcode):
     """$push +$pop"""
     code = 10
@@ -303,6 +309,31 @@ class OpcodeDeleteSliceEE(Opcode):
     name = 'DELETE_SLICE_EE'
     flag = 'has_old_slice'
 
+class OpcodeInplaceAdd(Opcode):
+    code = 55
+    name = 'INPLACE_ADD'
+    flag = 'has_inplace'
+
+class OpcodeInplaceSubstract(Opcode):
+    code = 56
+    name = 'INPLACE_SUBSTRACT'
+    flag = 'has_inplace'
+
+class OpcodeInplaceMultiply(Opcode):
+    code = 57
+    name = 'INPLACE_MULTIPLY'
+    flag = 'has_inplace'
+
+class OpcodeInplaceDivide(Opcode):
+    code = 58
+    name = 'INPLACE_DIVIDE'
+    flag = 'has_inplace'
+
+class OpcodeInplaceModulo(Opcode):
+    code = 59
+    name = 'INPLACE_MODULO'
+    flag = 'has_inplace'
+
 class OpcodeStoreSubscr(Opcode):
     """$pop[$pop] = $pop"""
     code = 60
@@ -338,6 +369,11 @@ class OpcodeBinaryOr(Opcode):
     code = 66
     name = 'BINARY_OR'
 
+class OpcodeInplacePower(Opcode):
+    code = 67
+    name = 'INPLACE_POWER'
+    flag = 'has_inplace'
+
 class OpcodePrintExpr(Opcode):
     """print_expr($pop)
 
@@ -363,6 +399,31 @@ class OpcodePrintNewline(Opcode):
     """
     code = 72
     name = 'PRINT_NEWLINE'
+
+class OpcodeInplaceLshift(Opcode):
+    code = 75
+    name = 'INPLACE_LSHIFT'
+    flag = 'has_inplace'
+
+class OpcodeInplaceRshift(Opcode):
+    code = 76
+    name = 'INPLACE_RSHIFT'
+    flag = 'has_inplace'
+
+class OpcodeInplaceAnd(Opcode):
+    code = 77
+    name = 'INPLACE_AND'
+    flag = 'has_inplace'
+
+class OpcodeInplaceXor(Opcode):
+    code = 78
+    name = 'INPLACE_XOR'
+    flag = 'has_inplace'
+
+class OpcodeInplaceOr(Opcode):
+    code = 79
+    name = 'INPLACE_OR'
+    flag = 'has_inplace'
 
 class OpcodeBreakLoop(Opcode):
     """break"""
@@ -482,6 +543,12 @@ class OpcodeUnpackVararg(OpcodeParamNum):
     code = 99
     name = "UNPACK_VARARG"
     flag = '!has_new_code'
+
+
+class OpcodeDupTopx(OpcodeParamNum):
+    code = 99
+    name = "DUP_TOPX"
+    flag = 'has_dup_topx'
 
 
 class OpcodeLoadConst(Opcode):

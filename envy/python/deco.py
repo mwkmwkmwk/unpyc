@@ -22,7 +22,6 @@ from .bytecode import *
 # - None is not exactly a keyword until 2.4
 # - py 1.4:
 #
-#   - new slices
 #   - mangling
 #
 # - py 1.5:
@@ -543,19 +542,26 @@ def visit_store_subscr(self, deco, expr, idx):
 
 @_lsd_visitor(OpcodeSliceNN, OpcodeStoreSliceNN, OpcodeDeleteSliceNN, Expr)
 def visit_store_slice_nn(self, deco, expr):
-    return ExprSlice(expr, None, None)
+    return ExprSubscr(expr, ExprSlice(None, None))
 
 @_lsd_visitor(OpcodeSliceEN, OpcodeStoreSliceEN, OpcodeDeleteSliceEN, Expr, Expr)
 def visit_store_slice_en(self, deco, expr, start):
-    return ExprSlice(expr, start, None)
+    return ExprSubscr(expr, ExprSlice(start, None))
 
 @_lsd_visitor(OpcodeSliceNE, OpcodeStoreSliceNE, OpcodeDeleteSliceNE, Expr, Expr)
 def visit_store_slice_ne(self, deco, expr, end):
-    return ExprSlice(expr, None, end)
+    return ExprSubscr(expr, ExprSlice(None, end))
 
 @_lsd_visitor(OpcodeSliceEE, OpcodeStoreSliceEE, OpcodeDeleteSliceEE, Expr, Expr, Expr)
 def visit_store_slice_ee(self, deco, expr, start, end):
-    return ExprSlice(expr, start, end)
+    return ExprSubscr(expr, ExprSlice(start, end))
+
+@_visitor(OpcodeBuildSlice, Exprs('param', 1))
+def visit_build_slice(self, deco, exprs):
+    if self.param in (2, 3):
+        return [ExprSlice(*[None if isinstance(expr, ExprNone) else expr for expr in exprs])]
+    else:
+        raise PythonError("funny slice length")
 
 # list & tuple unpacking
 

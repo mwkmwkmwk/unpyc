@@ -66,6 +66,9 @@ class ExprNone(Expr):
 class ExprEllipsis(Expr):
     __slots__ = ()
 
+    def subprocess(self, process):
+        return self
+
     def show(self, ctx):
         return "..."
 
@@ -358,29 +361,27 @@ class ExprSubscr(ExprBin):
 
 
 class ExprSlice(Expr):
-    __slots__ = 'expr', 'start', 'end', 'step'
+    __slots__ = 'start', 'end', 'step'
 
-    def __init__(self, expr, start, end, step=None):
-        self.expr = expr
+    def __init__(self, start, end, step=False):
         self.start = start
         self.end = end
         self.step = step
 
     def subprocess(self, process):
         return ExprSlice(
-            process(self.expr),
             process(self.start) if self.start else None,
             process(self.end) if self.end else None,
-            process(self.step) if self.step else None,
+            process(self.step) if self.step else self.step,
         )
 
     def show(self, ctx):
         def maybe(x):
             return x.show(ctx) if x is not None else ''
-        if self.step is None:
-            return '{}[{}:{}]'.format(self.expr.show(ctx), maybe(self.start), maybe(self.end))
+        if self.step is False:
+            return '{}:{}'.format(maybe(self.start), maybe(self.end))
         else:
-            return '{}[{}:{}:{}]'.format(self.expr.show(ctx), maybe(self.start), maybe(self.end), self.step.show(ctx))
+            return '{}:{}:{}'.format(maybe(self.start), maybe(self.end), maybe(self.step))
 
 
 # calls

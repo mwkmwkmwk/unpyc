@@ -120,6 +120,9 @@ class Pyc10(metaclass=PycVersion):
     py3k = False
     # has complex (tuple) arguments - def f(a, (b, c)):
     has_complex_args = True
+    # has old slice opcodes - used in parallel to new ones before 3.0 when
+    # possible
+    has_old_slice = True
     # has True/False as compile-time literals (as opposed to builtins)
     has_bool_literal = False
     # has source size in pyc
@@ -244,6 +247,7 @@ class Pyc30(Pyc27):
     py3k = True
     has_bool_literal = True
     has_complex_args = False
+    has_old_slice = False
 
 class Pyc31(Pyc30):
     # 3141 used in prealpha

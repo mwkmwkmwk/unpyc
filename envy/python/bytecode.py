@@ -235,61 +235,73 @@ class OpcodeSliceNN(Opcode):
     """$push $pop[:]"""
     code = 30
     name = 'SLICE_NN'
+    flag = 'has_old_slice'
 
 class OpcodeSliceEN(Opcode):
     """$push $pop[$pop:]"""
     code = 31
     name = 'SLICE_EN'
+    flag = 'has_old_slice'
 
 class OpcodeSliceNE(Opcode):
     """$push $pop[:$pop]"""
     code = 32
     name = 'SLICE_NE'
+    flag = 'has_old_slice'
 
 class OpcodeSliceEE(Opcode):
     """$push $pop[$pop:$pop]"""
     code = 33
     name = 'SLICE_EE'
+    flag = 'has_old_slice'
 
 class OpcodeStoreSliceNN(Opcode):
     """$pop[:] = $pop"""
     code = 40
     name = 'STORE_SLICE_NN'
+    flag = 'has_old_slice'
 
 class OpcodeStoreSliceEN(Opcode):
     """$pop[$pop:] = $pop"""
     code = 41
     name = 'STORE_SLICE_EN'
+    flag = 'has_old_slice'
 
 class OpcodeStoreSliceNE(Opcode):
     """$pop[:$pop] = $pop"""
     code = 42
     name = 'STORE_SLICE_NE'
+    flag = 'has_old_slice'
 
 class OpcodeStoreSliceEE(Opcode):
     """$pop[$pop:$pop] = $pop"""
     code = 43
     name = 'STORE_SLICE_EE'
+    flag = 'has_old_slice'
 
 class OpcodeDeleteSliceNN(Opcode):
     """del $pop[:]"""
     code = 50
     name = 'DELETE_SLICE_NN'
+    flag = 'has_old_slice'
 
 class OpcodeDeleteSliceEN(Opcode):
     """del $pop[$pop:]"""
     code = 51
     name = 'DELETE_SLICE_EN'
+    flag = 'has_old_slice'
 
 class OpcodeDeleteSliceNE(Opcode):
     """del $pop[:$pop]"""
     code = 52
     name = 'DELETE_SLICE_NE'
+    flag = 'has_old_slice'
 
 class OpcodeDeleteSliceEE(Opcode):
     """del $pop[$pop:$pop]"""
     code = 53
     name = 'DELETE_SLICE_EE'
+    flag = 'has_old_slice'
 
 class OpcodeStoreSubscr(Opcode):
     """$pop[$pop] = $pop"""

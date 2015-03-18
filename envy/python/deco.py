@@ -32,7 +32,6 @@ from .bytecode import *
 #
 # - py 2.0:
 #
-#   - inplace
 #   - print to
 #   - import star
 #   - unpack sequence
@@ -198,6 +197,8 @@ from .bytecode import *
 # funny intermediate stuff to put on stack
 
 Dup = namedtuple('Dup', ['expr'])
+DupTwo = namedtuple('DupTwo', ['a', 'b'])
+DupThree = namedtuple('DupThree', ['a', 'b', 'c'])
 ABA = namedtuple('ABA', ['a', 'b'])
 BAB = namedtuple('BAB', ['a', 'b'])
 Import = namedtuple('Import', ['name'])
@@ -220,6 +221,8 @@ CompareContinue = namedtuple('CompareContinue', ['items', 'flows', 'next'])
 WantPop = namedtuple('WantPop', [])
 WantPopBlock = namedtuple('WantPopBlock', [])
 WantRotTwo = namedtuple('WantRotTwo', [])
+WantRotThree = namedtuple('WantRotThree', [])
+WantRotFour = namedtuple('WantRotFour', [])
 WantFlow = namedtuple('WantFlow', ['flow'])
 SetupLoop = namedtuple('SetupLoop', ['flow'])
 SetupFinally = namedtuple('SetupFinally', ['flow'])
@@ -240,6 +243,21 @@ TryExceptAny = namedtuple('TryExceptAny', [])
 TryExceptElse = namedtuple('TryExceptElse', ['body', 'items', 'any', 'flows'])
 UnaryCall = namedtuple('UnaryCall', ['code'])
 Locals = namedtuple('Locals', [])
+DupAttr = namedtuple('DupAttr', ['expr', 'name'])
+DupSubscr = namedtuple('DupSubscr', ['expr', 'index'])
+DupSliceNN = namedtuple('DupSliceNN', ['expr'])
+DupSliceEN = namedtuple('DupSliceEN', ['expr', 'start'])
+DupSliceNE = namedtuple('DupSliceNE', ['expr', 'end'])
+DupSliceEE = namedtuple('DupSliceEE', ['expr', 'start', 'end'])
+InplaceName = namedtuple('InplaceName', ['name', 'src', 'stmt'])
+InplaceGlobal = namedtuple('InplaceGlobal', ['name', 'src', 'stmt'])
+InplaceFast = namedtuple('InplaceFast', ['idx', 'src', 'stmt'])
+InplaceAttr = namedtuple('InplaceAttr', ['expr', 'name', 'src', 'stmt'])
+InplaceSubscr = namedtuple('InplaceSubscr', ['expr', 'index', 'src', 'stmt'])
+InplaceSliceNN = namedtuple('InplaceSliceNN', ['expr', 'src', 'stmt'])
+InplaceSliceEN = namedtuple('InplaceSliceEN', ['expr', 'start', 'src', 'stmt'])
+InplaceSliceNE = namedtuple('InplaceSliceNE', ['expr', 'end', 'src', 'stmt'])
+InplaceSliceEE = namedtuple('InplaceSliceEE', ['expr', 'start', 'end', 'src', 'stmt'])
 
 # a special marker to put in stack want lists - will match getattr(opcode, attr)
 # expressions and pass a list
@@ -414,6 +432,15 @@ def visit_set_lineno(self, deco):
 @_visitor(OpcodeDupTop, Expr)
 def visit_dup_top(self, deco, expr):
     return [Dup(expr)]
+
+@_visitor(OpcodeDupTopX, Exprs('param', 1))
+def visit_dup_topx(self, deco, exprs):
+    if self.param == 2:
+        return [DupTwo(*exprs)]
+    elif self.param == 3:
+        return [DupThree(*exprs)]
+    else:
+        raise PythonError("funny DUP_TOPX parameter")
 
 @_visitor(OpcodeDupTop, MultiAssign)
 def visit_dup_top(self, deco, multi):
@@ -723,6 +750,14 @@ def _visit_want_pop_block(self, deco, want):
 
 @_visitor(OpcodeRotTwo, WantRotTwo)
 def _visit_want_rot_two(self, deco, want):
+    return []
+
+@_visitor(OpcodeRotThree, WantRotThree)
+def _visit_want_rot_three(self, deco, want):
+    return []
+
+@_visitor(OpcodeRotFour, WantRotFour)
+def _visit_want_rot_four(self, deco, want):
     return []
 
 @_stmt_visitor(Flow, IfElse, Block)
@@ -1068,6 +1103,127 @@ def _visit_reserve_fast(self, deco):
 
     deco.varnames = self.names
     return []
+
+# inplace assignments
+
+INPLACE_OPS = [
+    (OpcodeInplaceAdd, StmtInplaceAdd),
+    (OpcodeInplaceSubstract, StmtInplaceSubstract),
+    (OpcodeInplaceMultiply, StmtInplaceMultiply),
+    (OpcodeInplaceDivide, StmtInplaceDivide),
+    (OpcodeInplaceModulo, StmtInplaceModulo),
+    (OpcodeInplacePower, StmtInplacePower),
+    (OpcodeInplaceLshift, StmtInplaceLshift),
+    (OpcodeInplaceRshift, StmtInplaceRshift),
+    (OpcodeInplaceAnd, StmtInplaceAnd),
+    (OpcodeInplaceOr, StmtInplaceOr),
+    (OpcodeInplaceXor, StmtInplaceXor),
+]
+
+for op, stmt in INPLACE_OPS:
+    @_visitor(op, ExprName, Expr)
+    def _visit_inplace_name(self, deco, name, src, stmt=stmt):
+        return [InplaceName(name.name, src, stmt)]
+
+    @_visitor(op, ExprGlobal, Expr)
+    def _visit_inplace_global(self, deco, name, src, stmt=stmt):
+        return [InplaceGlobal(name.name, src, stmt)]
+
+    @_visitor(op, ExprFast, Expr)
+    def _visit_inplace_fast(self, deco, fast, src, stmt=stmt):
+        return [InplaceFast(fast.idx, src, stmt)]
+
+    @_visitor(op, DupAttr, Expr)
+    def _visit_inplace_attr(self, deco, dup, src, stmt=stmt):
+        return [InplaceAttr(dup.expr, dup.name, src, stmt), WantRotTwo()]
+
+    @_visitor(op, DupSubscr, Expr)
+    def _visit_inplace_subscr(self, deco, dup, src, stmt=stmt):
+        return [InplaceSubscr(dup.expr, dup.index, src, stmt), WantRotThree()]
+
+    @_visitor(op, DupSliceNN, Expr)
+    def _visit_inplace_slice_nn(self, deco, dup, src, stmt=stmt):
+        return [InplaceSliceNN(dup.expr, src, stmt), WantRotTwo()]
+
+    @_visitor(op, DupSliceEN, Expr)
+    def _visit_inplace_slice_en(self, deco, dup, src, stmt=stmt):
+        return [InplaceSliceEN(dup.expr, dup.start, src, stmt), WantRotThree()]
+
+    @_visitor(op, DupSliceNE, Expr)
+    def _visit_inplace_slice_ne(self, deco, dup, src, stmt=stmt):
+        return [InplaceSliceNE(dup.expr, dup.end, src, stmt), WantRotThree()]
+
+    @_visitor(op, DupSliceEE, Expr)
+    def _visit_inplace_slice_ee(self, deco, dup, src, stmt=stmt):
+        return [InplaceSliceEE(dup.expr, dup.start, dup.end, src, stmt), WantRotFour()]
+
+@_visitor(OpcodeLoadAttr, Dup)
+def _visit_load_attr_dup(self, deco, dup):
+    return [DupAttr(dup.expr, self.param)]
+
+@_visitor(OpcodeBinarySubscr, DupTwo)
+def _visit_load_subscr_dup(self, deco, dup):
+    return [DupSubscr(dup.a, dup.b)]
+
+@_visitor(OpcodeSliceNN, Dup)
+def _visit_slice_nn_dup(self, deco, dup):
+    return [DupSliceNN(dup.expr)]
+
+@_visitor(OpcodeSliceEN, DupTwo)
+def _visit_slice_en_dup(self, deco, dup):
+    return [DupSliceEN(dup.a, dup.b)]
+
+@_visitor(OpcodeSliceNE, DupTwo)
+def _visit_slice_ne_dup(self, deco, dup):
+    return [DupSliceNE(dup.a, dup.b)]
+
+@_visitor(OpcodeSliceEE, DupThree)
+def _visit_slice_ee_dup(self, deco, dup):
+    return [DupSliceEE(dup.a, dup.b, dup.c)]
+
+@_stmt_visitor(OpcodeStoreName, InplaceName)
+def _visit_inplace_store_name(self, deco, inp):
+    if inp.name != self.param:
+        raise PythonError("inplace name mismatch")
+    return inp.stmt(ExprName(inp.name), inp.src), []
+
+@_stmt_visitor(OpcodeStoreGlobal, InplaceGlobal)
+def _visit_inplace_store_global(self, deco, inp):
+    if inp.name != self.param:
+        raise PythonError("inplace name mismatch")
+    return inp.stmt(ExprGlobal(inp.name), inp.src), []
+
+@_stmt_visitor(OpcodeStoreFast, InplaceFast)
+def _visit_inplace_store_fast(self, deco, inp):
+    if inp.idx != self.param:
+        raise PythonError("inplace name mismatch")
+    return inp.stmt(ExprFast(inp.idx, deco.varnames[inp.idx]), inp.src), []
+
+@_stmt_visitor(OpcodeStoreAttr, InplaceAttr)
+def _visit_inplace_store_attr(self, deco, inp):
+    if inp.name != self.param:
+        raise PythonError("inplace name mismatch")
+    return inp.stmt(ExprAttr(inp.expr, inp.name), inp.src), []
+
+@_stmt_visitor(OpcodeStoreSubscr, InplaceSubscr)
+def _visit_inplace_store_subscr(self, deco, inp):
+    return inp.stmt(ExprSubscr(inp.expr, inp.index), inp.src), []
+
+@_stmt_visitor(OpcodeStoreSliceNN, InplaceSliceNN)
+def _visit_inplace_store_slice_nn(self, deco, inp):
+    return inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, None)), inp.src), []
+
+@_stmt_visitor(OpcodeStoreSliceEN, InplaceSliceEN)
+def _visit_inplace_store_slice_en(self, deco, inp):
+    return inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, None)), inp.src), []
+
+@_stmt_visitor(OpcodeStoreSliceNE, InplaceSliceNE)
+def _visit_inplace_store_slice_ne(self, deco, inp):
+    return inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, inp.end)), inp.src), []
+
+@_stmt_visitor(OpcodeStoreSliceEE, InplaceSliceEE)
+def _visit_inplace_store_slice_ee(self, deco, inp):
+    return inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, inp.end)), inp.src), []
 
 
 class DecoCtx:

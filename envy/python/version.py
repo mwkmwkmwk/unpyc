@@ -274,6 +274,8 @@ class Pyc32(Pyc31):
     # 3170 used in a1
     code = _v(3180)
     name = "Python 3.2"
+    has_dup_topx = False
+    has_rot_four = False
 
 class Pyc33(Pyc32):
     # 3190 used in prealpha

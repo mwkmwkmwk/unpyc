@@ -545,7 +545,7 @@ class OpcodeUnpackVararg(OpcodeParamNum):
     flag = '!has_new_code'
 
 
-class OpcodeDupTopx(OpcodeParamNum):
+class OpcodeDupTopX(OpcodeParamNum):
     code = 99
     name = "DUP_TOPX"
     flag = 'has_dup_topx'

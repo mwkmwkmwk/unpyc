@@ -149,6 +149,75 @@ class StmtAssign(Stmt):
         )
 
 
+class StmtInplace(Stmt):
+    __slots__ = 'dest', 'src'
+
+    def __init__(self, dest, src):
+        self.dest = dest
+        self.src = src
+
+    def subprocess(self, process):
+        return type(self)(process(self.dest), process(self.src))
+
+    def show(self):
+        yield '{} {} {}'.format(self.dest.show(None), self.sign, self.src.show(None))
+
+
+class StmtInplaceAdd(StmtInplace):
+    __slots__ = ()
+    sign = '+='
+
+
+class StmtInplaceSubstract(StmtInplace):
+    __slots__ = ()
+    sign = '-='
+
+
+class StmtInplaceMultiply(StmtInplace):
+    __slots__ = ()
+    sign = '*='
+
+
+class StmtInplaceDivide(StmtInplace):
+    __slots__ = ()
+    sign = '/='
+
+
+class StmtInplaceModulo(StmtInplace):
+    __slots__ = ()
+    sign = '%='
+
+
+class StmtInplacePower(StmtInplace):
+    __slots__ = ()
+    sign = '**='
+
+
+class StmtInplaceLshift(StmtInplace):
+    __slots__ = ()
+    sign = '<<='
+
+
+class StmtInplaceRshift(StmtInplace):
+    __slots__ = ()
+    sign = '>>='
+
+
+class StmtInplaceAnd(StmtInplace):
+    __slots__ = ()
+    sign = '&='
+
+
+class StmtInplaceOr(StmtInplace):
+    __slots__ = ()
+    sign = '|='
+
+
+class StmtInplaceXor(StmtInplace):
+    __slots__ = ()
+    sign = '^='
+
+
 class StmtDel(Stmt):
     __slots__ = 'val',
 

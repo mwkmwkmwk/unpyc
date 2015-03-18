@@ -118,6 +118,8 @@ class Pyc10(metaclass=PycVersion):
     has_bin_float = False
     # generic py3k flag - unicode strings, kw-only args, ...
     py3k = False
+    # has complex (tuple) arguments - def f(a, (b, c)):
+    has_complex_args = True
     # has True/False as compile-time literals (as opposed to builtins)
     has_bool_literal = False
     # has source size in pyc
@@ -133,8 +135,12 @@ class Pyc11(Pyc10):
     consts_is_list = False
     always_print_expr = False
     has_def_args = True
-    # note: there's a silent pyc-affecting change in Python 1.2 - lambdas
-    # have a name of '<lambda>' instead of None
+    # the following things are different between 1.1 and 1.2 (which have
+    # the same pyc code):
+    #
+    # - lambdas have a name of '<lambda>' instead of None
+    # - docstrings are supported
+    # - dotted names are allowed in imports
 
 class Pyc13(Pyc11):
     code = _v(11913)
@@ -237,6 +243,7 @@ class Pyc30(Pyc27):
     has_str_intern = False
     py3k = True
     has_bool_literal = True
+    has_complex_args = False
 
 class Pyc31(Pyc30):
     # 3141 used in prealpha

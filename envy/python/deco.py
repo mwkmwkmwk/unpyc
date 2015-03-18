@@ -19,10 +19,7 @@ from .bytecode import *
 # - find a way to print nested code objects after stage 3
 # - clean up import mess
 # - make sure signed/unsigned numbers are right
-# - py 1.3:
-#
-#   - tuple arguments
-#
+# - None is not exactly a keyword until 2.4
 # - py 1.4:
 #
 #   - new slices
@@ -31,6 +28,8 @@ from .bytecode import *
 # - py 1.5:
 #
 #   - assert
+#   - loose consts don't emit stuff (incl docstrings)
+#   - tuple arguments are called '.num' instead of ''
 #
 # - py 1.6:
 #
@@ -50,7 +49,7 @@ from .bytecode import *
 # - py 2.1:
 #
 #   - closures
-#   - proper continue
+#   - better continue
 #   - future
 #
 # - py 2.2:
@@ -61,9 +60,123 @@ from .bytecode import *
 #
 # - py 2.3:
 #
-#   - deal with optimizer
+#   - optimizer
+#
+#     - LOAD_CONST truthy ; JUMP_IF_FALSE xxx ; POP_TOP ->
+#       JUMP_FORWARD 4 ; JUMP_IF_FALSE xxx ; POP_TOP
+#
+#       Can be undone by a simple pre-process pass. However,
+#       still has to be taken into account for its impact
+#       on the following.
+#
+#     - any jump to JUMP_FORWARD/ABSOLUTE -> retarget
+#
+#       Impact:
+#
+#       forward @ forward
+#       forward @ absolute
+#       absolute @ forward
+#       absolute @ absolute
+#       absolute @ fake
+#       conditional @ forward
+#       conditional @ absolute
+#
 #   - encoding...
 #   - SET_LINENO no more
+#   - assert no longer has if __debug__
+#   - listcomp rot change
+#   - nofree flag
+#
+# - py 2.4:
+#
+#   - None is now a keyword
+#   - decorators
+#   - genexp
+#   - listcomp uses LIST_APPEND
+#   - we have a nop
+#   - enter peephole:
+#
+#     - UNARY_NOT JUMP_IF_FALSE [POP] -> JUMP_IF_TRUE [POP]
+#     - true const JUMP_IF_FALSE POP -> NOPs
+#     - pack/unpack for 1, 2, 3 is folded to rots
+#     - JUMP_IF_FALSE/TRUE chain shortening
+#     - nukes redundant return None
+#
+# - py 2.5:
+#
+#   - yield expression
+#   - relative imports
+#   - with
+#   - try / except / finally
+#   - if/else expression
+#   - the compiler has been rewritten. have fun, [TODO]
+#
+# - py 2.6:
+#
+#   - STORE_MAP used for dict displays
+#   - class decorators
+#   - except a as b
+#   - different with sequence
+#
+# - py 3.0 & 2.7:
+#
+#   - setcomp & dictcomp [different in 3.0]
+#   - set displays. also the frozenset optimization. [different in 3.0]
+#   - some opcodes gratuitously moved
+#
+# - py 3.0:
+#
+#   - yeah, well, unicode is everywhere
+#   - bool literals
+#   - extended unpack
+#   - nuke old slices
+#   - nuke ``, exec, print, old divide
+#   - kwdefaults, annotations
+#   - new build class
+#   - real funny except
+#   - make closure change?
+#   - has some opcodes
+#   - nonlocal
+#   - only two-arg raise, and different
+#   - ellipsis allowed everywhere
+#   - list comprehensions are functions
+#   - still new with sequence
+#
+# - py 2.7 & 3.1:
+#
+#   - comprehension changes (funny arg)
+#   - JUMP_IF_FALSE/TRUE changed to POP_* and *_OR_POP
+#   - multiple items in with
+#
+# - py 3.1:
+#
+#   - <> and barry
+#
+# - py 2.7 & 3.2:
+#
+#   - setup with
+#
+# - py 3.2:
+#
+#   - another EXTENDED_ARG move
+#   - dup_topx/rot4 -> dup_top_two
+#   - del deref
+#   - from .
+#
+# - py 3.3:
+#
+#   - yield from
+#   - qualnames
+#
+# - py 3.4:
+#
+#   - classderef
+#   - store locals is gone
+#
+# - py 3.5:
+#
+#   - matmul
+#   - empty else is elided
 #
 # and for prettifier:
 #

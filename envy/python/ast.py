@@ -46,16 +46,44 @@ def ast_process(deco, version):
     def process_fun_body(node):
         stmts = node.code.block.stmts
         if version.has_new_code:
+            # new code - simple arguments are determined from code attributes,
+            # complex arguments (if any) are handled as assignment statements
+            # at the beginning
             args = node.code.code.args.setdefs(node.defargs)
+            if version.has_complex_args:
+                # split leaking on purpose
+                for split, stmt in enumerate(stmts):
+                    if not (
+                        # stmt has to be an assignment...
+                        isinstance(stmt, StmtAssign) and
+                        # ... with a single destination ...
+                        len(stmt.dests) == 1 and
+                        # ... that is a tuple ...
+                        isinstance(stmt.dests[0], ExprTuple) and
+                        # ... with a fast var source ...
+                        isinstance(stmt.expr, ExprFast) and
+                        # ... that has a strange name ('.123' for 1.5+ or '' for 1.3/1.4) ...
+                        (stmt.expr.name.startswith('.') or stmt.expr.name == '') and
+                        # ... and is in the args range (this check should be redundant though)
+                        stmt.expr.idx < len(args.args)
+                    ):
+                        break
+                    # make sure the arg is still a fast var...
+                    if not isinstance(args.args[stmt.expr.idx], ExprFast):
+                        raise PythonError("a tuple arg already substituted?")
+                    args.args[stmt.expr.idx] = stmt.dests[0]
+            else:
+                split = 0
         else:
+            # old code - the first statement should be $args unpacking
             if not stmts or not isinstance(stmts[0], StmtArgs):
                 raise PythonError("no $args in function def")
             args = stmts[0].args.setdefs(node.defargs)
-            stmts = stmts[1:]
+            split = 1
         return ExprFunction(
             node.code.code.name,
             args,
-            Block(stmts)
+            Block(stmts[split:])
         )
 
     def isfunction(subnode):

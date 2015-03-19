@@ -1,0 +1,1 @@
+../../1.2/names/global_.py

@@ -14,7 +14,6 @@ from .bytecode import *
 # - contexts for expressions dammit
 # - bump as many versions as easily possible
 # - figure out what to do about line numbers
-# - access prettyprint modes
 # - make a test suite
 # - find a way to print nested code objects after stage 3
 # - clean up import mess

@@ -1,4 +1,5 @@
 from envy.show import indent
+from .helpers import PythonError
 
 class FunArgs:
     __slots__ = 'args', 'defargs', 'vararg', 'kwargs', 'varkw'
@@ -529,6 +530,8 @@ class StmtAccess(Stmt):
 
     # TODO: decode that crap
     def __init__(self, name, mode):
+        if mode & ~0o666 or not mode:
+            raise PythonError("funny access mode")
         self.name = name
         self.mode = mode
 
@@ -536,7 +539,16 @@ class StmtAccess(Stmt):
         return self
 
     def show(self):
-        yield 'access {}: {:o}'.format(self.name, self.mode)
+        chunks = []
+        for idx, name in enumerate(['public', 'protected', 'private']):
+            acc = self.mode >> idx * 3 & 6
+            if acc == 2:
+                chunks.append(name + " write")
+            elif acc == 4:
+                chunks.append(name + " read")
+            elif acc == 6:
+                chunks.append(name)
+        yield 'access {}: {}'.format(self.name, ', '.join(chunks))
 
 
 class StmtArgs(Stmt):

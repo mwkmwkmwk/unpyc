@@ -236,6 +236,7 @@ class OpcodeBinaryCall(Opcode):
     """$push $pop($pop)"""
     code = 26
     name = 'BINARY_CALL'
+    flag = '!has_new_code'
 
 class OpcodeSliceNN(Opcode):
     """$push $pop[:]"""
@@ -738,28 +739,20 @@ class OpcodeReserveFast(Opcode):
             return 'None'
         return ', '.join(self.names)
 
-    # TODO version_ok
-
 
 class OpcodeLoadFast(OpcodeParamFast):
     code = 124
     name = "LOAD_FAST"
-
-    # TODO version_ok
 
 
 class OpcodeStoreFast(OpcodeParamFast):
     code = 125
     name = "STORE_FAST"
 
-    # TODO version_ok
-
 
 class OpcodeDeleteFast(OpcodeParamFast):
     code = 126
     name = "DELETE_FAST"
-
-    # TODO version_ok
 
 
 class OpcodeSetLineno(OpcodeParamNum):

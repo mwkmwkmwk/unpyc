@@ -190,10 +190,8 @@ from .bytecode import *
 # funny intermediate stuff to put on stack
 
 DupTop = namedtuple('DupTop', [])
-Dup = namedtuple('Dup', ['expr'])
 DupTwo = namedtuple('DupTwo', ['a', 'b'])
 DupThree = namedtuple('DupThree', ['a', 'b', 'c'])
-ABA = namedtuple('ABA', ['a', 'b'])
 XAX = namedtuple('XAX', ['a'])
 BAB = namedtuple('BAB', ['a', 'b'])
 Import = namedtuple('Import', ['name', 'items'])
@@ -335,10 +333,10 @@ def _store_visitor(op, *stack):
             dst, extra = func(self, deco, *args)
             return StmtAssign([dst], src), extra
 
-        @_visitor(op, Block, Dup, *stack)
-        def visit_store_multi_start(self, deco, block, dup, *args):
+        @_visitor(op, Block, Expr, DupTop, *stack)
+        def visit_store_multi_start(self, deco, block, src, _, *args):
             dst, extra = func(self, deco, *args)
-            return [block, MultiAssign(dup.expr, [dst])] + extra
+            return [block, MultiAssign(src, [dst])] + extra
 
         @_visitor(op, Block, MultiAssign, DupTop, *stack)
         def visit_store_multi_next(self, deco, block, multi, _, *args):
@@ -436,9 +434,9 @@ def visit_set_lineno(self, deco):
 
 # special stuff
 
-@_visitor(OpcodeDupTop, Expr)
-def visit_dup_top(self, deco, expr):
-    return [Dup(expr)]
+@_visitor(OpcodeDupTop)
+def visit_dup_top(self, deco):
+    return [DupTop()]
 
 @_visitor(OpcodeDupTopX, Exprs('param', 1))
 def visit_dup_topx(self, deco, exprs):
@@ -449,21 +447,13 @@ def visit_dup_topx(self, deco, exprs):
     else:
         raise PythonError("funny DUP_TOPX parameter")
 
-@_visitor(OpcodeDupTop, MultiAssign)
-def visit_dup_top(self, deco, multi):
-    return [multi, DupTop()]
-
-@_visitor(OpcodeRotTwo, Dup, Expr)
-def visit_dup_top(self, deco, dup, expr):
-    return [ABA(dup.expr, expr)]
-
 @_visitor(OpcodeRotTwo, DupTop, Expr)
-def visit_dup_top(self, deco, dup, expr):
+def visit_dup_top(self, deco, _, expr):
     return [XAX(expr)]
 
-@_visitor(OpcodeRotThree, Expr, Dup)
-def visit_dup_top(self, deco, expr, dup):
-    return [BAB(expr, dup.expr)]
+@_visitor(OpcodeRotThree, Expr, Expr, DupTop)
+def visit_dup_top(self, deco, a, b, _):
+    return [BAB(a, b)]
 
 
 # expressions - unary
@@ -520,12 +510,11 @@ def visit_build_map(self, deco):
         raise PythonError("Non-zero param for BUILD_MAP")
     return [ExprDict([])]
 
-@_visitor(OpcodeStoreSubscr, ABA, Expr)
-def visit_build_map_step(self, deco, aba, expr):
-    dict_ = aba.a
+@_visitor(OpcodeStoreSubscr, Expr, XAX, Expr)
+def visit_build_map_step(self, deco, dict_, xax, expr):
     if not isinstance(dict_, ExprDict):
         raise NoMatch
-    dict_.items.append((expr, aba.b))
+    dict_.items.append((expr, xax.a))
     return [dict_]
 
 # expressions - function call
@@ -671,18 +660,14 @@ def visit_print_newline(self, deco):
 
 # print to
 
-@_visitor(OpcodePrintItemTo, ABA)
-def visit_print_item_to(self, deco, aba):
-    return [StmtPrintTo(aba.a, [aba.b], False)]
+@_visitor(OpcodePrintItemTo, Expr, XAX)
+def visit_print_item_to(self, deco, dst, xax):
+    return [StmtPrintTo(dst, [xax.a], False)]
 
 @_visitor(OpcodePrintItemTo, StmtPrintTo, XAX)
 def visit_print_item_to(self, deco, stmt, xax):
     stmt.vals.append(xax.a)
     return [stmt]
-
-@_visitor(OpcodeDupTop, StmtPrintTo)
-def visit_print_item_to(self, deco, stmt):
-    return [stmt, DupTop()]
 
 @_stmt_visitor(OpcodePopTop, StmtPrintTo)
 def visit_print_to_end(self, deco, stmt):
@@ -725,12 +710,12 @@ def _visit_raise_varargs(self, deco, exprs):
 
 # exec statement
 
-@_stmt_visitor(OpcodeExecStmt, Expr, Dup)
-def _visit_exec_3(self, deco, code, dup):
-    if isinstance(dup.expr, ExprNone):
+@_stmt_visitor(OpcodeExecStmt, Expr, Expr, DupTop)
+def _visit_exec_3(self, deco, code, env, _):
+    if isinstance(env, ExprNone):
         return StmtExec(code), []
     else:
-        return StmtExec(code, dup.expr), []
+        return StmtExec(code, env), []
 
 @_stmt_visitor(OpcodeExecStmt, Expr, Expr, Expr)
 def _visit_exec_3(self, deco, code, globals, locals):
@@ -910,9 +895,9 @@ def _visit_cmp_jump(self, deco, cmp):
     return [Compare(cmp.items, cmp.flows + [self.flow]), WantPop()]
 
 # middle #1
-@_visitor(OpcodeRotThree, Compare, Dup)
-def _visit_cmp_rot(self, deco, cmp, dup):
-    return [CompareContinue(cmp.items, cmp.flows, dup.expr)]
+@_visitor(OpcodeRotThree, Compare, Expr, DupTop)
+def _visit_cmp_rot(self, deco, cmp, expr, _):
+    return [CompareContinue(cmp.items, cmp.flows, expr)]
 
 # middle #2
 @_visitor(OpcodeCompareOp, CompareContinue)
@@ -1073,17 +1058,13 @@ def _visit_except_end_try(self, deco, try_):
 # - either pop or store value
 # - pop traceback
 
-@_visitor(OpcodeDupTop, TryExceptMid)
-def _visit_except_match_start(self, deco, try_):
+@_visitor(OpcodeCompareOp, TryExceptMid, DupTop, Expr)
+def _visit_except_match_check(self, deco, try_, _, expr):
     if try_.any:
         raise PythonError("making an except match after blanket")
-    return [try_, TryExceptMatchStart()]
-
-@_visitor(OpcodeCompareOp, TryExceptMatchStart, Expr)
-def _visit_except_match_check(self, deco, start, expr):
     if self.mode != CmpOp.EXC_MATCH:
         raise PythonError("funny except match")
-    return [TryExceptMatchMid(expr)]
+    return [try_, TryExceptMatchMid(expr)]
 
 @_visitor(OpcodeJumpIfFalse, TryExceptMatchMid)
 def _visit_except_match_jump(self, deco, mid):
@@ -1264,17 +1245,17 @@ for op, stmt in INPLACE_OPS:
     def _visit_inplace_slice_ee(self, deco, dup, src, stmt=stmt):
         return [InplaceSliceEE(dup.expr, dup.start, dup.end, src, stmt), WantRotFour()]
 
-@_visitor(OpcodeLoadAttr, Dup)
-def _visit_load_attr_dup(self, deco, dup):
-    return [DupAttr(dup.expr, self.param)]
+@_visitor(OpcodeLoadAttr, Expr, DupTop)
+def _visit_load_attr_dup(self, deco, expr, _):
+    return [DupAttr(expr, self.param)]
 
 @_visitor(OpcodeBinarySubscr, DupTwo)
 def _visit_load_subscr_dup(self, deco, dup):
     return [DupSubscr(dup.a, dup.b)]
 
-@_visitor(OpcodeSliceNN, Dup)
-def _visit_slice_nn_dup(self, deco, dup):
-    return [DupSliceNN(dup.expr)]
+@_visitor(OpcodeSliceNN, Expr, DupTop)
+def _visit_slice_nn_dup(self, deco, expr, _):
+    return [DupSliceNN(expr)]
 
 @_visitor(OpcodeSliceEN, DupTwo)
 def _visit_slice_en_dup(self, deco, dup):

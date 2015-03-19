@@ -97,6 +97,8 @@ class Pyc10(metaclass=PycVersion):
     has_complex = False
     # has stacksize and lnotab
     has_stacksize = False
+    # has assert statement
+    has_assert = False
     # has zero-argument raise (aka reraise) statement
     has_reraise = False
     # has unicode type
@@ -180,6 +182,7 @@ class Pyc15(Pyc14):
     code = _v(20121)
     name = "Python 1.5"
     has_stacksize = True
+    has_assert = True
 
 class Pyc16(Pyc15):
     code = _v(50428)

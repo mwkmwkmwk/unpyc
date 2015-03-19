@@ -32,7 +32,7 @@ for subdir in sorted(test_dir.iterdir(), key=lambda x: x.name):
     version = subdir.name
     print("version {}...".format(version))
     for pydir in pydirs:
-        if pydir.name.startswith("Python-{}".format(version)):
+        if pydir.is_dir() and pydir.name.startswith("Python-{}".format(version)):
             break
     else:
         print("No python {}".format(version))

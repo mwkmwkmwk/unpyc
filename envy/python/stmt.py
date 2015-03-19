@@ -279,20 +279,22 @@ class StmtAssert(Stmt):
 
 
 class StmtImport(Stmt):
-    __slots__ = 'name', 'as_'
+    __slots__ = 'name', 'attrs', 'as_'
 
-    def __init__(self, name, as_):
+    def __init__(self, name, attrs, as_):
         self.name = name
+        self.attrs = attrs
         self.as_ = as_
 
     def subprocess(self, process):
         return StmtImport(
             self.name,
+            self.attrs,
             process(self.as_)
         )
 
     def show(self):
-        yield "import {} as {}".format(self.name, self.as_.show(None))
+        yield "import {} as{} {}".format(self.name, ''.join('.' + attr for attr in self.attrs), self.as_.show(None))
 
 
 class StmtFromImport(Stmt):

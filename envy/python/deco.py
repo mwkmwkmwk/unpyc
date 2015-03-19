@@ -31,7 +31,6 @@ from .bytecode import *
 #
 #   - print to
 #   - wide
-#   - import as
 #   - list comprehensions
 #
 # - py 2.1:
@@ -197,7 +196,9 @@ DupThree = namedtuple('DupThree', ['a', 'b', 'c'])
 ABA = namedtuple('ABA', ['a', 'b'])
 BAB = namedtuple('BAB', ['a', 'b'])
 Import = namedtuple('Import', ['name', 'items'])
-Import2 = namedtuple('Import2', ['fromlist', 'name', 'exprs'])
+Import2Simple = namedtuple('Import2Simple', ['name', 'attrs'])
+Import2Star = namedtuple('Import2Star', ['name'])
+Import2From = namedtuple('Import2From', ['fromlist', 'name', 'exprs'])
 MultiAssign = namedtuple('MultiAssign', ['src', 'dsts'])
 MultiAssignDup = namedtuple('MultiAssignDup', ['src', 'dsts'])
 UnpackSlot = namedtuple('UnpackSlot', ['expr', 'idx'])
@@ -392,16 +393,12 @@ def _store_visitor(op, *stack):
             if import_.items:
                 raise PythonError("non-empty items for plain import")
             dst, extra = func(self, deco, *args)
-            return StmtImport(import_.name, dst), extra
+            return StmtImport(import_.name, [], dst), extra
 
-        @_stmt_visitor(op, Import2, *stack)
+        @_stmt_visitor(op, Import2Simple, *stack)
         def _visit_store_name_import(self, deco, import_, *args):
-            if import_.fromlist is not None:
-                raise PythonError("non-empty fromlist for plain import")
-            if import_.exprs:
-                raise PythonError("non-empty items for plain import")
             dst, extra = func(self, deco, *args)
-            return StmtImport(import_.name, dst), extra
+            return StmtImport(import_.name, import_.attrs, dst), extra
 
         return func
     return inner
@@ -734,39 +731,40 @@ def _visit_import_from_end(self, deco, import_):
 
 # imports - v2
 
-@_visitor(OpcodeImportName, Expr, flag='has_import_as')
+@_visitor(OpcodeImportName, ExprNone, flag='has_import_as')
 def _visit_import_name(self, deco, expr):
-    if isinstance(expr, ExprNone):
-        fromlist = None
-    elif isinstance(expr, ExprTuple):
-        fromlist = []
-        for item in expr.exprs:
-            if not isinstance(item, ExprString):
-                raise PythonError("non-string in fromlist")
-            fromlist.append(item.val.decode('ascii'))
-    else:
-        raise PythonError("funny fromlist")
-    return [Import2(fromlist, self.param, [])]
+    return [Import2Simple(self.param, [])]
 
-@_stmt_visitor(OpcodeImportStar, Import2)
+@_visitor(OpcodeLoadAttr, Import2Simple)
+def _visit_import_name_attr(self, deco, import_):
+    import_.attrs.append(self.param)
+    return [import_]
+
+@_visitor(OpcodeImportName, ExprTuple, flag='has_import_as')
+def _visit_import_name(self, deco, expr):
+    fromlist = []
+    for item in expr.exprs:
+        if not isinstance(item, ExprString):
+            raise PythonError("non-string in fromlist")
+        fromlist.append(item.val.decode('ascii'))
+    if fromlist == ['*']:
+        return [Import2Star(self.param)]
+    else:
+        return [Import2From(fromlist, self.param, [])]
+
+@_stmt_visitor(OpcodeImportStar, Import2Star)
 def _visit_import_star(self, deco, import_):
-    if import_.exprs:
-        raise PythonError("non-empty items for star import")
-    if import_.fromlist != ['*']:
-        raise PythonError("wrong fromlist for star import")
     return StmtImportStar(import_.name), []
 
-@_visitor(OpcodeImportFrom, Import2)
+@_visitor(OpcodeImportFrom, Import2From)
 def _visit_import_from(self, deco, import_):
     idx = len(import_.exprs)
     import_.exprs.append(None)
-    if (not isinstance(import_.fromlist, list)
-        or idx not in range(len(import_.fromlist))
-        or import_.fromlist[idx] != self.param):
+    if (idx >= len(import_.fromlist) or import_.fromlist[idx] != self.param):
         raise PythonError("fromlist mismatch")
     return [import_, UnpackSlot(import_, idx)]
 
-@_stmt_visitor(OpcodePopTop, Import2)
+@_stmt_visitor(OpcodePopTop, Import2From)
 def _visit_import_from_end(self, deco, import_):
     return StmtFromImport(import_.name, list(zip(import_.fromlist, import_.exprs))), []
 

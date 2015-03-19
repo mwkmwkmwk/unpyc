@@ -303,12 +303,18 @@ class StmtFromImport(Stmt):
         self.items = items
 
     def subprocess(self, process):
-        return self
+        return StmtFromImport(
+            self.name,
+            [(name, process(expr) if expr else None) for name, expr in self.items]
+        )
 
     def show(self):
         yield "from {} import {}".format(
             self.name,
-            ', '.join(self.items)
+            ', '.join(
+                "{} as {}".format(name, expr.show(None)) if expr else name
+                for name, expr in self.items
+            )
         )
 
 

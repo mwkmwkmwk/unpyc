@@ -30,7 +30,6 @@ from .bytecode import *
 # - py 2.0:
 #
 #   - print to
-#   - import star
 #   - wide
 #   - import as
 #   - list comprehensions
@@ -197,8 +196,8 @@ DupTwo = namedtuple('DupTwo', ['a', 'b'])
 DupThree = namedtuple('DupThree', ['a', 'b', 'c'])
 ABA = namedtuple('ABA', ['a', 'b'])
 BAB = namedtuple('BAB', ['a', 'b'])
-Import = namedtuple('Import', ['name'])
-FromImport = namedtuple('FromImport', ['name', 'items'])
+Import = namedtuple('Import', ['name', 'items'])
+Import2 = namedtuple('Import2', ['fromlist', 'name', 'exprs'])
 MultiAssign = namedtuple('MultiAssign', ['src', 'dsts'])
 MultiAssignDup = namedtuple('MultiAssignDup', ['src', 'dsts'])
 UnpackSlot = namedtuple('UnpackSlot', ['expr', 'idx'])
@@ -390,6 +389,17 @@ def _store_visitor(op, *stack):
 
         @_stmt_visitor(op, Import, *stack)
         def _visit_store_name_import(self, deco, import_, *args):
+            if import_.items:
+                raise PythonError("non-empty items for plain import")
+            dst, extra = func(self, deco, *args)
+            return StmtImport(import_.name, dst), extra
+
+        @_stmt_visitor(op, Import2, *stack)
+        def _visit_store_name_import(self, deco, import_, *args):
+            if import_.fromlist is not None:
+                raise PythonError("non-empty fromlist for plain import")
+            if import_.exprs:
+                raise PythonError("non-empty items for plain import")
             dst, extra = func(self, deco, *args)
             return StmtImport(import_.name, dst), extra
 
@@ -699,30 +709,66 @@ def _visit_exec_3(self, deco, code, globals, locals):
 
 # imports
 
-@_visitor(OpcodeImportName)
+@_visitor(OpcodeImportName, flag='!has_import_as')
 def _visit_import_name(self, deco):
-    return [Import(self.param)]
-
-@_visitor(OpcodeImportFrom, Import)
-def _visit_import_from_first(self, deco, import_):
-    if self.param == '*':
-        raise NoMatch
-    return [FromImport(import_.name, [self.param])]
+    return [Import(self.param, [])]
 
 @_stmt_visitor(OpcodeImportFrom, Import)
 def _visit_import_from_star(self, deco, import_, flag="!has_import_star"):
     if self.param != '*':
         raise NoMatch
+    if import_.items:
+        raise PythonError("non-empty items for star import")
     return StmtImportStar(import_.name), [WantPop()]
 
-@_visitor(OpcodeImportFrom, FromImport)
-def _visit_import_from_next(self, deco, from_import):
-    from_import.items.append(self.param)
-    return [from_import]
+@_visitor(OpcodeImportFrom, Import)
+def _visit_import_from(self, deco, import_):
+    if self.param == '*':
+        raise NoMatch
+    import_.items.append(self.param)
+    return [import_]
 
-@_stmt_visitor(OpcodePopTop, FromImport)
-def _visit_import_from_end(self, deco, from_import):
-    return StmtFromImport(from_import.name, from_import.items), []
+@_stmt_visitor(OpcodePopTop, Import)
+def _visit_import_from_end(self, deco, import_):
+    return StmtFromImport(import_.name, [(x, None) for x in import_.items]), []
+
+# imports - v2
+
+@_visitor(OpcodeImportName, Expr, flag='has_import_as')
+def _visit_import_name(self, deco, expr):
+    if isinstance(expr, ExprNone):
+        fromlist = None
+    elif isinstance(expr, ExprTuple):
+        fromlist = []
+        for item in expr.exprs:
+            if not isinstance(item, ExprString):
+                raise PythonError("non-string in fromlist")
+            fromlist.append(item.val.decode('ascii'))
+    else:
+        raise PythonError("funny fromlist")
+    return [Import2(fromlist, self.param, [])]
+
+@_stmt_visitor(OpcodeImportStar, Import2)
+def _visit_import_star(self, deco, import_):
+    if import_.exprs:
+        raise PythonError("non-empty items for star import")
+    if import_.fromlist != ['*']:
+        raise PythonError("wrong fromlist for star import")
+    return StmtImportStar(import_.name), []
+
+@_visitor(OpcodeImportFrom, Import2)
+def _visit_import_from(self, deco, import_):
+    idx = len(import_.exprs)
+    import_.exprs.append(None)
+    if (not isinstance(import_.fromlist, list)
+        or idx not in range(len(import_.fromlist))
+        or import_.fromlist[idx] != self.param):
+        raise PythonError("fromlist mismatch")
+    return [import_, UnpackSlot(import_, idx)]
+
+@_stmt_visitor(OpcodePopTop, Import2)
+def _visit_import_from_end(self, deco, import_):
+    return StmtFromImport(import_.name, list(zip(import_.fromlist, import_.exprs))), []
 
 # if
 

@@ -705,7 +705,15 @@ def _visit_import_name(self, deco):
 
 @_visitor(OpcodeImportFrom, Import)
 def _visit_import_from_first(self, deco, import_):
+    if self.param == '*':
+        raise NoMatch
     return [FromImport(import_.name, [self.param])]
+
+@_stmt_visitor(OpcodeImportFrom, Import)
+def _visit_import_from_star(self, deco, import_, flag="!has_import_star"):
+    if self.param != '*':
+        raise NoMatch
+    return StmtImportStar(import_.name), [WantPop()]
 
 @_visitor(OpcodeImportFrom, FromImport)
 def _visit_import_from_next(self, deco, from_import):

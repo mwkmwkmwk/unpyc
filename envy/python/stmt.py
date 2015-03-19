@@ -312,6 +312,19 @@ class StmtFromImport(Stmt):
         )
 
 
+class StmtImportStar(Stmt):
+    __slots__ = 'name'
+
+    def __init__(self, name):
+        self.name = name
+
+    def subprocess(self, process):
+        return self
+
+    def show(self):
+        yield "from {} import *".format(self.name)
+
+
 class StmtExec(Stmt):
     __slots__ = 'code', 'globals', 'locals'
 

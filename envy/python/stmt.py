@@ -258,6 +258,26 @@ class StmtRaise(Stmt):
             yield "raise {}, {}, {}".format(self.cls.show(None), self.val.show(None), self.tb.show(None))
 
 
+class StmtAssert(Stmt):
+    __slots__ = 'expr', 'msg'
+
+    def __init__(self, expr, msg=None):
+        self.expr = expr
+        self.msg = msg
+
+    def subprocess(self, process):
+        return StmtAssert(
+            process(self.expr),
+            process(self.msg) if self.msg else None,
+        )
+
+    def show(self):
+        if self.msg is None:
+            yield "assert {}".format(self.expr.show(None))
+        else:
+            yield "assert {}, {}".format(self.expr.show(None), self.msg.show(None))
+
+
 class StmtImport(Stmt):
     __slots__ = 'name', 'as_'
 

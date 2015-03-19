@@ -25,8 +25,6 @@ from .bytecode import *
 #
 # - py 1.5:
 #
-#   - assert
-#   - loose consts don't emit stuff (incl docstrings)
 #   - tuple arguments are called '.num' instead of ''
 #
 # - py 2.0:
@@ -288,6 +286,8 @@ class _Visitor:
                 for _ in range(num):
                     exprs = []
                     for _ in range(want.factor):
+                        if not stack:
+                            return False
                         expr = stack.pop()
                         if not isinstance(expr, Expr):
                             return False
@@ -296,6 +296,8 @@ class _Visitor:
                     arg.append(expr if want.factor == 1 else exprs)
                 arg.reverse()
             else:
+                if not stack:
+                    return False
                 arg = stack.pop()
                 if not isinstance(arg, want):
                     return False
@@ -783,6 +785,23 @@ def _visit_or(self, deco, start, expr):
     if self != start.flow:
         raise PythonError("funny or flow")
     return [ExprBoolOr(start.expr, expr)]
+
+# assert. ouch.
+
+@_stmt_visitor(OpcodeRaiseVarargs, IfStart, Block, OrStart, Exprs('param', 1), flag='has_assert')
+def _visit_assert_1(self, deco, ifstart, block, orstart, exprs):
+    if block.stmts:
+        raise PythonError("extra assert statements")
+    if not isinstance(exprs[0], ExprGlobal) or exprs[0].name != 'AssertionError':
+        raise PythonError("hmm, I wanted an assert...")
+    if not isinstance(ifstart.expr, ExprGlobal) or ifstart.expr.name != '__debug__':
+        raise PythonError("hmm, I wanted an assert...")
+    if self.param == 1:
+        return StmtAssert(orstart.expr), [WantPop(), WantFlow(orstart.flow), WantFlow(ifstart.flow)]
+    elif self.param == 2:
+        return StmtAssert(orstart.expr, exprs[1]), [WantPop(), WantFlow(orstart.flow), WantFlow(ifstart.flow)]
+    else:
+        raise PythonError("funny assert params")
 
 # comparisons
 

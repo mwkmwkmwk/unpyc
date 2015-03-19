@@ -2,9 +2,9 @@ assert a
 x
 assert a, b
 x
-assert not a
+assert (not a)
 x
-assert not a, b
+assert (not a), b
 x
 assert 1
 x

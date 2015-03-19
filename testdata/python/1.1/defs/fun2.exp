@@ -1,0 +1,6 @@
+def f(a$0, b$1, c$2=3):
+	pass
+def g(a$0=1, b$1=3):
+	pass
+def g(a$0, b$1=3, *c$2):
+	pass

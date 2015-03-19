@@ -6,3 +6,6 @@ def g(a=1, b=3):
 
 def g(a, b=3, *c):
     pass
+
+def g(a, (b, c, (d, e))=z, (f, g), *h):
+    pass

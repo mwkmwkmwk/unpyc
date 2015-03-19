@@ -19,3 +19,7 @@ def f6(a, *b):
 def f7(a, *b): pass
 
 def f8(a, b, *c): pass
+
+def f8(a, (b, c)): pass
+
+def f8(a, (b, (c, d), ((e, f), g)), *h): pass

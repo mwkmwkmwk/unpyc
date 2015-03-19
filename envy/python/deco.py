@@ -29,7 +29,6 @@ from .bytecode import *
 #
 # - py 2.0:
 #
-#   - print to
 #   - wide
 #   - list comprehensions
 #
@@ -190,17 +189,18 @@ from .bytecode import *
 
 # funny intermediate stuff to put on stack
 
+DupTop = namedtuple('DupTop', [])
 Dup = namedtuple('Dup', ['expr'])
 DupTwo = namedtuple('DupTwo', ['a', 'b'])
 DupThree = namedtuple('DupThree', ['a', 'b', 'c'])
 ABA = namedtuple('ABA', ['a', 'b'])
+XAX = namedtuple('XAX', ['a'])
 BAB = namedtuple('BAB', ['a', 'b'])
 Import = namedtuple('Import', ['name', 'items'])
 Import2Simple = namedtuple('Import2Simple', ['name', 'attrs'])
 Import2Star = namedtuple('Import2Star', ['name'])
 Import2From = namedtuple('Import2From', ['fromlist', 'name', 'exprs'])
 MultiAssign = namedtuple('MultiAssign', ['src', 'dsts'])
-MultiAssignDup = namedtuple('MultiAssignDup', ['src', 'dsts'])
 UnpackSlot = namedtuple('UnpackSlot', ['expr', 'idx'])
 UnpackArgSlot = namedtuple('UnpackArgSlot', ['args', 'idx'])
 UnpackVarargSlot = namedtuple('UnpackVarargSlot', ['args'])
@@ -340,11 +340,11 @@ def _store_visitor(op, *stack):
             dst, extra = func(self, deco, *args)
             return [block, MultiAssign(dup.expr, [dst])] + extra
 
-        @_visitor(op, Block, MultiAssignDup, *stack)
-        def visit_store_multi_next(self, deco, block, multidup, *args):
+        @_visitor(op, Block, MultiAssign, DupTop, *stack)
+        def visit_store_multi_next(self, deco, block, multi, _, *args):
             dst, extra = func(self, deco, *args)
-            multidup.dsts.append(dst)
-            return [block, MultiAssign(multidup.src, multidup.dsts)] + extra
+            multi.dsts.append(dst)
+            return [block, multi] + extra
 
         @_stmt_visitor(op, MultiAssign, *stack)
         def visit_store_multi_end(self, deco, multi, *args):
@@ -451,11 +451,15 @@ def visit_dup_topx(self, deco, exprs):
 
 @_visitor(OpcodeDupTop, MultiAssign)
 def visit_dup_top(self, deco, multi):
-    return [MultiAssignDup(multi.src, multi.dsts)]
+    return [multi, DupTop()]
 
 @_visitor(OpcodeRotTwo, Dup, Expr)
 def visit_dup_top(self, deco, dup, expr):
     return [ABA(dup.expr, expr)]
+
+@_visitor(OpcodeRotTwo, DupTop, Expr)
+def visit_dup_top(self, deco, dup, expr):
+    return [XAX(expr)]
 
 @_visitor(OpcodeRotThree, Expr, Dup)
 def visit_dup_top(self, deco, expr, dup):
@@ -664,6 +668,34 @@ def visit_print_item(self, deco, expr):
 @_stmt_visitor(OpcodePrintNewline)
 def visit_print_newline(self, deco):
     return StmtPrint([], True), []
+
+# print to
+
+@_visitor(OpcodePrintItemTo, ABA)
+def visit_print_item_to(self, deco, aba):
+    return [StmtPrintTo(aba.a, [aba.b], False)]
+
+@_visitor(OpcodePrintItemTo, StmtPrintTo, XAX)
+def visit_print_item_to(self, deco, stmt, xax):
+    stmt.vals.append(xax.a)
+    return [stmt]
+
+@_visitor(OpcodeDupTop, StmtPrintTo)
+def visit_print_item_to(self, deco, stmt):
+    return [stmt, DupTop()]
+
+@_stmt_visitor(OpcodePopTop, StmtPrintTo)
+def visit_print_to_end(self, deco, stmt):
+    return stmt, []
+
+@_stmt_visitor(OpcodePrintNewlineTo, StmtPrintTo)
+def visit_print_newline_to(self, deco, stmt):
+    stmt.nl = True
+    return stmt, []
+
+@_stmt_visitor(OpcodePrintNewlineTo, Expr)
+def visit_print_newline_to(self, deco, expr):
+    return StmtPrintTo(expr, [], True), []
 
 # return statement
 

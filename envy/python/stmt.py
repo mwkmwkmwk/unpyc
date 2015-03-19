@@ -104,6 +104,25 @@ class StmtPrint(Stmt):
             yield "print"
 
 
+class StmtPrintTo(Stmt):
+    __slots__ = 'to', 'vals', 'nl'
+
+    def __init__(self, to, vals, nl=True):
+        self.to = to
+        self.vals = vals
+        self.nl = nl
+
+    def subprocess(self, process):
+        return StmtPrintTo(process(self.to), [process(expr) for expr in self.vals], self.nl)
+
+    def show(self):
+        if self.vals:
+            yield "print >>{}, {}{}".format(self.to.show(None), ', '.join(val.show(None) for val in self.vals), '' if self.nl else ',')
+        else:
+            assert self.nl
+            yield "print >>{}".format(self.to.show(None))
+
+
 class StmtSingle(Stmt):
     __slots__ = 'val',
 

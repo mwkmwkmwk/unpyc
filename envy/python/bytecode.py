@@ -454,6 +454,11 @@ class OpcodeReturnValue(Opcode):
 
 # TODO: LOAD_GLOBALS - appears unused...
 
+class OpcodeImportStar(Opcode):
+    code = 84
+    name = 'IMPORT_STAR'
+    flag = 'has_import_star'
+
 class OpcodeExecStmt(Opcode):
     """exec $pop in $pop, $pop"""
     code = 85

@@ -400,6 +400,16 @@ class OpcodePrintNewline(Opcode):
     code = 72
     name = 'PRINT_NEWLINE'
 
+class OpcodePrintItemTo(Opcode):
+    code = 73
+    name = 'PRINT_ITEM_TO'
+    flag = 'has_print_to'
+
+class OpcodePrintNewlineTo(Opcode):
+    code = 74
+    name = 'PRINT_NEWLINE_TO'
+    flag = 'has_print_to'
+
 class OpcodeInplaceLshift(Opcode):
     code = 75
     name = 'INPLACE_LSHIFT'

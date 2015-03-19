@@ -117,6 +117,8 @@ class Pyc10(metaclass=PycVersion):
     has_import_star = False
     # has import as
     has_import_as = False
+    # has print >>a, b
+    has_print_to = False
     # has -U option to interpreter
     has_U = False
     # has nested functions with closures
@@ -207,6 +209,7 @@ class Pyc20(Pyc16):
     has_unpack_sequence = True
     has_import_star = True
     has_import_as = True
+    has_print_to = True
 
 class Pyc21(Pyc20):
     code = _v(60202)

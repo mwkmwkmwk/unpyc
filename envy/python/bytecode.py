@@ -690,6 +690,11 @@ class OpcodeSetFuncArgs(OpcodeParamNum):
     name = "SET_FUNC_ARGS"
     flag = 'has_def_args', '!has_new_code'
 
+class OpcodeContinueLoop(OpcodeParamAbs):
+    code = 119
+    name = 'CONTINUE_LOOP'
+    flag = 'has_new_continue'
+
 
 class OpcodeSetupLoop(OpcodeParamRel):
     code = 120

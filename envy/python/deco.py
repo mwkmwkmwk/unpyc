@@ -27,10 +27,6 @@ from .bytecode import *
 #
 #   - tuple arguments are called '.num' instead of ''
 #
-# - py 2.0:
-#
-#   - wide
-#
 # - py 2.1:
 #
 #   - closures

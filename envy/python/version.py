@@ -127,6 +127,8 @@ class Pyc10(metaclass=PycVersion):
     has_U = False
     # has nested functions with closures
     has_closure = False
+    # has new continue opcode, capable of busting except blocks
+    has_new_continue = False
     # numeric fields in code are 32-bit instead of 16-bit
     has_le4 = False
     # has SET_LIENENO
@@ -221,6 +223,7 @@ class Pyc21(Pyc20):
     code = _v(60202)
     name = "Python 2.1"
     has_closure = True
+    has_new_continue = True
 
 class Pyc22(Pyc21):
     code = _v(60717)

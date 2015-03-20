@@ -74,6 +74,12 @@ def ast_process(deco, version):
                     args.args[stmt.expr.idx] = stmt.dests[0]
             else:
                 split = 0
+            # now validate closures, if any
+            if len(node.closures) != len(node.code.code.freevars):
+                raise PythonError("closures len mismatch")
+            for closure, free in zip(node.closures, node.code.code.freevars):
+                if closure.name != free:
+                    raise PythonError("closures mismatch")
         else:
             # old code - the first statement should be $args unpacking
             if not stmts or not isinstance(stmts[0], StmtArgs):

@@ -803,6 +803,30 @@ class OpcodeBuildSlice(OpcodeParamNum):
     flag = 'has_new_slice'
 
 
+class OpcodeMakeClosure(OpcodeParamNum):
+    code = 134
+    name = "MAKE_CLOSURE"
+    flag = 'has_closure'
+
+
+class OpcodeLoadClosure(OpcodeParamNum):
+    code = 135
+    name = "LOAD_CLOSURE"
+    flag = 'has_closure'
+
+
+class OpcodeLoadDeref(OpcodeParamNum):
+    code = 136
+    name = "LOAD_DEREF"
+    flag = 'has_closure'
+
+
+class OpcodeStoreDeref(OpcodeParamNum):
+    code = 137
+    name = "STORE_DEREF"
+    flag = 'has_closure'
+
+
 class OpcodeCallFunctionVar(OpcodeCallFunctionBase):
     __slots__ = ()
     code = 140

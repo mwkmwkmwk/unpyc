@@ -517,25 +517,44 @@ class ExprFast(Expr):
     def __eq__(self, other):
         return type(self) is type(other) and self.idx == other.idx
 
+
+class ExprDeref(Expr):
+    __slots__ = 'idx', 'name',
+
+    def __init__(self, idx, name):
+        self.idx = idx
+        self.name = name
+
+    def subprocess(self, process):
+        return self
+
+    def show(self, ctx):
+        return '{}$d{}'.format(self.name, self.idx)
+
+    def __eq__(self, other):
+        return type(self) is type(other) and self.idx == other.idx
+
 # functions - to be cleaned up by prettifier
 
 class ExprFunctionRaw(Expr):
-    __slots__ = 'code', 'defargs'
+    __slots__ = 'code', 'defargs', 'closures'
 
-    def __init__(self, code, defargs=[]):
+    def __init__(self, code, defargs=[], closures=[]):
         self.code = code
         self.defargs = defargs
+        self.closures = closures
 
     def subprocess(self, process):
         return ExprFunctionRaw(
             process(self.code),
-            [process(arg) for arg in self.defargs]
+            [process(arg) for arg in self.defargs],
+            [process(c) for c in self.closures]
         )
 
     def show(self, ctx):
         # TODO some better idea?
-        if self.defargs:
-            return '($functionraw {})'.format(', '.join(arg.show(None) for arg in self.defargs))
+        if self.defargs or self.closures:
+            return '($functionraw {} ; {})'.format(', '.join(arg.show(None) for arg in self.defargs), ', '.join(c.show(None) for c in self.closures))
         return '$functionraw'
 
 

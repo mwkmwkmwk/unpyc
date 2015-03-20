@@ -257,6 +257,7 @@ DupSliceEE = namedtuple('DupSliceEE', ['expr', 'start', 'end'])
 InplaceName = namedtuple('InplaceName', ['name', 'src', 'stmt'])
 InplaceGlobal = namedtuple('InplaceGlobal', ['name', 'src', 'stmt'])
 InplaceFast = namedtuple('InplaceFast', ['idx', 'src', 'stmt'])
+InplaceDeref = namedtuple('InplaceDeref', ['idx', 'src', 'stmt'])
 InplaceAttr = namedtuple('InplaceAttr', ['expr', 'name', 'src', 'stmt'])
 InplaceSubscr = namedtuple('InplaceSubscr', ['expr', 'index', 'src', 'stmt'])
 InplaceSliceNN = namedtuple('InplaceSliceNN', ['expr', 'src', 'stmt'])
@@ -267,9 +268,12 @@ InplaceSliceEE = namedtuple('InplaceSliceEE', ['expr', 'start', 'end', 'src', 's
 OldListCompStart = namedtuple('OldListCompStart', ['expr', 'tmp'])
 CompLevel = namedtuple('CompLevel', ['meat', 'items'])
 
+Closure = namedtuple('Closure', ['var'])
+
 # a special marker to put in stack want lists - will match getattr(opcode, attr)
 # expressions and pass a list
 Exprs = namedtuple('Exprs', ['attr', 'factor'])
+Closures = object()
 
 # visitors
 
@@ -290,9 +294,19 @@ class _Visitor:
         if not deco.version.match(self.flag):
             return False
         total = 0
+        closure_num = None
         for want in self.wanted:
             if isinstance(want, Exprs):
                 total += getattr(opcode, want.attr) * want.factor
+            elif want is Closures:
+                # fuck you.
+                if not deco.stack:
+                    return False
+                code = deco.stack[-1]
+                if not isinstance(code, Code):
+                    return False
+                closure_num = len(code.freevars)
+                total += closure_num
             else:
                 total += 1
         if len(deco.stack) < total:
@@ -315,6 +329,14 @@ class _Visitor:
                         exprs.append(expr)
                     exprs.reverse()
                     arg.append(expr if want.factor == 1 else exprs)
+                arg.reverse()
+            elif want is Closures:
+                arg = []
+                for _ in range(closure_num):
+                    closure = stack.pop()
+                    if not isinstance(closure, Closure):
+                        return False
+                    arg.append(closure.var)
                 arg.reverse()
             else:
                 arg = stack.pop()
@@ -599,11 +621,11 @@ def visit_store_global(self, deco):
 
 @_lsd_visitor(OpcodeLoadFast, OpcodeStoreFast, OpcodeDeleteFast)
 def visit_store_fast(self, deco):
-    if deco.varnames is None:
-        raise PythonError("no fast variables")
-    if self.param not in range(len(deco.varnames)):
-        raise PythonError("fast var out of range")
-    return ExprFast(self.param, deco.varnames[self.param])
+    return deco.fast(self.param)
+
+@_lsd_visitor(OpcodeLoadDeref, OpcodeStoreDeref, None)
+def visit_store_deref(self, deco):
+    return deco.deref(self.param)
 
 @_lsd_visitor(OpcodeLoadAttr, OpcodeStoreAttr, OpcodeDeleteAttr, Expr)
 def visit_store_attr(self, deco, expr):
@@ -1239,24 +1261,32 @@ def _visit_except_end(self, deco, try_, block):
 
 @_visitor(OpcodeBuildFunction, Code)
 def _visit_build_function(self, deco, code):
-    return [ExprFunctionRaw(deco_code(code), [])]
+    return [ExprFunctionRaw(deco_code(code), [], [])]
 
 @_visitor(OpcodeSetFuncArgs, ExprTuple, ExprFunctionRaw)
 def _visit_set_func_args(self, deco, args, fun):
     # bug alert: def f(a, b=1) is compiled as def f(a=1, b)
-    return [ExprFunctionRaw(fun.code, args.exprs)]
+    return [ExprFunctionRaw(fun.code, args.exprs, [])]
 
 # make function - py 1.3+
 
 @_visitor(OpcodeMakeFunction, Exprs('param', 1), Code)
 def _visit_make_function(self, deco, args, code):
-    return [ExprFunctionRaw(deco_code(code), args)]
+    return [ExprFunctionRaw(deco_code(code), args, [])]
+
+@_visitor(OpcodeMakeClosure, Closures, Exprs('param', 1), Code)
+def _visit_make_function(self, deco, closures, args, code):
+    return [ExprFunctionRaw(deco_code(code), args, closures)]
 
 @_visitor(OpcodeUnaryCall, ExprFunctionRaw)
 def _visit_unary_call(self, deco, fun):
     if fun.defargs:
         raise PythonError("class call with a function with default arguments")
     return [UnaryCall(fun.code)]
+
+@_visitor(OpcodeLoadClosure)
+def visit_load_closure(self, deco):
+    return [Closure(deco.deref(self.param))]
 
 @_visitor(OpcodeBuildClass, ExprString, ExprTuple, UnaryCall)
 def _visit_build_class(self, deco, name, expr, call):
@@ -1269,6 +1299,8 @@ def _visit_build_class(self, deco, name, expr, call):
     fun = call.expr
     if not isinstance(fun, ExprFunctionRaw):
         raise PythonError("class call with non-function")
+    if fun.closures:
+        raise PythonError("class call with a function with closures")
     if fun.defargs:
         raise PythonError("class call with a function with default arguments")
     return [ExprClassRaw(name.val.decode('ascii'), expr.exprs, fun.code)]
@@ -1382,7 +1414,7 @@ def _visit_inplace_store_global(self, deco, inp):
 def _visit_inplace_store_fast(self, deco, inp):
     if inp.idx != self.param:
         raise PythonError("inplace name mismatch")
-    return inp.stmt(ExprFast(inp.idx, deco.varnames[inp.idx]), inp.src), []
+    return inp.stmt(deco.fast(inp.idx), inp.src), []
 
 @_stmt_visitor(OpcodeStoreAttr, InplaceAttr, RotTwo)
 def _visit_inplace_store_attr(self, deco, inp, _):
@@ -1439,7 +1471,7 @@ def visit_listcomp_start(self, deco, dup):
         or dup.name != 'append'):
         raise PythonError("weird listcomp start")
     expr = ExprListComp()
-    meat = OldListCompStart(expr, ExprFast(self.param, deco.varnames[self.param]))
+    meat = OldListCompStart(expr, deco.fast(self.param))
     return [expr, meat, CompLevel(meat, [])]
 
 @_visitor(OpcodePopTop, CompLevel, ExprCall)
@@ -1468,7 +1500,7 @@ def visit_listcomp_end(self, deco, comp):
 
 @_visitor(OpcodeDeleteFast, OldListCompStart)
 def visit_listcomp_end(self, deco, comp):
-    if comp.tmp != ExprFast(self.param, deco.varnames[self.param]):
+    if comp.tmp != deco.fast(self.param):
         raise PythonError("deleting a funny name")
     return []
 
@@ -1478,6 +1510,7 @@ class DecoCtx:
         self.version = code.version
         self.stack = [Block([])]
         self.bytecode = code.code
+        self.code = code
         self.lineno = None
         if self.version.has_new_code:
             self.varnames = code.varnames
@@ -1517,6 +1550,21 @@ class DecoCtx:
                 break
         else:
             raise NoMatch
+
+    def fast(self, idx):
+        if self.varnames is None:
+            raise PythonError("no fast variables")
+        if idx not in range(len(self.varnames)):
+            raise PythonError("fast var out of range")
+        return ExprFast(idx, self.varnames[idx])
+
+    def deref(self, idx):
+        if idx in range(len(self.code.cellvars)):
+            return ExprDeref(idx, self.code.cellvars[idx])
+        fidx = idx - len(self.code.cellvars)
+        if fidx in range(len(self.code.freevars)):
+            return ExprDeref(idx, self.code.freevars[fidx])
+        raise PythonError("deref var out of range")
 
 
 def deco_code(code):

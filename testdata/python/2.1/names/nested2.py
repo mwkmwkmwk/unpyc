@@ -1,3 +1,5 @@
+from __future__ import nested_scopes
+
 def a():
     x = 1
     def b():

@@ -121,6 +121,8 @@ class Pyc10(metaclass=PycVersion):
     has_print_to = False
     # has list comprehensions
     has_listcomp = False
+    # has possible variable collisions in list comprehensions (heh)
+    has_listcomp_collide = False
     # has EXTENDED_ARG
     has_extended_arg = False
     # has -U option to interpreter
@@ -217,6 +219,7 @@ class Pyc20(Pyc16):
     has_import_as = True
     has_print_to = True
     has_listcomp = True
+    has_listcomp_collide = True
     has_extended_arg = True
 
 class Pyc21(Pyc20):
@@ -224,6 +227,7 @@ class Pyc21(Pyc20):
     name = "Python 2.1"
     has_closure = True
     has_new_continue = True
+    has_listcomp_collide = False
 
 class Pyc22(Pyc21):
     code = _v(60717)

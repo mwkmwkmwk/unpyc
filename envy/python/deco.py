@@ -1463,7 +1463,8 @@ def visit_listcomp_start(self, deco, dup):
     meat = OldListCompStart(expr, ExprName(self.param))
     return [expr, meat, CompLevel(meat, [])]
 
-@_visitor(OpcodeStoreGlobal, DupAttr)
+# you have to go out of your way to hit that one.
+@_visitor(OpcodeStoreGlobal, DupAttr, flag='has_listcomp_collide')
 def visit_listcomp_start(self, deco, dup):
     if (not isinstance(dup.expr, ExprList)
         or len(dup.expr.exprs) != 0

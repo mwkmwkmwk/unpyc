@@ -30,7 +30,6 @@ from .bytecode import *
 # - py 2.1:
 #
 #   - closures
-#   - better continue
 #   - future
 #
 # - py 2.2:
@@ -1030,6 +1029,31 @@ def _visit_continue(self, deco):
             pass
         else:
             raise NoMatch
+    if not loop.cont:
+        raise NoMatch
+    if loop.cont[-1] != self.flow:
+        raise NoMatch
+    loop.cont.pop()
+    return StmtContinue(), []
+
+@_stmt_visitor(OpcodeContinueLoop)
+def _visit_continue(self, deco):
+    seen = False
+    for item in reversed(deco.stack):
+        if isinstance(item, Loop):
+            loop = item
+            break
+        elif isinstance(item, ForLoop):
+            loop = item.loop
+            break
+        elif isinstance(item, SetupExcept):
+            seen = True
+        elif isinstance(item, (Block, WhileStart, IfStart, IfElse, LoopElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptElse)):
+            pass
+        else:
+            raise NoMatch
+    if not seen:
+        raise PythonError("got CONTINUE_LOOP where a JUMP_ABSOLUTE would suffice")
     if not loop.cont:
         raise NoMatch
     if loop.cont[-1] != self.flow:

@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import subprocess
+import sys
 
 from envy.format.pyc import PycFile
 from envy.format.helpers import FormatError
@@ -28,8 +29,12 @@ def gather_tests(dir):
 
 pydirs = list(oldpy_dir.iterdir())
 
+wanted = sys.argv[1:]
+
 for subdir in sorted(test_dir.iterdir(), key=lambda x: x.name):
     version = subdir.name
+    if wanted and version not in wanted:
+        continue
     print("version {}...".format(version))
     for pydir in pydirs:
         if pydir.is_dir() and pydir.name.startswith("Python-{}".format(version)):

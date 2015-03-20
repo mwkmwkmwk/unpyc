@@ -190,59 +190,71 @@ from .bytecode import *
 # funny intermediate stuff to put on stack
 
 DupTop = namedtuple('DupTop', [])
-DupTwo = namedtuple('DupTwo', ['a', 'b'])
-DupThree = namedtuple('DupThree', ['a', 'b', 'c'])
-XAX = namedtuple('XAX', ['a'])
-BAB = namedtuple('BAB', ['a', 'b'])
+DupTwo = namedtuple('DupTwo', [])
+DupThree = namedtuple('DupThree', [])
+
+RotTwo = namedtuple('RotTwo', [])
+RotThree = namedtuple('RotThree', [])
+RotFour = namedtuple('RotFour', [])
+
 Import = namedtuple('Import', ['name', 'items'])
 Import2Simple = namedtuple('Import2Simple', ['name', 'attrs'])
 Import2Star = namedtuple('Import2Star', ['name'])
 Import2From = namedtuple('Import2From', ['fromlist', 'name', 'exprs'])
+
 MultiAssign = namedtuple('MultiAssign', ['src', 'dsts'])
+
 UnpackSlot = namedtuple('UnpackSlot', ['expr', 'idx'])
 UnpackArgSlot = namedtuple('UnpackArgSlot', ['args', 'idx'])
 UnpackVarargSlot = namedtuple('UnpackVarargSlot', ['args'])
+
 JumpIfFalse = namedtuple('JumpIfFalse', ['expr', 'flow'])
 JumpIfTrue = namedtuple('JumpIfTrue', ['expr', 'flow'])
+
 IfStart = namedtuple('IfStart', ['expr', 'flow'])
-IfElse = namedtuple('IfElse', ['expr', 'body', 'flow'])
 OrStart = namedtuple('OrStart', ['expr', 'flow'])
+IfElse = namedtuple('IfElse', ['expr', 'body', 'flow'])
+
 CompareStart = namedtuple('CompareStart', ['items', 'flows'])
 Compare = namedtuple('Compare', ['items', 'flows'])
 CompareLast = namedtuple('CompareLast', ['items', 'flows'])
 CompareNext = namedtuple('CompareNext', ['items', 'flows'])
-CompareContinue = namedtuple('CompareContinue', ['items', 'flows', 'next'])
+
 WantPop = namedtuple('WantPop', [])
 WantPopBlock = namedtuple('WantPopBlock', [])
-WantRotTwo = namedtuple('WantRotTwo', [])
-WantRotThree = namedtuple('WantRotThree', [])
-WantRotFour = namedtuple('WantRotFour', [])
+WantRotPop = namedtuple('WantRotPop', [])
 WantFlow = namedtuple('WantFlow', ['flow'])
+
 SetupLoop = namedtuple('SetupLoop', ['flow'])
 SetupFinally = namedtuple('SetupFinally', ['flow'])
 SetupExcept = namedtuple('SetupExcept', ['flow'])
+
 Loop = namedtuple('Loop', ['flow', 'cont'])
 While = namedtuple('While', ['expr', 'end', 'block'])
 ForStart = namedtuple('ForStart', ['expr', 'loop', 'flow'])
 ForLoop = namedtuple('ForLoop', ['expr', 'dst', 'loop', 'flow'])
+
 TryFinallyPending = namedtuple('TryFinallyPending', ['body', 'flow'])
 TryFinally = namedtuple('TryFinally', ['body'])
+
 TryExceptEndTry = namedtuple('TryExceptEndTry', ['flow', 'body'])
 TryExceptMid = namedtuple('TryExceptMid', ['else_', 'body', 'items', 'any', 'flows'])
-TryExceptMatchStart = namedtuple('TryExceptMatchStart', [])
 TryExceptMatchMid = namedtuple('TryExceptMatchMid', ['expr'])
 TryExceptMatchOk = namedtuple('TryExceptMatchOk', ['expr', 'next'])
 TryExceptMatch = namedtuple('TryExceptMatch', ['expr', 'dst', 'next'])
 TryExceptAny = namedtuple('TryExceptAny', [])
 TryExceptElse = namedtuple('TryExceptElse', ['body', 'items', 'any', 'flows'])
+
 UnaryCall = namedtuple('UnaryCall', ['code'])
 Locals = namedtuple('Locals', [])
+
 DupAttr = namedtuple('DupAttr', ['expr', 'name'])
 DupSubscr = namedtuple('DupSubscr', ['expr', 'index'])
 DupSliceNN = namedtuple('DupSliceNN', ['expr'])
 DupSliceEN = namedtuple('DupSliceEN', ['expr', 'start'])
 DupSliceNE = namedtuple('DupSliceNE', ['expr', 'end'])
 DupSliceEE = namedtuple('DupSliceEE', ['expr', 'start', 'end'])
+
 InplaceName = namedtuple('InplaceName', ['name', 'src', 'stmt'])
 InplaceGlobal = namedtuple('InplaceGlobal', ['name', 'src', 'stmt'])
 InplaceFast = namedtuple('InplaceFast', ['idx', 'src', 'stmt'])
@@ -438,22 +450,18 @@ def visit_set_lineno(self, deco):
 def visit_dup_top(self, deco):
     return [DupTop()]
 
-@_visitor(OpcodeDupTopX, Exprs('param', 1))
-def visit_dup_topx(self, deco, exprs):
+@_visitor(OpcodeDupTopX)
+def visit_dup_topx(self, deco):
     if self.param == 2:
-        return [DupTwo(*exprs)]
+        return [DupTwo()]
     elif self.param == 3:
-        return [DupThree(*exprs)]
+        return [DupThree()]
     else:
         raise PythonError("funny DUP_TOPX parameter")
 
-@_visitor(OpcodeRotTwo, DupTop, Expr)
-def visit_dup_top(self, deco, _, expr):
-    return [XAX(expr)]
-
-@_visitor(OpcodeRotThree, Expr, Expr, DupTop)
-def visit_dup_top(self, deco, a, b, _):
-    return [BAB(a, b)]
+@_visitor(OpcodeRotThree)
+def visit_rot_three(self, deco):
+    return [RotThree()]
 
 
 # expressions - unary
@@ -510,11 +518,11 @@ def visit_build_map(self, deco):
         raise PythonError("Non-zero param for BUILD_MAP")
     return [ExprDict([])]
 
-@_visitor(OpcodeStoreSubscr, Expr, XAX, Expr)
-def visit_build_map_step(self, deco, dict_, xax, expr):
+@_visitor(OpcodeStoreSubscr, Expr, DupTop, Expr, RotTwo, Expr)
+def visit_build_map_step(self, deco, dict_, _1, val, _2, key):
     if not isinstance(dict_, ExprDict):
         raise NoMatch
-    dict_.items.append((expr, xax.a))
+    dict_.items.append((key, val))
     return [dict_]
 
 # expressions - function call
@@ -660,13 +668,13 @@ def visit_print_newline(self, deco):
 
 # print to
 
-@_visitor(OpcodePrintItemTo, Expr, XAX)
-def visit_print_item_to(self, deco, dst, xax):
-    return [StmtPrintTo(dst, [xax.a], False)]
+@_visitor(OpcodePrintItemTo, Expr, DupTop, Expr, RotTwo)
+def visit_print_item_to(self, deco, to, _dup, expr, _rot):
+    return [StmtPrintTo(to, [expr], False)]
 
-@_visitor(OpcodePrintItemTo, StmtPrintTo, XAX)
-def visit_print_item_to(self, deco, stmt, xax):
-    stmt.vals.append(xax.a)
+@_visitor(OpcodePrintItemTo, StmtPrintTo, DupTop, Expr, RotTwo)
+def visit_print_item_to(self, deco, stmt, _dup, expr, _rot):
+    stmt.vals.append(expr)
     return [stmt]
 
 @_stmt_visitor(OpcodePopTop, StmtPrintTo)
@@ -823,17 +831,17 @@ def _visit_want_pop(self, deco, want):
 def _visit_want_pop_block(self, deco, want):
     return []
 
-@_visitor(OpcodeRotTwo, WantRotTwo)
-def _visit_want_rot_two(self, deco, want):
+@_visitor(OpcodeRotTwo)
+def _visit_rot_two(self, deco):
+    return [RotTwo()]
+
+@_visitor(OpcodePopTop, WantRotPop, RotTwo)
+def _visit_want_rot_two(self, deco, want, _):
     return []
 
-@_visitor(OpcodeRotThree, WantRotThree)
-def _visit_want_rot_three(self, deco, want):
-    return []
-
-@_visitor(OpcodeRotFour, WantRotFour)
-def _visit_want_rot_four(self, deco, want):
-    return []
+@_visitor(OpcodeRotFour)
+def _visit_rot_four(self, deco):
+    return [RotFour()]
 
 @_stmt_visitor(Flow, IfElse, Block)
 def _visit_if_end(self, deco, if_, inner):
@@ -883,28 +891,23 @@ def _visit_cmp(self, deco, e1, e2):
 # chained comparisons
 
 # start #1
-@_visitor(OpcodeCompareOp, BAB)
-def _visit_cmp_start(self, deco, bab):
+@_visitor(OpcodeCompareOp, Expr, Expr, DupTop, RotThree)
+def _visit_cmp_start(self, deco, a, b, _dup, _rot):
     if self.mode is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareStart([bab.a, self.mode, bab.b], [])]
+    return [CompareStart([a, self.mode, b], [])]
 
 # start #2 and middle #3
 @_visitor(OpcodeJumpIfFalse, CompareStart)
 def _visit_cmp_jump(self, deco, cmp):
     return [Compare(cmp.items, cmp.flows + [self.flow]), WantPop()]
 
-# middle #1
-@_visitor(OpcodeRotThree, Compare, Expr, DupTop)
-def _visit_cmp_rot(self, deco, cmp, expr, _):
-    return [CompareContinue(cmp.items, cmp.flows, expr)]
-
 # middle #2
-@_visitor(OpcodeCompareOp, CompareContinue)
-def _visit_cmp_next(self, deco, cmp):
+@_visitor(OpcodeCompareOp, Compare, Expr, DupTop, RotThree)
+def _visit_cmp_next(self, deco, cmp, expr, _dup, _rot):
     if self.mode is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareStart(cmp.items + [self.mode, cmp.next], cmp.flows)]
+    return [CompareStart(cmp.items + [self.mode, expr], cmp.flows)]
 
 # end #1
 @_visitor(OpcodeCompareOp, Compare, Expr)
@@ -919,8 +922,7 @@ def _visit_cmp_last_jump(self, deco, cmp):
     return [
         ExprCmp(cmp.items),
         WantFlow(self.flow),
-        WantPop(),
-        WantRotTwo()
+        WantRotPop(),
     ] + [WantFlow(flow) for flow in cmp.flows]
 
 # $loop framing
@@ -1223,51 +1225,51 @@ for op, stmt in INPLACE_OPS:
 
     @_visitor(op, DupAttr, Expr)
     def _visit_inplace_attr(self, deco, dup, src, stmt=stmt):
-        return [InplaceAttr(dup.expr, dup.name, src, stmt), WantRotTwo()]
+        return [InplaceAttr(dup.expr, dup.name, src, stmt)]
 
     @_visitor(op, DupSubscr, Expr)
     def _visit_inplace_subscr(self, deco, dup, src, stmt=stmt):
-        return [InplaceSubscr(dup.expr, dup.index, src, stmt), WantRotThree()]
+        return [InplaceSubscr(dup.expr, dup.index, src, stmt)]
 
     @_visitor(op, DupSliceNN, Expr)
     def _visit_inplace_slice_nn(self, deco, dup, src, stmt=stmt):
-        return [InplaceSliceNN(dup.expr, src, stmt), WantRotTwo()]
+        return [InplaceSliceNN(dup.expr, src, stmt)]
 
     @_visitor(op, DupSliceEN, Expr)
     def _visit_inplace_slice_en(self, deco, dup, src, stmt=stmt):
-        return [InplaceSliceEN(dup.expr, dup.start, src, stmt), WantRotThree()]
+        return [InplaceSliceEN(dup.expr, dup.start, src, stmt)]
 
     @_visitor(op, DupSliceNE, Expr)
     def _visit_inplace_slice_ne(self, deco, dup, src, stmt=stmt):
-        return [InplaceSliceNE(dup.expr, dup.end, src, stmt), WantRotThree()]
+        return [InplaceSliceNE(dup.expr, dup.end, src, stmt)]
 
     @_visitor(op, DupSliceEE, Expr)
     def _visit_inplace_slice_ee(self, deco, dup, src, stmt=stmt):
-        return [InplaceSliceEE(dup.expr, dup.start, dup.end, src, stmt), WantRotFour()]
+        return [InplaceSliceEE(dup.expr, dup.start, dup.end, src, stmt)]
 
 @_visitor(OpcodeLoadAttr, Expr, DupTop)
 def _visit_load_attr_dup(self, deco, expr, _):
     return [DupAttr(expr, self.param)]
 
-@_visitor(OpcodeBinarySubscr, DupTwo)
-def _visit_load_subscr_dup(self, deco, dup):
-    return [DupSubscr(dup.a, dup.b)]
+@_visitor(OpcodeBinarySubscr, Expr, Expr, DupTwo)
+def _visit_load_subscr_dup(self, deco, a, b, _dup):
+    return [DupSubscr(a, b)]
 
 @_visitor(OpcodeSliceNN, Expr, DupTop)
 def _visit_slice_nn_dup(self, deco, expr, _):
     return [DupSliceNN(expr)]
 
-@_visitor(OpcodeSliceEN, DupTwo)
-def _visit_slice_en_dup(self, deco, dup):
-    return [DupSliceEN(dup.a, dup.b)]
+@_visitor(OpcodeSliceEN, Expr, Expr, DupTwo)
+def _visit_slice_en_dup(self, deco, a, b, _dup):
+    return [DupSliceEN(a, b)]
 
-@_visitor(OpcodeSliceNE, DupTwo)
-def _visit_slice_ne_dup(self, deco, dup):
-    return [DupSliceNE(dup.a, dup.b)]
+@_visitor(OpcodeSliceNE, Expr, Expr, DupTwo)
+def _visit_slice_ne_dup(self, deco, a, b, _dup):
+    return [DupSliceNE(a, b)]
 
-@_visitor(OpcodeSliceEE, DupThree)
-def _visit_slice_ee_dup(self, deco, dup):
-    return [DupSliceEE(dup.a, dup.b, dup.c)]
+@_visitor(OpcodeSliceEE, Expr, Expr, Expr, DupThree)
+def _visit_slice_ee_dup(self, deco, a, b, c, _dup):
+    return [DupSliceEE(a, b, c)]
 
 @_stmt_visitor(OpcodeStoreName, InplaceName)
 def _visit_inplace_store_name(self, deco, inp):
@@ -1287,30 +1289,30 @@ def _visit_inplace_store_fast(self, deco, inp):
         raise PythonError("inplace name mismatch")
     return inp.stmt(ExprFast(inp.idx, deco.varnames[inp.idx]), inp.src), []
 
-@_stmt_visitor(OpcodeStoreAttr, InplaceAttr)
-def _visit_inplace_store_attr(self, deco, inp):
+@_stmt_visitor(OpcodeStoreAttr, InplaceAttr, RotTwo)
+def _visit_inplace_store_attr(self, deco, inp, _):
     if inp.name != self.param:
         raise PythonError("inplace name mismatch")
     return inp.stmt(ExprAttr(inp.expr, inp.name), inp.src), []
 
-@_stmt_visitor(OpcodeStoreSubscr, InplaceSubscr)
-def _visit_inplace_store_subscr(self, deco, inp):
+@_stmt_visitor(OpcodeStoreSubscr, InplaceSubscr, RotThree)
+def _visit_inplace_store_subscr(self, deco, inp, _rot):
     return inp.stmt(ExprSubscr(inp.expr, inp.index), inp.src), []
 
-@_stmt_visitor(OpcodeStoreSliceNN, InplaceSliceNN)
-def _visit_inplace_store_slice_nn(self, deco, inp):
+@_stmt_visitor(OpcodeStoreSliceNN, InplaceSliceNN, RotTwo)
+def _visit_inplace_store_slice_nn(self, deco, inp, _rot):
     return inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, None)), inp.src), []
 
-@_stmt_visitor(OpcodeStoreSliceEN, InplaceSliceEN)
-def _visit_inplace_store_slice_en(self, deco, inp):
+@_stmt_visitor(OpcodeStoreSliceEN, InplaceSliceEN, RotThree)
+def _visit_inplace_store_slice_en(self, deco, inp, _rot):
     return inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, None)), inp.src), []
 
-@_stmt_visitor(OpcodeStoreSliceNE, InplaceSliceNE)
-def _visit_inplace_store_slice_ne(self, deco, inp):
+@_stmt_visitor(OpcodeStoreSliceNE, InplaceSliceNE, RotThree)
+def _visit_inplace_store_slice_ne(self, deco, inp, _rot):
     return inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, inp.end)), inp.src), []
 
-@_stmt_visitor(OpcodeStoreSliceEE, InplaceSliceEE)
-def _visit_inplace_store_slice_ee(self, deco, inp):
+@_stmt_visitor(OpcodeStoreSliceEE, InplaceSliceEE, RotFour)
+def _visit_inplace_store_slice_ee(self, deco, inp, _rot):
     return inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, inp.end)), inp.src), []
 
 

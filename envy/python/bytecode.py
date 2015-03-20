@@ -20,12 +20,13 @@ class OpcodeMeta(type):
 
 
 class Opcode(metaclass=OpcodeMeta):
-    __slots__ = 'pos', 'nextpos', 'version', 'outflow', 'inflow'
+    __slots__ = 'pos', 'ext', 'nextpos', 'version', 'outflow', 'inflow'
     end = False
     flag = None
 
-    def __init__(self, bytecode, pos):
+    def __init__(self, bytecode, pos, ext):
         self.pos = pos
+        self.ext = ext or 0
         self.outflow = []
         self.inflow = []
         self.version = bytecode.version
@@ -59,7 +60,7 @@ class OpcodeParamNum(Opcode):
     __slots__ = 'param',
 
     def read_params(self, bytecode):
-        self.param = bytecode.word()
+        self.param = bytecode.word(self.ext)
 
     def print_params(self):
         return str(self.param)
@@ -69,7 +70,7 @@ class OpcodeParamAbs(Opcode):
     __slots__ = 'flow',
 
     def read_params(self, bytecode):
-        target = bytecode.word()
+        target = bytecode.word(self.ext)
         self.flow = Flow(self.pos, target)
         self.outflow.append(target)
 
@@ -81,7 +82,7 @@ class OpcodeParamRel(Opcode):
     __slots__ = 'flow',
 
     def read_params(self, bytecode):
-        diff = bytecode.word()
+        diff = bytecode.word(self.ext)
         # importantly, bytecode.pos is *end* of the insn
         target = bytecode.pos + diff
         self.flow = Flow(self.pos, target)
@@ -95,7 +96,7 @@ class OpcodeParamName(Opcode):
     __slots__ = 'param',
 
     def read_params(self, bytecode):
-        idx = bytecode.word()
+        idx = bytecode.word(self.ext)
         if idx not in range(len(bytecode.names)):
             raise PythonError("name index out of range")
         self.param = bytecode.names[idx]
@@ -579,7 +580,7 @@ class OpcodeLoadConst(Opcode):
 
     def read_params(self, bytecode):
         from .code import Code
-        self.const, self.idx = bytecode.get_const((Expr, Code))
+        self.const, self.idx = bytecode.get_const((Expr, Code), self.ext)
 
     def print_params(self):
         from .code import Code
@@ -629,7 +630,7 @@ class OpcodeCompareOp(Opcode):
 
     def read_params(self, bytecode):
         try:
-            self.mode = CmpOp(bytecode.word())
+            self.mode = CmpOp(bytecode.word(self.ext))
         except ValueError:
             raise PythonError("invalid cmp op")
 
@@ -716,7 +717,7 @@ class OpcodeReserveFast(Opcode):
         # TODO
         if bytecode.version.consts_is_list:
             from .code import CodeDict
-            const, _ = bytecode.get_const((CodeDict, ExprNone))
+            const, _ = bytecode.get_const((CodeDict, ExprNone), self.ext)
             if isinstance(const, CodeDict):
                 self.names = const.names
             elif isinstance(const, ExprNone):
@@ -724,7 +725,7 @@ class OpcodeReserveFast(Opcode):
             else:
                 assert False
         else:
-            const, _ = bytecode.get_const((ExprTuple, ExprNone))
+            const, _ = bytecode.get_const((ExprTuple, ExprNone), self.ext)
             if isinstance(const, ExprTuple):
                 self.names = []
                 for name in const.exprs:
@@ -771,7 +772,7 @@ class OpcodeCallFunctionBase(Opcode):
     flag = 'has_new_code'
 
     def read_params(self, bytecode):
-        param = bytecode.word()
+        param = bytecode.word(self.ext)
         self.args = param & 0xff
         self.kwargs = param >> 8 & 0xff
 
@@ -818,6 +819,13 @@ class OpcodeCallFunctionVarKw(OpcodeCallFunctionBase):
     flag = 'has_var_call'
 
 
+class ExtendedArg(OpcodeParamNum):
+    __slots__ = ()
+    code = 143
+    name = "EXTENDED_ARG"
+    flag = 'has_extended_arg'
+
+
 class Bytecode:
     def __init__(self, version, code):
         self.version = version
@@ -830,12 +838,12 @@ class Bytecode:
         while self.pos != len(self.code):
             pos = self.pos
             opc = self.byte()
-            for cls in OPCODES.get(opc, []):
-                if cls.version_ok(version):
-                    op = cls(self, pos)
-                    break
-            else:
-                raise PythonError("unknown opcode {}".format(opc))
+            op = self.get_op(pos, opc, 0)
+            if isinstance(op, ExtendedArg):
+                opc = self.byte()
+                op = self.get_op(pos, opc, op.param)
+                if isinstance(op, ExtendedArg):
+                    raise PythonError("funny, two EXTENDED_ARG in a row")
             self.ops.append(op)
             self.opdict[pos] = op
         for op in self.ops:
@@ -844,6 +852,12 @@ class Bytecode:
                     raise PythonError("invalid branch target")
                 trg = self.opdict[out]
                 trg.inflow.append(op.pos)
+
+    def get_op(self, pos, opc, ext):
+        for cls in OPCODES.get(opc, []):
+            if cls.version_ok(self.version):
+                return cls(self, pos, ext)
+        raise PythonError("unknown opcode {}".format(opc))
 
     def bytes(self, num):
         new = self.pos + num
@@ -856,11 +870,11 @@ class Bytecode:
     def byte(self):
         return self.bytes(1)[0]
 
-    def word(self):
-        return int.from_bytes(self.bytes(2), 'little')
+    def word(self, ext):
+        return int.from_bytes(self.bytes(2), 'little') | ext << 16
 
-    def get_const(self, cls):
-        idx = self.word()
+    def get_const(self, cls, ext):
+        idx = self.word(ext)
         if idx < 0 or idx >= len(self.consts):
             raise PythonError("Const index out of range")
         res = self.consts[idx]

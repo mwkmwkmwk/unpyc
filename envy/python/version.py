@@ -121,6 +121,8 @@ class Pyc10(metaclass=PycVersion):
     has_print_to = False
     # has list comprehensions
     has_listcomp = False
+    # has EXTENDED_ARG
+    has_extended_arg = False
     # has -U option to interpreter
     has_U = False
     # has nested functions with closures
@@ -213,6 +215,7 @@ class Pyc20(Pyc16):
     has_import_as = True
     has_print_to = True
     has_listcomp = True
+    has_extended_arg = True
 
 class Pyc21(Pyc20):
     code = _v(60202)

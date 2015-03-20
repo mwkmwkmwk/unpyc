@@ -30,7 +30,6 @@ from .bytecode import *
 # - py 2.0:
 #
 #   - wide
-#   - list comprehensions
 #
 # - py 2.1:
 #
@@ -212,6 +211,9 @@ JumpIfFalse = namedtuple('JumpIfFalse', ['expr', 'flow'])
 JumpIfTrue = namedtuple('JumpIfTrue', ['expr', 'flow'])
 
 AndStart = namedtuple('AndStart', ['expr', 'flow'])
+IfStart = namedtuple('IfStart', ['expr', 'flow'])
+WhileStart = namedtuple('WhileStart', ['expr', 'flow'])
+CompIfStart = namedtuple('CompIfStart', ['expr', 'flow'])
 OrStart = namedtuple('OrStart', ['expr', 'flow'])
 IfElse = namedtuple('IfElse', ['expr', 'body', 'flow'])
 
@@ -234,6 +236,7 @@ Loop = namedtuple('Loop', ['flow', 'cont'])
 While = namedtuple('While', ['expr', 'end', 'block'])
 ForStart = namedtuple('ForStart', ['expr', 'loop', 'flow'])
 ForLoop = namedtuple('ForLoop', ['expr', 'dst', 'loop', 'flow'])
+CompForLoop = namedtuple('CompForLoop', ['loop', 'flow'])
 
 TryFinallyPending = namedtuple('TryFinallyPending', ['body', 'flow'])
 TryFinally = namedtuple('TryFinally', ['body'])
@@ -265,6 +268,9 @@ InplaceSliceNN = namedtuple('InplaceSliceNN', ['expr', 'src', 'stmt'])
 InplaceSliceEN = namedtuple('InplaceSliceEN', ['expr', 'start', 'src', 'stmt'])
 InplaceSliceNE = namedtuple('InplaceSliceNE', ['expr', 'end', 'src', 'stmt'])
 InplaceSliceEE = namedtuple('InplaceSliceEE', ['expr', 'start', 'end', 'src', 'stmt'])
+
+OldListCompStart = namedtuple('OldListCompStart', ['expr', 'tmp'])
+CompLevel = namedtuple('CompLevel', ['meat', 'items'])
 
 # a special marker to put in stack want lists - will match getattr(opcode, attr)
 # expressions and pass a list
@@ -382,12 +388,22 @@ def _store_visitor(op, *stack):
             slot.args.vararg = dst
             return extra
 
-        @_visitor(op, ForStart, *stack)
-        def visit_store_multi_start(self, deco, start, *args):
+        @_visitor(op, Block, ForStart, *stack)
+        def visit_store_multi_start(self, deco, block, start, *args):
             dst, extra = func(self, deco, *args)
             return [
+                block,
                 ForLoop(start.expr, dst, start.loop, start.flow),
                 Block([])
+            ] + extra
+
+        @_visitor(op, CompLevel, ForStart, *stack)
+        def visit_store_multi_start(self, deco, comp, start, *args):
+            dst, extra = func(self, deco, *args)
+            return [
+                comp,
+                CompForLoop(start.loop, start.flow),
+                CompLevel(comp.meat, comp.items + [CompFor(dst, start.expr)])
             ] + extra
 
         @_visitor(op, TryExceptMatchOk, *stack)
@@ -804,19 +820,37 @@ def _visit_jump_if_false(self, deco, expr):
 def _visit_jump_if_false(self, deco, expr):
     return [JumpIfTrue(expr, self.flow)]
 
+@_visitor(OpcodePopTop, Block, JumpIfFalse)
+def _visit_if(self, deco, block, jump):
+    return [block, IfStart(jump.expr, jump.flow), Block([])]
+
+@_visitor(OpcodePopTop, Loop, JumpIfFalse)
+def _visit_if(self, deco, loop, jump):
+    return [loop, WhileStart(jump.expr, jump.flow), Block([])]
+
+@_visitor(OpcodePopTop, CompLevel, JumpIfFalse)
+def _visit_if(self, deco, comp, jump):
+    return [comp, CompIfStart(jump.expr, jump.flow), CompLevel(comp.meat, comp.items + [CompIf(jump.expr)])]
+
 @_visitor(OpcodePopTop, JumpIfFalse)
 def _visit_if(self, deco, jump):
-    return [AndStart(jump.expr, jump.flow), Block([])]
+    return [AndStart(jump.expr, jump.flow)]
 
 @_visitor(OpcodePopTop, JumpIfTrue)
 def _visit_if(self, deco, jump):
     return [OrStart(jump.expr, jump.flow)]
 
-@_visitor(OpcodeJumpForward, AndStart, Block)
-def _visit_if_else(self, deco, if_, block):
+@_visitor(OpcodeJumpForward, Block, IfStart, Block)
+def _visit_if_else(self, deco, block, if_, body):
     if if_.flow.dst != self.nextpos:
         raise PythonError("missing if code")
-    return [IfElse(if_.expr, block, self.flow), Block([]), WantPop(), WantFlow(if_.flow)]
+    return [block, IfElse(if_.expr, body, self.flow), Block([]), WantPop(), WantFlow(if_.flow)]
+
+@_visitor(OpcodeJumpForward, CompLevel, CompIfStart)
+def _visit_if_else(self, deco, comp, if_):
+    if if_.flow.dst != self.nextpos:
+        raise PythonError("missing if code")
+    return [WantFlow(self.flow), WantPop(), WantFlow(if_.flow)]
 
 @_visitor(Flow, WantFlow)
 def _visit_flow(self, deco, want):
@@ -846,12 +880,34 @@ def _visit_if_end(self, deco, if_, inner):
         raise PythonError("mismatch else flow")
     return StmtIf([(if_.expr, if_.body)], inner), []
 
-@_visitor(Flow, AndStart, Block, Expr)
+@_visitor(Flow, WhileStart, Block, Expr)
 def _visit_and(self, deco, start, block, expr):
     if self != start.flow:
         raise PythonError("funny and flow")
     if block.stmts:
         raise PythonError("extra and statements")
+    return [ExprBoolAnd(start.expr, expr)]
+
+@_visitor(Flow, IfStart, Block, Expr)
+def _visit_and(self, deco, start, block, expr):
+    if self != start.flow:
+        raise PythonError("funny and flow")
+    if block.stmts:
+        raise PythonError("extra and statements")
+    return [ExprBoolAnd(start.expr, expr)]
+
+@_visitor(Flow, CompIfStart, Comp, Expr)
+def _visit_and(self, deco, start, comp, expr):
+    if self != start.flow:
+        raise PythonError("funny and flow")
+    if block.stmts:
+        raise PythonError("extra and statements")
+    return [ExprBoolAnd(start.expr, expr)]
+
+@_visitor(Flow, AndStart, Expr)
+def _visit_and(self, deco, start, expr):
+    if self != start.flow:
+        raise PythonError("funny and flow")
     return [ExprBoolAnd(start.expr, expr)]
 
 @_visitor(Flow, OrStart, Expr)
@@ -862,7 +918,7 @@ def _visit_or(self, deco, start, expr):
 
 # assert. ouch.
 
-@_stmt_visitor(OpcodeRaiseVarargs, AndStart, Block, OrStart, Exprs('param', 1), flag='has_assert')
+@_stmt_visitor(OpcodeRaiseVarargs, IfStart, Block, OrStart, Exprs('param', 1), flag='has_assert')
 def _visit_assert_1(self, deco, ifstart, block, orstart, exprs):
     if block.stmts:
         raise PythonError("extra assert statements")
@@ -964,7 +1020,7 @@ def _visit_continue(self, deco):
         elif isinstance(item, ForLoop):
             loop = item.loop
             break
-        elif isinstance(item, (Block, AndStart, IfElse, LoopElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptElse)):
+        elif isinstance(item, (Block, WhileStart, IfStart, IfElse, LoopElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptElse)):
             pass
         else:
             raise NoMatch
@@ -977,7 +1033,7 @@ def _visit_continue(self, deco):
 
 # while loop
 
-@_stmt_visitor(OpcodeJumpAbsolute, Loop, AndStart, Block)
+@_stmt_visitor(OpcodeJumpAbsolute, Loop, WhileStart, Block)
 def _visit_while(self, deco, loop, start, inner):
     if loop.cont:
         raise NoMatch
@@ -1001,6 +1057,14 @@ def _visit_for(self, deco, loop, inner):
     if loop.loop.flow != self.flow or loop.flow.dst != self.nextpos:
         raise PythonError("mismatched for loop")
     return StmtForRaw(loop.expr, loop.dst, inner), [WantFlow(loop.flow)]
+
+@_visitor(OpcodeJumpAbsolute, CompLevel, CompForLoop)
+def _visit_for(self, deco, _, loop):
+    if loop.loop.cont:
+        raise NoMatch
+    if loop.loop.flow != self.flow or loop.flow.dst != self.nextpos:
+        raise PythonError("mismatched for loop")
+    return [WantFlow(loop.flow)]
 
 # break
 
@@ -1315,6 +1379,68 @@ def _visit_inplace_store_slice_ne(self, deco, inp, _rot):
 @_stmt_visitor(OpcodeStoreSliceEE, InplaceSliceEE, RotFour)
 def _visit_inplace_store_slice_ee(self, deco, inp, _rot):
     return inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, inp.end)), inp.src), []
+
+# list comprehensions
+
+@_visitor(OpcodeStoreName, DupAttr)
+def visit_listcomp_start(self, deco, dup):
+    if (not isinstance(dup.expr, ExprList)
+        or len(dup.expr.exprs) != 0
+        or dup.name != 'append'):
+        raise PythonError("weird listcomp start")
+    expr = ExprListComp()
+    meat = OldListCompStart(expr, ExprName(self.param))
+    return [expr, meat, CompLevel(meat, [])]
+
+@_visitor(OpcodeStoreGlobal, DupAttr)
+def visit_listcomp_start(self, deco, dup):
+    if (not isinstance(dup.expr, ExprList)
+        or len(dup.expr.exprs) != 0
+        or dup.name != 'append'):
+        raise PythonError("weird listcomp start")
+    expr = ExprListComp()
+    meat = OldListCompStart(expr, ExprGlobal(self.param))
+    return [expr, meat, CompLevel(meat, [])]
+
+@_visitor(OpcodeStoreFast, DupAttr)
+def visit_listcomp_start(self, deco, dup):
+    if (not isinstance(dup.expr, ExprList)
+        or len(dup.expr.exprs) != 0
+        or dup.name != 'append'):
+        raise PythonError("weird listcomp start")
+    expr = ExprListComp()
+    meat = OldListCompStart(expr, ExprFast(self.param, deco.varnames[self.param]))
+    return [expr, meat, CompLevel(meat, [])]
+
+@_visitor(OpcodePopTop, CompLevel, ExprCall)
+def visit_listcomp_item(self, deco, comp, call):
+    if not isinstance(comp.meat, OldListCompStart):
+        raise PythonError("not an old list comp...")
+    if comp.meat.tmp != call.expr:
+        raise PythonError("list.append temp doesn't match")
+    if len(call.params) != 1 or call.params[0][0] != '':
+        raise PythonError("funny args to list.append")
+    arg = call.params[0][1]
+    comp.meat.expr.comp = Comp(arg, comp.items)
+    return []
+
+@_visitor(OpcodeDeleteName, OldListCompStart)
+def visit_listcomp_end(self, deco, comp):
+    if comp.tmp != ExprName(self.param):
+        raise PythonError("deleting a funny name")
+    return []
+
+@_visitor(OpcodeDeleteGlobal, OldListCompStart)
+def visit_listcomp_end(self, deco, comp):
+    if comp.tmp != ExprGlobal(self.param):
+        raise PythonError("deleting a funny name")
+    return []
+
+@_visitor(OpcodeDeleteFast, OldListCompStart)
+def visit_listcomp_end(self, deco, comp):
+    if comp.tmp != ExprFast(self.param, deco.varnames[self.param]):
+        raise PythonError("deleting a funny name")
+    return []
 
 
 class DecoCtx:

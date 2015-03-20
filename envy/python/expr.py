@@ -42,6 +42,48 @@ COMPARE_OPS = {
     CmpOp.IS_NOT: 'is not',
 }
 
+class CompFor:
+    __slots__ = 'dst', 'expr'
+
+    def __init__(self, dst, expr):
+        self.dst = dst
+        self.expr = expr
+
+    def subprocess(self, process):
+        return CompFor(process(self.dst), process(self.expr))
+
+    def show(self):
+        return 'for {} in {}'.format(self.dst.show(None), self.expr.show(None))
+
+class CompIf:
+    __slots__ = 'expr'
+
+    def __init__(self, expr):
+        self.expr = expr
+
+    def subprocess(self, process):
+        return CompIf(process(self.expr))
+
+    def show(self):
+        return 'if {}'.format(self.expr.show(None))
+
+class Comp:
+    __slots__ = 'expr', 'items'
+
+    def __init__(self, expr, items):
+        self.expr = expr
+        self.items = items
+
+    def subprocess(self, process):
+        return Comp(
+            process(self.expr),
+            [process(item) for item in self.items]
+        )
+
+    def show(self):
+        return '{} {}'.format(self.expr.show(None), ' '.join(item.show() for item in self.items))
+
+
 # TODO: print unicode/byte strings as appropriate for the python version
 # TODO: context-aware printing
 # TODO: nuke frozenset from load_from_marshal
@@ -165,6 +207,19 @@ class ExprList(ExprSequence):
         return '[{}]'.format(
             ', '.join(v.show(ctx) for v in self.exprs),
         )
+
+
+class ExprListComp(Expr):
+    __slots__ = ('comp')
+
+    def __init__(self, comp=None):
+        self.comp = comp
+
+    def show(self, ctx):
+        return '[{}]'.format(self.comp.show())
+
+    def subprocess(self, process):
+        return ExprListComp(process(self.comp))
 
 
 class ExprDict(Expr):
@@ -426,6 +481,9 @@ class ExprName(Expr):
     def show(self, ctx):
         return self.name
 
+    def __eq__(self, other):
+        return type(self) is type(other) and self.name == other.name
+
 
 class ExprGlobal(Expr):
     __slots__ = 'name',
@@ -438,6 +496,9 @@ class ExprGlobal(Expr):
 
     def show(self, ctx):
         return '$global[{}]'.format(self.name)
+
+    def __eq__(self, other):
+        return type(self) is type(other) and self.name == other.name
 
 
 class ExprFast(Expr):
@@ -452,6 +513,9 @@ class ExprFast(Expr):
 
     def show(self, ctx):
         return '{}${}'.format(self.name, self.idx)
+
+    def __eq__(self, other):
+        return type(self) is type(other) and self.idx == other.idx
 
 # functions - to be cleaned up by prettifier
 

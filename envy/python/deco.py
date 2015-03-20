@@ -294,7 +294,18 @@ class _Visitor:
     def visit(self, opcode, deco):
         if not deco.version.match(self.flag):
             return False
-        stack = deco.stack[:]
+        total = 0
+        for want in self.wanted:
+            if isinstance(want, Exprs):
+                total += getattr(opcode, want.attr) * want.factor
+            else:
+                total += 1
+        if len(deco.stack) < total:
+            return False
+        if total:
+            stack = deco.stack[-total:]
+        else:
+            stack = []
         args = []
         for want in reversed(self.wanted):
             if isinstance(want, Exprs):
@@ -303,8 +314,6 @@ class _Visitor:
                 for _ in range(num):
                     exprs = []
                     for _ in range(want.factor):
-                        if not stack:
-                            return False
                         expr = stack.pop()
                         if not isinstance(expr, Expr):
                             return False
@@ -313,19 +322,20 @@ class _Visitor:
                     arg.append(expr if want.factor == 1 else exprs)
                 arg.reverse()
             else:
-                if not stack:
-                    return False
                 arg = stack.pop()
                 if not isinstance(arg, want):
                     return False
             args.append(arg)
         args.reverse()
         try:
-            stack += self.func(opcode, deco, *args)
-            deco.stack = stack
-            return True
+            res = self.func(opcode, deco, *args)
         except NoMatch:
             return False
+        else:
+            if total:
+                deco.stack[-total:] = []
+            deco.stack += res
+            return True
 
 
 def _visitor(op, *stack, **kwargs):

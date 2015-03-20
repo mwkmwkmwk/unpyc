@@ -29,7 +29,6 @@ from .bytecode import *
 #
 # - py 2.1:
 #
-#   - closures
 #   - future
 #
 # - py 2.2:
@@ -1350,6 +1349,10 @@ for op, stmt in INPLACE_OPS:
     def _visit_inplace_fast(self, deco, fast, src, stmt=stmt):
         return [InplaceFast(fast.idx, src, stmt)]
 
+    @_visitor(op, ExprDeref, Expr)
+    def _visit_inplace_deref(self, deco, deref, src, stmt=stmt):
+        return [InplaceDeref(deref.idx, src, stmt)]
+
     @_visitor(op, DupAttr, Expr)
     def _visit_inplace_attr(self, deco, dup, src, stmt=stmt):
         return [InplaceAttr(dup.expr, dup.name, src, stmt)]
@@ -1415,6 +1418,12 @@ def _visit_inplace_store_fast(self, deco, inp):
     if inp.idx != self.param:
         raise PythonError("inplace name mismatch")
     return inp.stmt(deco.fast(inp.idx), inp.src), []
+
+@_stmt_visitor(OpcodeStoreDeref, InplaceDeref)
+def _visit_inplace_store_deref(self, deco, inp):
+    if inp.idx != self.param:
+        raise PythonError("inplace name mismatch")
+    return inp.stmt(deco.deref(inp.idx), inp.src), []
 
 @_stmt_visitor(OpcodeStoreAttr, InplaceAttr, RotTwo)
 def _visit_inplace_store_attr(self, deco, inp, _):

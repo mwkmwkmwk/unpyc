@@ -135,13 +135,13 @@ def ast_process(deco, version):
 
     def process_loop(node):
         stmts = node.body.stmts
-        if not stmts:
-            raise PythonError("empty $loop")
+        if len(stmts) != 1:
+            raise PythonError("funny $loop")
         raw = stmts[0]
-        if len(stmts) == 1:
-            else_ = None
+        if node.else_.stmts:
+            else_ = node.else_
         else:
-            else_ = Block(stmts[1:])
+            else_ = None
         if isinstance(raw, StmtWhileRaw):
             return StmtWhile(raw.expr, raw.body, else_)
         elif isinstance(raw, StmtForRaw):

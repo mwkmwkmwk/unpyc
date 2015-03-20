@@ -221,13 +221,14 @@ CompareLast = namedtuple('CompareLast', ['items', 'flows'])
 CompareNext = namedtuple('CompareNext', ['items', 'flows'])
 
 WantPop = namedtuple('WantPop', [])
-WantPopBlock = namedtuple('WantPopBlock', [])
 WantRotPop = namedtuple('WantRotPop', [])
 WantFlow = namedtuple('WantFlow', ['flow'])
 
 SetupLoop = namedtuple('SetupLoop', ['flow'])
 SetupFinally = namedtuple('SetupFinally', ['flow'])
 SetupExcept = namedtuple('SetupExcept', ['flow'])
+
+LoopElse = namedtuple('LoopElse', ['flow', 'body'])
 
 Loop = namedtuple('Loop', ['flow', 'cont'])
 While = namedtuple('While', ['expr', 'end', 'block'])
@@ -827,10 +828,6 @@ def _visit_flow(self, deco, want):
 def _visit_want_pop(self, deco, want):
     return []
 
-@_visitor(OpcodePopBlock, WantPopBlock)
-def _visit_want_pop_block(self, deco, want):
-    return []
-
 @_visitor(OpcodeRotTwo)
 def _visit_rot_two(self, deco):
     return [RotTwo()]
@@ -931,11 +928,15 @@ def _visit_cmp_last_jump(self, deco, cmp):
 def _visit_setup_loop(self, deco):
     return [SetupLoop(self.flow), Block([])]
 
-@_stmt_visitor(Flow, SetupLoop, Block)
+@_visitor(OpcodePopBlock, SetupLoop, Block)
+def _visit_pop_loop(self, deco, setup, block):
+    return [LoopElse(setup.flow, block), Block([])]
+
+@_stmt_visitor(Flow, LoopElse, Block)
 def _visit_end_loop(self, deco, loop, inner):
     if self != loop.flow:
         raise NoMatch
-    return StmtLoop(inner), []
+    return StmtLoop(loop.body, inner), []
 
 # actual loops
 
@@ -963,7 +964,7 @@ def _visit_continue(self, deco):
         elif isinstance(item, ForLoop):
             loop = item.loop
             break
-        elif isinstance(item, (Block, AndStart, IfElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptElse)):
+        elif isinstance(item, (Block, AndStart, IfElse, LoopElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptElse)):
             pass
         else:
             raise NoMatch
@@ -983,7 +984,7 @@ def _visit_while(self, deco, loop, start, inner):
     # TODO validate flow
     if loop.flow != self.flow or start.flow.dst != self.nextpos:
         raise PythonError("funny while loop")
-    return StmtWhileRaw(start.expr, inner), [WantPopBlock(), WantPop(), WantFlow(start.flow)]
+    return StmtWhileRaw(start.expr, inner), [WantPop(), WantFlow(start.flow)]
 
 # for loop
 
@@ -999,7 +1000,7 @@ def _visit_for(self, deco, loop, inner):
         raise NoMatch
     if loop.loop.flow != self.flow or loop.flow.dst != self.nextpos:
         raise PythonError("mismatched for loop")
-    return StmtForRaw(loop.expr, loop.dst, inner), [WantPopBlock(), WantFlow(loop.flow)]
+    return StmtForRaw(loop.expr, loop.dst, inner), [WantFlow(loop.flow)]
 
 # break
 

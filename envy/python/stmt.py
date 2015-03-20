@@ -411,17 +411,23 @@ class StmtIf(Stmt):
 
 
 class StmtLoop(Stmt):
-    __slots__ = 'body'
+    __slots__ = 'body', 'else_'
 
-    def __init__(self, body):
+    def __init__(self, body, else_):
         self.body = body
+        self.else_ = else_
 
     def subprocess(self, process):
-        return StmtLoop(process(self.body))
+        return StmtLoop(
+            process(self.body),
+            process(self.else_)
+        )
 
     def show(self):
         yield "$loop:"
         yield from indent(self.body.show())
+        yield "else:"
+        yield from indent(self.else_.show())
 
 
 class StmtWhileRaw(Stmt):

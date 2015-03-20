@@ -211,7 +211,7 @@ UnpackVarargSlot = namedtuple('UnpackVarargSlot', ['args'])
 JumpIfFalse = namedtuple('JumpIfFalse', ['expr', 'flow'])
 JumpIfTrue = namedtuple('JumpIfTrue', ['expr', 'flow'])
 
-IfStart = namedtuple('IfStart', ['expr', 'flow'])
+AndStart = namedtuple('AndStart', ['expr', 'flow'])
 OrStart = namedtuple('OrStart', ['expr', 'flow'])
 IfElse = namedtuple('IfElse', ['expr', 'body', 'flow'])
 
@@ -805,13 +805,13 @@ def _visit_jump_if_false(self, deco, expr):
 
 @_visitor(OpcodePopTop, JumpIfFalse)
 def _visit_if(self, deco, jump):
-    return [IfStart(jump.expr, jump.flow), Block([])]
+    return [AndStart(jump.expr, jump.flow), Block([])]
 
 @_visitor(OpcodePopTop, JumpIfTrue)
 def _visit_if(self, deco, jump):
     return [OrStart(jump.expr, jump.flow)]
 
-@_visitor(OpcodeJumpForward, IfStart, Block)
+@_visitor(OpcodeJumpForward, AndStart, Block)
 def _visit_if_else(self, deco, if_, block):
     if if_.flow.dst != self.nextpos:
         raise PythonError("missing if code")
@@ -849,7 +849,7 @@ def _visit_if_end(self, deco, if_, inner):
         raise PythonError("mismatch else flow")
     return StmtIf([(if_.expr, if_.body)], inner), []
 
-@_visitor(Flow, IfStart, Block, Expr)
+@_visitor(Flow, AndStart, Block, Expr)
 def _visit_and(self, deco, start, block, expr):
     if self != start.flow:
         raise PythonError("funny and flow")
@@ -865,7 +865,7 @@ def _visit_or(self, deco, start, expr):
 
 # assert. ouch.
 
-@_stmt_visitor(OpcodeRaiseVarargs, IfStart, Block, OrStart, Exprs('param', 1), flag='has_assert')
+@_stmt_visitor(OpcodeRaiseVarargs, AndStart, Block, OrStart, Exprs('param', 1), flag='has_assert')
 def _visit_assert_1(self, deco, ifstart, block, orstart, exprs):
     if block.stmts:
         raise PythonError("extra assert statements")
@@ -963,7 +963,7 @@ def _visit_continue(self, deco):
         elif isinstance(item, ForLoop):
             loop = item.loop
             break
-        elif isinstance(item, (Block, IfStart, IfElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptElse)):
+        elif isinstance(item, (Block, AndStart, IfElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptElse)):
             pass
         else:
             raise NoMatch
@@ -976,7 +976,7 @@ def _visit_continue(self, deco):
 
 # while loop
 
-@_stmt_visitor(OpcodeJumpAbsolute, Loop, IfStart, Block)
+@_stmt_visitor(OpcodeJumpAbsolute, Loop, AndStart, Block)
 def _visit_while(self, deco, loop, start, inner):
     if loop.cont:
         raise NoMatch

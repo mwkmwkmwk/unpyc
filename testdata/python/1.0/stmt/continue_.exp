@@ -41,3 +41,9 @@ while a:
 		c
 for a in b:
 	continue
+while a:
+	x
+	while b:
+		x
+	else:
+		continue

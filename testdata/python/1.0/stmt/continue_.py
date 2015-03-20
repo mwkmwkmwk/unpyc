@@ -50,3 +50,10 @@ while a:
 
 for a in b:
     continue
+
+while a:
+    x
+    while b:
+        x
+    else:
+        continue

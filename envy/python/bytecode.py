@@ -801,6 +801,7 @@ class OpcodeDeleteFast(OpcodeParamFast):
 class OpcodeSetLineno(OpcodeParamNum):
     code = 127
     name = "SET_LINENO"
+    flag = 'has_set_lineno'
 
 
 class OpcodeRaiseVarargs(OpcodeParamNum):

@@ -9,6 +9,7 @@ from envy.python.helpers import PythonError
 from envy.python.code import Code
 from envy.python.deco import deco_code
 from envy.python.ast import ast_process
+from envy.python.version import *
 
 root_dir = (Path(__file__).parent / '..' / '..').resolve()
 
@@ -27,37 +28,59 @@ def gather_tests(dir):
         elif item.suffix == '.py':
             yield item
 
-pydirs = list(oldpy_dir.iterdir())
-
 wanted = sys.argv[1:]
 
-for subdir in sorted(test_dir.iterdir(), key=lambda x: x.name):
-    version = subdir.name
+VERSIONS = [
+    ("1.0", "1.0.1", 'import', None, Pyc10),
+    ("1.1", "1.1", 'import', None, Pyc11),
+    ("1.2", "1.2", 'import', None, Pyc11),
+    ("1.3", "1.3", 'import', None, Pyc13),
+    ("1.4", "1.4", 'compile', None, Pyc14),
+    ("1.5", "1.5", 'compile', None, Pyc15),
+    ("1.6", "1.6.1", 'compile', None, Pyc16),
+    ("2.0", "2.0.1", 'compile', None, Pyc20),
+    ("2.1", "2.1.3", 'compile', None, Pyc21),
+    ("2.2", "2.2.3", 'compile', None, Pyc22),
+]
+
+for v in VERSIONS:
+    version, rversion, cmode, tag, pycver = v
     if wanted and version not in wanted:
         continue
-    print("version {}...".format(version))
-    for pydir in pydirs:
-        if pydir.is_dir() and pydir.name.startswith("Python-{}".format(version)):
-            break
-    else:
-        print("No python {}".format(version))
+    subdir = test_dir / version
+    print("version {} ({})...".format(version, rversion))
+    pydir = oldpy_dir / "Python-{}".format(rversion)
+    if not pydir.exists():
+        print("No python {}".format(rversion))
         continue
+    # clear all pyc files
     for test in gather_tests(subdir):
-        name = test.stem
-        errfile = test.parent / (test.stem + '.log')
         pycfile = test.parent / (test.stem + '.pyc')
         if pycfile.exists():
             pycfile.unlink()
-        with errfile.open('wb') as err:
-            p = subprocess.Popen([str(pydir / 'python'), '-c', 'import {}'.format(name)], cwd=str(test.parent), stderr=err, stdout=subprocess.DEVNULL)
+    # if compileall is present, use it now
+    if cmode == 'compile':
+        p = subprocess.Popen(['./python', 'Lib/compileall.py', str(subdir)], cwd=str(pydir), stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         p.wait()
+    # now, the actual tests
+    for test in gather_tests(subdir):
+        name = test.stem
+        pycfile = test.parent / (test.stem + '.pyc')
+        if cmode == 'import':
+            errfile = test.parent / (test.stem + '.log')
+            with errfile.open('wb') as err:
+                p = subprocess.Popen([str(pydir / 'python'), '-c', 'import {}'.format(name)], cwd=str(test.parent), stderr=err, stdout=subprocess.DEVNULL)
+            p.wait()
+            if not pycfile.exists():
+                print("compiling {} did not succeed:".format(test))
+                with errfile.open() as err:
+                    for line in err.readlines():
+                        print('\t{}'.format(line))
+                continue
+            errfile.unlink()
         if not pycfile.exists():
-            print("compiling {} did not succeed:".format(test))
-            with errfile.open() as err:
-                for line in err.readlines():
-                    print('\t{}'.format(line))
+            print("compiling {} did not succeed".format(test))
             continue
-        errfile.unlink()
         try:
             with pycfile.open('rb') as fp:
                 pyc = PycFile(fp)

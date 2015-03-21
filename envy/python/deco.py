@@ -62,7 +62,6 @@ from .bytecode import *
 #
 #   - encoding...
 #   - SET_LINENO no more
-#   - assert no longer has if __debug__
 #   - listcomp rot change
 #   - nofree flag
 #
@@ -948,7 +947,7 @@ def _visit_or(self, deco, start, expr):
 
 # assert. ouch.
 
-@_stmt_visitor(OpcodeRaiseVarargs, IfStart, Block, OrStart, Exprs('param', 1), flag='has_assert')
+@_stmt_visitor(OpcodeRaiseVarargs, IfStart, Block, OrStart, Exprs('param', 1), flag=('has_assert', '!has_short_assert'))
 def _visit_assert_1(self, deco, ifstart, block, orstart, exprs):
     if block.stmts:
         raise PythonError("extra assert statements")
@@ -960,6 +959,17 @@ def _visit_assert_1(self, deco, ifstart, block, orstart, exprs):
         return StmtAssert(orstart.expr), [WantPop(), WantFlow(orstart.flow), WantFlow(ifstart.flow)]
     elif self.param == 2:
         return StmtAssert(orstart.expr, exprs[1]), [WantPop(), WantFlow(orstart.flow), WantFlow(ifstart.flow)]
+    else:
+        raise PythonError("funny assert params")
+
+@_stmt_visitor(OpcodeRaiseVarargs, OrStart, Exprs('param', 1), flag='has_short_assert')
+def _visit_assert_1(self, deco, orstart, exprs):
+    if not isinstance(exprs[0], ExprGlobal) or exprs[0].name != 'AssertionError':
+        raise PythonError("hmm, I wanted an assert...")
+    if self.param == 1:
+        return StmtAssert(orstart.expr), [WantPop(), WantFlow(orstart.flow)]
+    elif self.param == 2:
+        return StmtAssert(orstart.expr, exprs[1]), [WantPop(), WantFlow(orstart.flow)]
     else:
         raise PythonError("funny assert params")
 

@@ -135,6 +135,8 @@ class Pyc10(metaclass=PycVersion):
     has_iter = False
     # has new divide operators (true and floor)
     has_new_divide = False
+    # has short assert sequence
+    has_short_assert = False
     # numeric fields in code are 32-bit instead of 16-bit
     has_le4 = False
     # has SET_LIENENO
@@ -244,6 +246,7 @@ class Pyc23(Pyc22):
     # 62021 used in prealpha
     code = _v(62011)
     name = "Python 2.3"
+    has_short_assert = True
     has_le4 = True
     has_set_lineno = False
     has_peephole = True

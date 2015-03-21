@@ -238,6 +238,16 @@ class StmtInplaceXor(StmtInplace):
     sign = '^='
 
 
+class StmtInplaceTrueDivide(StmtInplace):
+    __slots__ = ()
+    sign = '$/='
+
+
+class StmtInplaceFloorDivide(StmtInplace):
+    __slots__ = ()
+    sign = '//='
+
+
 class StmtDel(Stmt):
     __slots__ = 'val',
 

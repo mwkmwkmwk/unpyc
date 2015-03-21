@@ -34,8 +34,7 @@ from .bytecode import *
 # - py 2.2:
 #
 #   - nuke __module__ = __name__
-#   - floor/true divide
-#   - iterator-based for
+#   - unfuture true divide
 #   - generators
 #
 # - py 2.3:
@@ -545,6 +544,8 @@ for otype, etype in {
     OpcodeBinaryAnd: ExprAnd,
     OpcodeBinaryOr: ExprOr,
     OpcodeBinaryXor: ExprXor,
+    OpcodeBinaryTrueDivide: ExprTrueDiv,
+    OpcodeBinaryFloorDivide: ExprFloorDiv,
 }.items():
     _register_binary(otype, etype)
 
@@ -1347,6 +1348,8 @@ INPLACE_OPS = [
     (OpcodeInplaceAnd, StmtInplaceAnd),
     (OpcodeInplaceOr, StmtInplaceOr),
     (OpcodeInplaceXor, StmtInplaceXor),
+    (OpcodeInplaceTrueDivide, StmtInplaceTrueDivide),
+    (OpcodeInplaceFloorDivide, StmtInplaceFloorDivide),
 ]
 
 for op, stmt in INPLACE_OPS:

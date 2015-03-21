@@ -369,6 +369,16 @@ class ExprBoolOr(ExprBin):
     sign = 'or'
 
 
+class ExprTrueDiv(ExprBin):
+    __slots__ = ()
+    sign = '$/'
+
+
+class ExprFloorDiv(ExprBin):
+    __slots__ = ()
+    sign = '//'
+
+
 # compares
 
 class ExprCmp(Expr):

@@ -239,6 +239,26 @@ class OpcodeBinaryCall(Opcode):
     name = 'BINARY_CALL'
     flag = '!has_new_code'
 
+class OpcodeBinaryFloorDivide(Opcode):
+    code = 26
+    name = 'BINARY_FLOOR_DIVIDE'
+    flag = 'has_new_divide'
+
+class OpcodeBinaryTrueDivide(Opcode):
+    code = 27
+    name = 'BINARY_TRUE_DIVIDE'
+    flag = 'has_new_divide'
+
+class OpcodeInplaceFloorDivide(Opcode):
+    code = 28
+    name = 'INPLACE_FLOOR_DIVIDE'
+    flag = 'has_new_divide'
+
+class OpcodeInplaceTrueDivide(Opcode):
+    code = 29
+    name = 'INPLACE_TRUE_DIVIDE'
+    flag = 'has_new_divide'
+
 class OpcodeSliceNN(Opcode):
     """$push $pop[:]"""
     code = 30

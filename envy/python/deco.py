@@ -35,7 +35,7 @@ from .bytecode import *
 #
 #   - nuke __module__ = __name__
 #   - unfuture true divide
-#   - generators
+#   - detect generators, add if 0: yield
 #
 # - py 2.3:
 #
@@ -1529,6 +1529,12 @@ def visit_listcomp_end(self, deco, comp):
     if comp.tmp != deco.fast(self.param):
         raise PythonError("deleting a funny name")
     return []
+
+# yield
+
+@_stmt_visitor(OpcodeYieldValue, Expr)
+def _visit_yield_stmt(self, deco, expr):
+    return StmtSingle(ExprYield(expr)), []
 
 
 class DecoCtx:

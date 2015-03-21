@@ -507,6 +507,11 @@ class OpcodeBuildFunction(Opcode):
     name = 'BUILD_FUNCTION'
     flag = '!has_new_code'
 
+class OpcodeYieldValue(Opcode):
+    code = 86
+    name = 'YIELD_VALUE'
+    flag = 'has_yield_stmt'
+
 class OpcodePopBlock(Opcode):
     code = 87
     name = 'POP_BLOCK'

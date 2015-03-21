@@ -287,6 +287,11 @@ class ExprInvert(ExprUn):
     sign = '~'
 
 
+class ExprYield(ExprUn):
+    __slots__ = ()
+    sign = 'yield '
+
+
 # binary
 
 class ExprBin(Expr):

@@ -238,6 +238,7 @@ class Pyc22(Pyc21):
     name = "Python 2.2"
     has_iter = True
     has_new_divide = True
+    has_yield_stmt = True
 
 class Pyc23(Pyc22):
     # 62021 used in prealpha

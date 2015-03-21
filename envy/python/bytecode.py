@@ -376,6 +376,11 @@ class OpcodeInplacePower(Opcode):
     name = 'INPLACE_POWER'
     flag = 'has_inplace'
 
+class OpcodeGetIter(Opcode):
+    code = 68
+    name = 'GET_ITER'
+    flag = 'has_iter'
+
 class OpcodePrintExpr(Opcode):
     """print_expr($pop)
 
@@ -528,6 +533,12 @@ class OpcodeUnpackList(OpcodeParamNum):
     flag = "!has_unpack_sequence"
 
 
+class OpcodeForIter(OpcodeParamRel):
+    code = 93
+    name = 'FOR_ITER'
+    flag = 'has_iter'
+
+
 class OpcodeUnpackArg(OpcodeParamNum):
     """$push, $push, $push, [... times arg] = $args"""
     code = 94
@@ -676,6 +687,7 @@ class OpcodeJumpAbsolute(OpcodeParamAbs):
 class OpcodeForLoop(OpcodeParamRel):
     code = 114
     name = 'FOR_LOOP'
+    flag = '!has_iter'
 
 # TODO: LOAD_LOCAL - appears unused...
 

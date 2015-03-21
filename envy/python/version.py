@@ -131,6 +131,8 @@ class Pyc10(metaclass=PycVersion):
     has_closure = False
     # has new continue opcode, capable of busting except blocks
     has_new_continue = False
+    # has iterators
+    has_iter = False
     # numeric fields in code are 32-bit instead of 16-bit
     has_le4 = False
     # has SET_LIENENO
@@ -232,6 +234,7 @@ class Pyc21(Pyc20):
 class Pyc22(Pyc21):
     code = _v(60717)
     name = "Python 2.2"
+    has_iter = True
 
 class Pyc23(Pyc22):
     # 62021 used in prealpha

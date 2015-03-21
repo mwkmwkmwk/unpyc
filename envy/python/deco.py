@@ -33,6 +33,7 @@ from .bytecode import *
 #
 # - py 2.2:
 #
+#   - nuke __module__ = __name__
 #   - floor/true divide
 #   - iterator-based for
 #   - generators
@@ -189,6 +190,8 @@ DupThree = namedtuple('DupThree', [])
 RotTwo = namedtuple('RotTwo', [])
 RotThree = namedtuple('RotThree', [])
 RotFour = namedtuple('RotFour', [])
+
+Iter = namedtuple('Iter', ['expr'])
 
 Import = namedtuple('Import', ['name', 'items'])
 Import2Simple = namedtuple('Import2Simple', ['name', 'attrs'])
@@ -1116,6 +1119,16 @@ def _visit_for(self, deco, _, loop):
     if loop.loop.flow != self.flow or loop.flow.dst != self.nextpos:
         raise PythonError("mismatched for loop")
     return [WantFlow(loop.flow)]
+
+# new for loop
+
+@_visitor(OpcodeGetIter, Expr)
+def visit_get_iter(self, deco, expr):
+    return [Iter(expr)]
+
+@_visitor(OpcodeForIter, Iter, Loop)
+def _visit_for_iter(self, deco, iter_, loop):
+    return [ForStart(iter_.expr, loop, self.flow)]
 
 # break
 

@@ -62,7 +62,6 @@ from .bytecode import *
 #
 #   - encoding...
 #   - SET_LINENO no more
-#   - listcomp rot change
 #   - nofree flag
 #
 # - py 2.4:
@@ -564,10 +563,13 @@ def visit_build_map(self, deco):
         raise PythonError("Non-zero param for BUILD_MAP")
     return [ExprDict([])]
 
-@_visitor(OpcodeStoreSubscr, Expr, DupTop, Expr, RotTwo, Expr)
+@_visitor(OpcodeStoreSubscr, ExprDict, DupTop, Expr, RotTwo, Expr, flag='has_reversed_kv')
 def visit_build_map_step(self, deco, dict_, _1, val, _2, key):
-    if not isinstance(dict_, ExprDict):
-        raise NoMatch
+    dict_.items.append((key, val))
+    return [dict_]
+
+@_visitor(OpcodeStoreSubscr, ExprDict, DupTop, Expr, Expr, RotThree, flag='!has_reversed_kv')
+def visit_build_map_step(self, deco, dict_, _1, key, val, _2):
     dict_.items.append((key, val))
     return [dict_]
 

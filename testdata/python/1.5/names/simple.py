@@ -1,1 +1,0 @@
-../../1.4/names/simple.py

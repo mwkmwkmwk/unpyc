@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import subprocess
 import sys
+import shutil
 
 from envy.format.pyc import PycFile
 from envy.format.helpers import FormatError
@@ -20,56 +21,238 @@ if "OLDPY_PATH" in os.environ:
 else:
     oldpy_dir = root_dir / '..' / 'oldpy'
 
-def gather_tests(dir):
-    for item in dir.iterdir():
-        if item.is_dir():
-            if item.name != '__pycache__':
-                yield from gather_tests(item)
-        elif item.suffix == '.py':
-            yield item
-
 wanted = sys.argv[1:]
 
+TESTS_10 = {
+    # marshal types exercises
+    'marshal/none': '10',
+    'marshal/int': '10',
+    'marshal/str': '10',
+    'marshal/float': '10',
+    'marshal/tuple': '10',
+    # unary ops
+    'unary/plus': '10',
+    'unary/minus': '10',
+    'unary/not_': '10',
+    'unary/repr': '10',
+    'unary/invert': '10',
+    # binary ops
+    'binary/add': '10',
+    'binary/sub': '10',
+    'binary/mul': '10',
+    'binary/div': '10',
+    'binary/mod': '10',
+    'binary/and_': '10',
+    'binary/or_': '10',
+    'binary/xor': '10',
+    'binary/shl': '10',
+    'binary/shr': '10',
+    # misc expressions
+    'expr/attr': '10',
+    'expr/call': '10',
+    'expr/tuple': '10',
+    'expr/list': '10',
+    'expr/dict': '10',
+    'expr/cmp': '10',
+    'expr/chain': '10',
+    'expr/logic': '10',
+    'expr/logic_const': '10',
+    'expr/slice': '10',
+    'expr/subscr': '10',
+    'expr/misc': '10',
+    # function/class definitions
+    'defs/fun': '10',
+    'defs/lambda_': '10',
+    'defs/cls': '10',
+    'defs/doc': '10',
+    'defs/doc2': '10',
+    # names processing
+    'names/simple': '10',
+    'names/fun': '10',
+    'names/fun2': '10',
+    'names/global_': '10',
+    'names/nested': '10',
+    'names/nested2': '10',
+    # statements
+    'stmt/multi': '10',
+
+    'stmt/assign': '10',
+    'stmt/access_': '10',
+    'stmt/exec_': '10',
+    'stmt/raise_': '10',
+    'stmt/print_': '10',
+    'stmt/import_': '10',
+
+    'stmt/break_': '10',
+    'stmt/continue_': '10',
+
+    'stmt/if_': '10',
+    'stmt/if_logic': '10',
+    'stmt/if_const': '10',
+    'stmt/if_logic_const': '10',
+    'stmt/for_': '10',
+    'stmt/while_': '10',
+    'stmt/while_logic': '10',
+    'stmt/while_const': '10',
+    'stmt/except_': '10',
+    'stmt/finally_': '10',
+    # misc
+    'misc/unpack': '10',
+    'misc/empty': '10',
+}
+
+TESTS_11 = TESTS_10.copy()
+TESTS_11.update({
+    'names/fun': '11',
+    'defs/lambda_': '11',
+    'defs/fun': '11',
+    'defs/cls': '11',
+    'names/nested': '11',
+    'names/nested2': '11',
+})
+
+TESTS_12 = TESTS_11.copy()
+TESTS_12.update({
+    'defs/doc': '12',
+    'stmt/import2': '12',
+})
+
+TESTS_13 = TESTS_12.copy()
+TESTS_13.update({
+    'defs/lambda_': '13',
+    'defs/fun': '13',
+    'defs/fun2': '13',
+    'defs/fun3': '13',
+    'stmt/access_': '13',
+    'stmt/raise2': '13',
+    'expr/call2': '13',
+    'names/fun': '13',
+    'names/fun2': '13',
+})
+
+TESTS_14 = TESTS_13.copy()
+TESTS_14.update({
+    'marshal/complex': '14',
+    'binary/pow': '14',
+    'expr/slice2': '14',
+})
+del TESTS_14['stmt/access_']
+
+TESTS_15 = TESTS_14.copy()
+TESTS_15.update({
+    'marshal/int': '15',
+    'defs/doc': '15',
+    'defs/doc2': '15',
+    'stmt/assert_': '15',
+    'stmt/if_const': '15',
+})
+
+TESTS_16 = TESTS_15.copy()
+TESTS_16.update({
+    'marshal/unicode': '16',
+    'defs/fun4': '16',
+    'expr/call3': '16',
+    'stmt/raise3': '16',
+})
+del TESTS_16['defs/fun2']
+del TESTS_16['defs/fun3']
+
+TESTS_20 = TESTS_16.copy()
+TESTS_20.update({
+    'misc/huge': '20',
+    'misc/unpack': '20',
+    'names/nested2': '20',
+    'names/fun': '20',
+    'names/fun2': '20',
+    'comp/basic': '20',
+    'comp/nested': '20',
+    'comp/cond': '20',
+    'comp/complex': '20',
+    'comp/fun': '20',
+    'stmt/import_': '20',
+    'stmt/import2': '20',
+    'stmt/import3': '20',
+    'stmt/inplace': '20',
+    'stmt/print2': '20',
+})
+
+TESTS_21 = TESTS_20.copy()
+TESTS_21.update({
+    'names/nested': '21',
+    'names/nested2': '21',
+    'names/fun': '21',
+    'names/fun2': '21',
+    'names/global_': '21',
+    'stmt/inplace': '21',
+    'stmt/inplace2': '21',
+    'stmt/continue2': '21',
+})
+
+TESTS_22 = TESTS_21.copy()
+TESTS_22.update({
+    'marshal/complex': '22',
+    'binary/floordiv': '22',
+    'binary/truediv': '22',
+    'defs/gen': '22',
+    'defs/doc': '22',
+    'defs/doc2': '22',
+    'defs/cls': '22',
+    'names/nested': '22',
+    'names/nested2': '22',
+    'names/fun': '22',
+    'names/fun2': '22',
+    'comp/fun': '22',
+    'stmt/inplace': '22',
+    'stmt/inplace3': '22',
+})
+
 VERSIONS = [
-    ("1.0", "1.0.1", 'import', None, Pyc10),
-    ("1.1", "1.1", 'import', None, Pyc11),
-    ("1.2", "1.2", 'import', None, Pyc11),
-    ("1.3", "1.3", 'import', None, Pyc13),
-    ("1.4", "1.4", 'compile', None, Pyc14),
-    ("1.5", "1.5", 'compile', None, Pyc15),
-    ("1.6", "1.6.1", 'compile', None, Pyc16),
-    ("2.0", "2.0.1", 'compile', None, Pyc20),
-    ("2.1", "2.1.3", 'compile', None, Pyc21),
-    ("2.2", "2.2.3", 'compile', None, Pyc22),
+    ("1.0", "1.0.1", 'import', None, Pyc10, TESTS_10),
+    ("1.1", "1.1", 'import', None, Pyc11, TESTS_11),
+    ("1.2", "1.2", 'import', None, Pyc11, TESTS_12),
+    ("1.3", "1.3", 'import', None, Pyc13, TESTS_13),
+    ("1.4", "1.4", 'compile', None, Pyc14, TESTS_14),
+    ("1.5", "1.5", 'compile', None, Pyc15, TESTS_15),
+    ("1.6", "1.6.1", 'compile', None, Pyc16, TESTS_16),
+    ("2.0", "2.0.1", 'compile', None, Pyc20, TESTS_20),
+    ("2.1", "2.1.3", 'compile', None, Pyc21, TESTS_21),
+    ("2.2", "2.2.3", 'compile', None, Pyc22, TESTS_22),
 ]
 
 for v in VERSIONS:
-    version, rversion, cmode, tag, pycver = v
+    version, rversion, cmode, tag, pycver, tests = v
     if wanted and version not in wanted:
         continue
-    subdir = test_dir / version
+    subdir = test_dir / 'work' / version
+    shutil.rmtree(str(subdir), ignore_errors=True)
+    subdir.mkdir(parents=True)
     print("version {} ({})...".format(version, rversion))
     pydir = oldpy_dir / "Python-{}".format(rversion)
     if not pydir.exists():
         print("No python {}".format(rversion))
         continue
     # clear all pyc files
-    for test in gather_tests(subdir):
-        pycfile = test.parent / (test.stem + '.pyc')
-        if pycfile.exists():
-            pycfile.unlink()
+    for test in tests:
+        srcfile = test_dir / (test + '.py')
+        if not srcfile.exists():
+            continue
+        pyfile = subdir / (test + '.py')
+        try:
+            pyfile.parent.mkdir(parents=True)
+        except FileExistsError:
+            pass
+        shutil.copyfile(str(srcfile), str(pyfile))
     # if compileall is present, use it now
     if cmode == 'compile':
         p = subprocess.Popen(['./python', 'Lib/compileall.py', str(subdir)], cwd=str(pydir), stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         p.wait()
     # now, the actual tests
-    for test in gather_tests(subdir):
-        name = test.stem
-        pycfile = test.parent / (test.stem + '.pyc')
+    for test, exp in tests.items():
+        pycfile = subdir / (test + '.pyc')
         if cmode == 'import':
-            errfile = test.parent / (test.stem + '.log')
+            errfile = subdir / (test + '.log')
             with errfile.open('wb') as err:
-                p = subprocess.Popen([str(pydir / 'python'), '-c', 'import {}'.format(name)], cwd=str(test.parent), stderr=err, stdout=subprocess.DEVNULL)
+                p = subprocess.Popen([str(pydir / 'python'), '-c', 'import {}'.format(pycfile.stem)], cwd=str(pycfile.parent), stderr=err, stdout=subprocess.DEVNULL)
             p.wait()
             if not pycfile.exists():
                 print("compiling {} did not succeed:".format(test))
@@ -91,8 +274,8 @@ for v in VERSIONS:
         except (PythonError, FormatError) as e:
             print("FAIL {}: {}".format(test, e))
         else:
-            expfile = test.parent / (test.stem + '.exp')
-            resfile = test.parent / (test.stem + '.res')
+            expfile = test_dir / (test + '.exp-{}.py'.format(exp))
+            resfile = subdir / (test + '.res.py')
             if resfile.exists():
                 resfile.unlink()
             if not expfile.exists():

@@ -1,1 +1,0 @@
-../../1.6/stmt/assert_.py

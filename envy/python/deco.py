@@ -104,10 +104,7 @@ from .bytecode import *
 # - py 3.0:
 #
 #   - yeah, well, unicode is everywhere
-#   - bool literals
 #   - extended unpack
-#   - nuke old slices
-#   - nuke ``, exec, print, old divide
 #   - kwdefaults, annotations
 #   - new build class
 #   - real funny except

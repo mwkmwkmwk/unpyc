@@ -138,7 +138,7 @@ class OpcodeUnaryNegative(Opcode):
 class OpcodeUnaryNot(Opcode):
     name = 'UNARY_NOT'
 
-@_opcode(13)
+@_opcode(13, 'has_repr')
 class OpcodeUnaryConvert(Opcode):
     name = 'UNARY_CONVERT'
 
@@ -158,7 +158,7 @@ class OpcodeBinaryPower(Opcode):
 class OpcodeBinaryMultiply(Opcode):
     name = 'BINARY_MULTIPLY'
 
-@_opcode(21)
+@_opcode(21, 'has_old_divide')
 class OpcodeBinaryDivide(Opcode):
     name = 'BINARY_DIVIDE'
 
@@ -258,7 +258,7 @@ class OpcodeInplaceSubstract(Opcode):
 class OpcodeInplaceMultiply(Opcode):
     name = 'INPLACE_MULTIPLY'
 
-@_opcode(58, 'has_inplace')
+@_opcode(58, ('has_inplace', 'has_old_divide'))
 class OpcodeInplaceDivide(Opcode):
     name = 'INPLACE_DIVIDE'
 

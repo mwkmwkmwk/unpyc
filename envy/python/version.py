@@ -148,7 +148,7 @@ class Pyc10(metaclass=PycVersion):
     # has peephole optimier
     has_peephole = False
     # has LIST_APPEND opcode
-    has_list_append = True
+    has_list_append = False
     # has interned bytestrings in marshal
     has_str_intern = False
     # has sets and frozensets

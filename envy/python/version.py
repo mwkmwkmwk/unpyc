@@ -151,11 +151,17 @@ class Pyc10(metaclass=PycVersion):
     has_list_append = False
     # has interned bytestrings in marshal
     has_str_intern = False
+    # has function decorators
+    has_fun_deco = False
+    # return X; return None -> return X
+    has_return_squash = False
     # has sets and frozensets
     # TODO rename
     has_frozenset = False
     # has binary float format in marshal
     has_bin_float = False
+    # has class decorators
+    has_cls_deco = False
     # generic py3k flag - unicode strings, kw-only args, ...
     py3k = False
     # has complex (tuple) arguments - def f(a, (b, c)):
@@ -276,6 +282,8 @@ class Pyc24(Pyc23):
     name = "Python 2.4"
     has_list_append = True
     has_str_intern = True
+    has_fun_deco = True
+    has_return_squash = True
 
 class Pyc25(Pyc24):
     # 62071 used in prealpha
@@ -294,6 +302,7 @@ class Pyc26(Pyc25):
     # 62151 used in prealpha
     code = _v(62161)
     name = "Python 2.6"
+    has_cls_deco = True
 
 class Pyc27(Pyc26):
     # 62171 used in preaplha

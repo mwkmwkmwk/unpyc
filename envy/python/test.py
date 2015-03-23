@@ -214,6 +214,7 @@ TESTS_23.update({
 TESTS_24 = TESTS_23.copy()
 TESTS_24.update({
     'marshal/int2': '24',
+    'defs/deco': '24',
 })
 
 TESTS_25 = TESTS_24.copy()
@@ -222,11 +223,13 @@ TESTS_25.update({
     'marshal/float': '25',
     'marshal/unicode': '25',
     'stmt/exec_': '25',
+    'defs/cls': '25',
 })
 
 TESTS_26 = TESTS_25.copy()
 TESTS_26.update({
     'marshal/bytes': '26',
+    'defs/deco2': '26',
 })
 
 TESTS_27 = TESTS_26.copy()

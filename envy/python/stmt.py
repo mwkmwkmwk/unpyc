@@ -644,21 +644,25 @@ class StmtArgs(Stmt):
 
 
 class StmtClass(Stmt):
-    __slots__ = 'name', 'bases', 'body'
+    __slots__ = 'deco', 'name', 'bases', 'body'
 
-    def __init__(self, name, bases, body):
+    def __init__(self, deco, name, bases, body):
+        self.deco = deco
         self.name = name
         self.bases = bases
         self.body = body
 
     def subprocess(self, process):
         return StmtClass(
+            [process(d) for d in self.deco],
             self.name,
             [process(base) for base in self.bases],
             process(self.body)
         )
 
     def show(self):
+        for d in self.deco:
+            yield '@{}'.format(d.show(None))
         if self.bases:
             yield 'class {}({}):'.format(
                 self.name,
@@ -683,21 +687,25 @@ class StmtEndClass(Stmt):
 
 
 class StmtDef(Stmt):
-    __slots__ = 'name', 'args', 'body'
+    __slots__ = 'deco', 'name', 'args', 'body'
 
-    def __init__(self, name, args, body):
+    def __init__(self, deco, name, args, body):
+        self.deco = deco
         self.name = name
         self.args = args
         self.body = body
 
     def subprocess(self, process):
         return StmtDef(
+            [process(d) for d in self.deco],
             self.name,
             process(self.args),
             process(self.body)
         )
 
     def show(self):
+        for d in self.deco:
+            yield '@{}'.format(d.show(None))
         yield 'def {}({}):'.format(
             self.name,
             self.args.show()

@@ -92,36 +92,55 @@ def ast_process(deco, version):
             Block(stmts[split:])
         )
 
-    def isfunction(subnode):
-        return isinstance(subnode, ExprFunction)
+    def isdecorator(node):
+        if isinstance(node, ExprCall):
+            node = node.expr
+        while isinstance(node, ExprAttr):
+            node = node.expr
+        return isinstance(node, (ExprName, ExprGlobal, ExprFast, ExprDeref))
 
-    def isclass(subnode):
-        return isinstance(subnode, ExprClass)
+    def undecorate(node):
+        decorators = []
+        while isinstance(node, ExprCall):
+            if len(node.params) != 1:
+                return None, None
+            if node.params[0][0]:
+                return None, None
+            if not isdecorator(node.expr):
+                return None, None
+            decorators.append(node.expr)
+            node = node.params[0][1]
+        return decorators, node
 
     def process_def(node):
         if len(node.dests) != 1:
             return node
         dst = node.dests[0]
-        fun = node.expr
 
         # TODO allow only ExprName, punt it before name resolve
         if not isinstance(dst, (ExprName, ExprGlobal, ExprFast)):
             return node
         name = dst.name
 
-        if isfunction(fun):
+        decorators, fun = undecorate(node.expr)
+
+        if isinstance(fun, ExprFunction):
             if not fun.name or fun.name != name:
+                return node
+            if decorators and not version.has_fun_deco:
                 return node
             stmts = fun.block.stmts
             if stmts and isinstance(stmts[-1], StmtReturn) and isinstance(stmts[-1].val, ExprNone):
                 stmts.pop()
-            else:
+            elif not version.has_return_squash:
                 raise PythonError("function not terminated by return None")
-            return StmtDef(fun.name, fun.args, fun.block)
-        elif isclass(fun):
+            return StmtDef(decorators, fun.name, fun.args, fun.block)
+        elif isinstance(fun, ExprClass):
             if fun.name != name:
                 return node
-            return StmtClass(fun.name, fun.bases, fun.body)
+            if decorators and not version.has_cls_deco:
+                return node
+            return StmtClass(decorators, fun.name, fun.bases, fun.body)
         else:
             return node
 

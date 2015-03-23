@@ -67,7 +67,6 @@ from .bytecode import *
 # - py 2.4:
 #
 #   - None is now a keyword
-#   - decorators
 #   - genexp
 #   - enter peephole:
 #
@@ -89,7 +88,6 @@ from .bytecode import *
 # - py 2.6:
 #
 #   - STORE_MAP used for dict displays
-#   - class decorators
 #   - except a as b
 #   - different with sequence
 #

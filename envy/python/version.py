@@ -161,6 +161,10 @@ class Pyc10(metaclass=PycVersion):
     has_old_slice = True
     # has True/False as compile-time literals (as opposed to builtins)
     has_bool_literal = False
+    # has print statement
+    has_print = True
+    # has exec statement
+    has_exec = True
     # has source size in pyc
     has_size = False
     # has marshal optimized formats
@@ -304,6 +308,8 @@ class Pyc30(Pyc27):
     has_bool_literal = True
     has_complex_args = False
     has_old_slice = False
+    has_print = False
+    has_exec = False
 
 class Pyc31(Pyc30):
     # 3141 used in prealpha

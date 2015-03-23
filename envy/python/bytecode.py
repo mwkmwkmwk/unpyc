@@ -13,16 +13,15 @@ class OpcodeMeta(type):
             namespace['__slots__'] = ()
         return super(__class__, cls).__new__(cls, name, bases, namespace)
 
-    def __init__(self, name, bases, namespace):
-        super().__init__(name, bases, namespace)
-        if 'code' in namespace:
-            OPCODES.setdefault(self.code, []).append(self)
+def _opcode(opc, flag=None):
+    def inner(cls):
+        OPCODES.setdefault(opc, []).append((cls, flag))
+        return cls
+    return inner
 
 
 class Opcode(metaclass=OpcodeMeta):
     __slots__ = 'pos', 'ext', 'nextpos', 'version', 'outflow', 'inflow'
-    end = False
-    flag = None
 
     def __init__(self, bytecode, pos, ext):
         self.pos = pos
@@ -50,10 +49,6 @@ class Opcode(metaclass=OpcodeMeta):
 
     def print_params(self):
         return None
-
-    @classmethod
-    def version_ok(cls, version):
-        return version.match(cls.flag)
 
 
 class OpcodeParamNum(Opcode):
@@ -111,507 +106,348 @@ OpcodeParamFast = OpcodeParamNum
 
 # opcodes start here
 
+@_opcode(1)
 class OpcodePopTop(Opcode):
-    """$pop
-
-    Used for:
-
-    - from x import y [pops x afterwards]
-    - chained comparisons
-    - and/or operators
-    - if statements
-    - while statements
-    - try statement: except clause
-    """
-    code = 1
     name = 'POP_TOP'
 
-
+@_opcode(2)
 class OpcodeRotTwo(Opcode):
-    """a, b = b, a
-
-    Used for:
-
-    - dict builder
-    - chained comparisons
-    """
-    code = 2
     name = 'ROT_TWO'
 
-
+@_opcode(3)
 class OpcodeRotThree(Opcode):
-    """Used for:
-
-    - chained comparisons
-    """
-    code = 3
     name = 'ROT_THREE'
 
+@_opcode(4)
 class OpcodeDupTop(Opcode):
-    """$push($top)
-
-    Used for:
-
-    - multiple assignment statements (a = b = c)
-    """
-    code = 4
     name = 'DUP_TOP'
 
-
+@_opcode(5, 'has_rot_four')
 class OpcodeRotFour(Opcode):
-    code = 5
     name = 'ROT_FOUR'
-    flag = 'has_rot_four'
 
+@_opcode(10)
 class OpcodeUnaryPositive(Opcode):
-    """$push +$pop"""
-    code = 10
     name = 'UNARY_POSITIVE'
 
+@_opcode(11)
 class OpcodeUnaryNegative(Opcode):
-    """$push -$pop"""
-    code = 11
     name = 'UNARY_NEGATIVE'
 
+@_opcode(12)
 class OpcodeUnaryNot(Opcode):
-    """$push not $pop"""
-    code = 12
     name = 'UNARY_NOT'
 
+@_opcode(13)
 class OpcodeUnaryConvert(Opcode):
-    """$push `$pop`"""
-    code = 13
     name = 'UNARY_CONVERT'
 
+@_opcode(14, '!has_new_code')
 class OpcodeUnaryCall(Opcode):
-    """$push $pop()
-
-    Used for class defs.
-    """
-    code = 14
     name = 'UNARY_CALL'
-    flag = '!has_new_code'
 
+@_opcode(15)
 class OpcodeUnaryInvert(Opcode):
-    """$push ~$pop"""
-    code = 15
     name = 'UNARY_INVERT'
 
+@_opcode(19, 'has_power')
 class OpcodeBinaryPower(Opcode):
-    """$push $pop ** $pop"""
-    code = 19
     name = 'BINARY_POWER'
-    flag = 'has_power'
 
+@_opcode(20)
 class OpcodeBinaryMultiply(Opcode):
-    """$push $pop * $pop"""
-    code = 20
     name = 'BINARY_MULTIPLY'
 
+@_opcode(21)
 class OpcodeBinaryDivide(Opcode):
-    """$push $pop / $pop"""
-    code = 21
     name = 'BINARY_DIVIDE'
 
+@_opcode(22)
 class OpcodeBinaryModulo(Opcode):
-    """$push $pop % $pop"""
-    code = 22
     name = 'BINARY_MODULO'
 
+@_opcode(23)
 class OpcodeBinaryAdd(Opcode):
-    """$push $pop + $pop"""
-    code = 23
     name = 'BINARY_ADD'
 
+@_opcode(24)
 class OpcodeBinarySubstract(Opcode):
-    """$push $pop - $pop"""
-    code = 24
     name = 'BINARY_SUBSTRACT'
 
+@_opcode(25)
 class OpcodeBinarySubscr(Opcode):
-    """$push $pop[$pop]"""
-    code = 25
     name = 'BINARY_SUBSCR'
 
+@_opcode(26, '!has_new_code')
 class OpcodeBinaryCall(Opcode):
-    """$push $pop($pop)"""
-    code = 26
     name = 'BINARY_CALL'
-    flag = '!has_new_code'
 
+@_opcode(26, 'has_new_divide')
 class OpcodeBinaryFloorDivide(Opcode):
-    code = 26
     name = 'BINARY_FLOOR_DIVIDE'
-    flag = 'has_new_divide'
 
+@_opcode(27, 'has_new_divide')
 class OpcodeBinaryTrueDivide(Opcode):
-    code = 27
     name = 'BINARY_TRUE_DIVIDE'
-    flag = 'has_new_divide'
 
+@_opcode(28, 'has_new_divide')
 class OpcodeInplaceFloorDivide(Opcode):
-    code = 28
     name = 'INPLACE_FLOOR_DIVIDE'
-    flag = 'has_new_divide'
 
+@_opcode(29, 'has_new_divide')
 class OpcodeInplaceTrueDivide(Opcode):
-    code = 29
     name = 'INPLACE_TRUE_DIVIDE'
-    flag = 'has_new_divide'
 
+@_opcode(30, 'has_old_slice')
 class OpcodeSliceNN(Opcode):
-    """$push $pop[:]"""
-    code = 30
     name = 'SLICE_NN'
-    flag = 'has_old_slice'
 
+@_opcode(31, 'has_old_slice')
 class OpcodeSliceEN(Opcode):
-    """$push $pop[$pop:]"""
-    code = 31
     name = 'SLICE_EN'
-    flag = 'has_old_slice'
 
+@_opcode(32, 'has_old_slice')
 class OpcodeSliceNE(Opcode):
-    """$push $pop[:$pop]"""
-    code = 32
     name = 'SLICE_NE'
-    flag = 'has_old_slice'
 
+@_opcode(33, 'has_old_slice')
 class OpcodeSliceEE(Opcode):
-    """$push $pop[$pop:$pop]"""
-    code = 33
     name = 'SLICE_EE'
-    flag = 'has_old_slice'
 
+@_opcode(40, 'has_old_slice')
 class OpcodeStoreSliceNN(Opcode):
-    """$pop[:] = $pop"""
-    code = 40
     name = 'STORE_SLICE_NN'
-    flag = 'has_old_slice'
 
+@_opcode(41, 'has_old_slice')
 class OpcodeStoreSliceEN(Opcode):
-    """$pop[$pop:] = $pop"""
-    code = 41
     name = 'STORE_SLICE_EN'
-    flag = 'has_old_slice'
 
+@_opcode(42, 'has_old_slice')
 class OpcodeStoreSliceNE(Opcode):
-    """$pop[:$pop] = $pop"""
-    code = 42
     name = 'STORE_SLICE_NE'
-    flag = 'has_old_slice'
 
+@_opcode(43, 'has_old_slice')
 class OpcodeStoreSliceEE(Opcode):
-    """$pop[$pop:$pop] = $pop"""
-    code = 43
     name = 'STORE_SLICE_EE'
-    flag = 'has_old_slice'
 
+@_opcode(50, 'has_old_slice')
 class OpcodeDeleteSliceNN(Opcode):
-    """del $pop[:]"""
-    code = 50
     name = 'DELETE_SLICE_NN'
-    flag = 'has_old_slice'
 
+@_opcode(51, 'has_old_slice')
 class OpcodeDeleteSliceEN(Opcode):
-    """del $pop[$pop:]"""
-    code = 51
     name = 'DELETE_SLICE_EN'
-    flag = 'has_old_slice'
 
+@_opcode(52, 'has_old_slice')
 class OpcodeDeleteSliceNE(Opcode):
-    """del $pop[:$pop]"""
-    code = 52
     name = 'DELETE_SLICE_NE'
-    flag = 'has_old_slice'
 
+@_opcode(53, 'has_old_slice')
 class OpcodeDeleteSliceEE(Opcode):
-    """del $pop[$pop:$pop]"""
-    code = 53
     name = 'DELETE_SLICE_EE'
-    flag = 'has_old_slice'
 
+@_opcode(55, 'has_inplace')
 class OpcodeInplaceAdd(Opcode):
-    code = 55
     name = 'INPLACE_ADD'
-    flag = 'has_inplace'
 
+@_opcode(56, 'has_inplace')
 class OpcodeInplaceSubstract(Opcode):
-    code = 56
     name = 'INPLACE_SUBSTRACT'
-    flag = 'has_inplace'
 
+@_opcode(57, 'has_inplace')
 class OpcodeInplaceMultiply(Opcode):
-    code = 57
     name = 'INPLACE_MULTIPLY'
-    flag = 'has_inplace'
 
+@_opcode(58, 'has_inplace')
 class OpcodeInplaceDivide(Opcode):
-    code = 58
     name = 'INPLACE_DIVIDE'
-    flag = 'has_inplace'
 
+@_opcode(59, 'has_inplace')
 class OpcodeInplaceModulo(Opcode):
-    code = 59
     name = 'INPLACE_MODULO'
-    flag = 'has_inplace'
 
+@_opcode(60)
 class OpcodeStoreSubscr(Opcode):
-    """$pop[$pop] = $pop"""
-    code = 60
     name = 'STORE_SUBSCR'
 
+@_opcode(61)
 class OpcodeDeleteSubscr(Opcode):
-    """del $pop[$pop]"""
-    code = 61
     name = 'DELETE_SUBSCR'
 
+@_opcode(62)
 class OpcodeBinaryLshift(Opcode):
-    """$push $pop << $pop"""
-    code = 62
     name = 'BINARY_LSHIFT'
 
+@_opcode(63)
 class OpcodeBinaryRshift(Opcode):
-    """$push $pop >> $pop"""
-    code = 63
     name = 'BINARY_RSHIFT'
 
+@_opcode(64)
 class OpcodeBinaryAnd(Opcode):
-    """$push $pop & $pop"""
-    code = 64
     name = 'BINARY_AND'
 
+@_opcode(65)
 class OpcodeBinaryXor(Opcode):
-    """$push $pop ^ $pop"""
-    code = 65
     name = 'BINARY_XOR'
 
+@_opcode(66)
 class OpcodeBinaryOr(Opcode):
-    """$push $pop | $pop"""
-    code = 66
     name = 'BINARY_OR'
 
+@_opcode(67, 'has_inplace')
 class OpcodeInplacePower(Opcode):
-    code = 67
     name = 'INPLACE_POWER'
-    flag = 'has_inplace'
 
+@_opcode(68, 'has_iter')
 class OpcodeGetIter(Opcode):
-    code = 68
     name = 'GET_ITER'
-    flag = 'has_iter'
 
+@_opcode(70)
 class OpcodePrintExpr(Opcode):
-    """print_expr($pop)
-
-    Interactive implicit print statement.  Emitted for a single expression
-    statement (in later Pythons, for interactive mode only).  If expr is None,
-    does nothing.  Otherwise, prints its repr.
-    """
-    code = 70
     name = 'PRINT_EXPR'
 
+@_opcode(71, 'has_print')
 class OpcodePrintItem(Opcode):
-    """print_item($pop)
-
-    Prints a single expression in a print statement.
-    """
-    code = 71
     name = 'PRINT_ITEM'
 
+@_opcode(72, 'has_print')
 class OpcodePrintNewline(Opcode):
-    """print_newline()
-
-    Prints a newline in a print statement.
-    """
-    code = 72
     name = 'PRINT_NEWLINE'
 
+@_opcode(73, 'has_print_to')
 class OpcodePrintItemTo(Opcode):
-    code = 73
     name = 'PRINT_ITEM_TO'
-    flag = 'has_print_to'
 
+@_opcode(74, 'has_print_to')
 class OpcodePrintNewlineTo(Opcode):
-    code = 74
     name = 'PRINT_NEWLINE_TO'
-    flag = 'has_print_to'
 
+@_opcode(75, 'has_inplace')
 class OpcodeInplaceLshift(Opcode):
-    code = 75
     name = 'INPLACE_LSHIFT'
-    flag = 'has_inplace'
 
+@_opcode(76, 'has_inplace')
 class OpcodeInplaceRshift(Opcode):
-    code = 76
     name = 'INPLACE_RSHIFT'
-    flag = 'has_inplace'
 
+@_opcode(77, 'has_inplace')
 class OpcodeInplaceAnd(Opcode):
-    code = 77
     name = 'INPLACE_AND'
-    flag = 'has_inplace'
 
+@_opcode(78, 'has_inplace')
 class OpcodeInplaceXor(Opcode):
-    code = 78
     name = 'INPLACE_XOR'
-    flag = 'has_inplace'
 
+@_opcode(79, 'has_inplace')
 class OpcodeInplaceOr(Opcode):
-    code = 79
     name = 'INPLACE_OR'
-    flag = 'has_inplace'
 
+@_opcode(80)
 class OpcodeBreakLoop(Opcode):
-    """break"""
-    code = 80
     name = 'BREAK_LOOP'
-    # could be end = True, but not considered as such by compiler
 
+@_opcode(81, '!has_new_raise')
 class OpcodeRaiseException(Opcode):
-    """raise $pop, $pop"""
-    code = 81
     name = 'RAISE_EXCEPTION'
-    flag = '!has_new_raise'
-    # could be end = True, but not considered as such by compiler
 
+@_opcode(82)
 class OpcodeLoadLocals(Opcode):
-    """$push($locals)
-
-    Used at the end of class-building function.
-    """
-    code = 82
     name = 'LOAD_LOCALS'
 
+@_opcode(83)
 class OpcodeReturnValue(Opcode):
-    """return $pop"""
-    code = 83
     name = 'RETURN_VALUE'
-    # could be end = True, but not considered as such by compiler
 
 # TODO: LOAD_GLOBALS - appears unused...
 
+@_opcode(84, 'has_import_star')
 class OpcodeImportStar(Opcode):
-    code = 84
     name = 'IMPORT_STAR'
-    flag = 'has_import_star'
 
+@_opcode(85, 'has_exec')
 class OpcodeExecStmt(Opcode):
-    """exec $pop in $pop, $pop"""
-    code = 85
     name = 'EXEC_STMT'
 
+@_opcode(86, '!has_new_code')
 class OpcodeBuildFunction(Opcode):
-    """$push function($pop)"""
-    code = 86
     name = 'BUILD_FUNCTION'
-    flag = '!has_new_code'
 
+@_opcode(86, 'has_yield_stmt')
 class OpcodeYieldValue(Opcode):
-    code = 86
     name = 'YIELD_VALUE'
-    flag = 'has_yield_stmt'
 
+@_opcode(87)
 class OpcodePopBlock(Opcode):
-    code = 87
     name = 'POP_BLOCK'
 
+@_opcode(88)
 class OpcodeEndFinally(Opcode):
-    code = 88
     name = 'END_FINALLY'
 
+@_opcode(89)
 class OpcodeBuildClass(Opcode):
-    """$push class($pop, $pop, $pop) - args are name, bases, namespace"""
-    code = 89
     name = 'BUILD_CLASS'
 
 
+# opcodes have an argument from here on
+
+@_opcode(90)
 class OpcodeStoreName(OpcodeParamName):
-    """name = $pop"""
-    code = 90
     name = "STORE_NAME"
 
-
+@_opcode(91)
 class OpcodeDeleteName(OpcodeParamName):
-    """del name"""
-    code = 91
     name = "DELETE_NAME"
 
-
+@_opcode(92, '!has_unpack_sequence')
 class OpcodeUnpackTuple(OpcodeParamNum):
-    """$push, $push, $push, [... times arg] = $pop"""
-    code = 92
     name = "UNPACK_TUPLE"
-    flag = "!has_unpack_sequence"
 
-
+@_opcode(92, 'has_unpack_sequence')
 class OpcodeUnpackSequence(OpcodeParamNum):
-    code = 92
     name = "UNPACK_SEQUENCE"
-    flag = "has_unpack_sequence"
 
-
+@_opcode(93, '!has_unpack_sequence')
 class OpcodeUnpackList(OpcodeParamNum):
-    """[$push, $push, $push, [... times arg]] = $args"""
-    code = 93
     name = "UNPACK_LIST"
-    flag = "!has_unpack_sequence"
 
-
+@_opcode(93, 'has_iter')
 class OpcodeForIter(OpcodeParamRel):
-    code = 93
     name = 'FOR_ITER'
-    flag = 'has_iter'
 
-
+@_opcode(94, '!has_new_code')
 class OpcodeUnpackArg(OpcodeParamNum):
-    """$push, $push, $push, [... times arg] = $args"""
-    code = 94
     name = "UNPACK_ARG"
-    flag = '!has_new_code'
 
-
+@_opcode(95)
 class OpcodeStoreAttr(OpcodeParamName):
-    """$pop.name = $pop"""
-    code = 95
     name = "STORE_ATTR"
 
-
+@_opcode(96)
 class OpcodeDeleteAttr(OpcodeParamName):
-    """del $pop.name"""
-    code = 96
     name = "DELETE_ATTR"
 
-
+@_opcode(97)
 class OpcodeStoreGlobal(OpcodeParamName):
-    """$global name = $pop"""
-    code = 97
     name = "STORE_GLOBAL"
 
-
+@_opcode(98)
 class OpcodeDeleteGlobal(OpcodeParamName):
-    """del $global name"""
-    code = 98
     name = "DELETE_GLOBAL"
 
-
+@_opcode(99, '!has_new_code')
 class OpcodeUnpackVararg(OpcodeParamNum):
-    """$push, $push, $push, [... times arg], *$push = $args"""
-    code = 99
     name = "UNPACK_VARARG"
-    flag = '!has_new_code'
 
-
+@_opcode(99, 'has_dup_topx')
 class OpcodeDupTopX(OpcodeParamNum):
-    code = 99
     name = "DUP_TOPX"
-    flag = 'has_dup_topx'
 
 
+@_opcode(100)
 class OpcodeLoadConst(Opcode):
     """$push(const)"""
     __slots__ = 'const', 'idx'
-    code = 100
     name = 'LOAD_CONST'
 
     def read_params(self, bytecode):
@@ -628,40 +464,29 @@ class OpcodeLoadConst(Opcode):
             raise TypeError("unknown const")
 
 
+@_opcode(101)
 class OpcodeLoadName(OpcodeParamName):
-    """$push(name)"""
-    code = 101
     name = "LOAD_NAME"
 
-
+@_opcode(102)
 class OpcodeBuildTuple(OpcodeParamNum):
-    """$push(($pop, $pop, $pop, [... times arg]))"""
-    code = 102
     name = "BUILD_TUPLE"
 
-
+@_opcode(103)
 class OpcodeBuildList(OpcodeParamNum):
-    """$push([$pop, $pop, $pop, [... times arg]])"""
-    code = 103
     name = "BUILD_LIST"
 
-
+@_opcode(104)
 class OpcodeBuildMap(OpcodeParamNum):
-    # TODO: validate param
-    """$push({}) - param has to be 0"""
-    code = 104
     name = "BUILD_MAP"
 
-
+@_opcode(105)
 class OpcodeLoadAttr(OpcodeParamName):
-    """$push($pop.name)"""
-    code = 105
     name = "LOAD_ATTR"
 
-
+@_opcode(106)
 class OpcodeCompareOp(Opcode):
     __slots__ = 'mode',
-    code = 106
     name = "COMPARE_OP"
 
     def read_params(self, bytecode):
@@ -674,86 +499,72 @@ class OpcodeCompareOp(Opcode):
         return self.mode.name
 
 
+@_opcode(107)
 class OpcodeImportName(OpcodeParamName):
-    """$push(__import__("name"))"""
-    code = 107
     name = "IMPORT_NAME"
 
-
+@_opcode(108)
 class OpcodeImportFrom(OpcodeParamName):
-    """name = $top.name"""
-    code = 108
     name = "IMPORT_FROM"
 
-
+@_opcode(109, 'has_access')
 class OpcodeAccessMode(OpcodeParamName):
-    code = 109
     name = "ACCESS_MODE"
-    flag = 'has_access'
 
-
+@_opcode(110)
 class OpcodeJumpForward(OpcodeParamRel):
-    code = 110
     name = 'JUMP_FORWARD'
-    end = True
 
+@_opcode(111)
 class OpcodeJumpIfFalse(OpcodeParamRel):
-    code = 111
     name = 'JUMP_IF_FALSE'
 
+@_opcode(112)
 class OpcodeJumpIfTrue(OpcodeParamRel):
-    code = 112
     name = 'JUMP_IF_TRUE'
 
+@_opcode(113)
 class OpcodeJumpAbsolute(OpcodeParamAbs):
-    code = 113
     name = 'JUMP_ABSOLUTE'
 
+@_opcode(114, '!has_iter')
 class OpcodeForLoop(OpcodeParamRel):
-    code = 114
     name = 'FOR_LOOP'
-    flag = '!has_iter'
 
 # TODO: LOAD_LOCAL - appears unused...
 
 
+@_opcode(116)
 class OpcodeLoadGlobal(OpcodeParamName):
-    """$push($global name)"""
-    code = 116
     name = "LOAD_GLOBAL"
 
+@_opcode(117, ('has_def_args', '!has_new_code'))
 class OpcodeSetFuncArgs(OpcodeParamNum):
-    code = 117
     name = "SET_FUNC_ARGS"
-    flag = 'has_def_args', '!has_new_code'
 
+@_opcode(119, 'has_new_continue')
 class OpcodeContinueLoop(OpcodeParamAbs):
-    code = 119
     name = 'CONTINUE_LOOP'
-    flag = 'has_new_continue'
 
 
+@_opcode(120)
 class OpcodeSetupLoop(OpcodeParamRel):
-    code = 120
     name = 'SETUP_LOOP'
 
-
+@_opcode(121)
 class OpcodeSetupExcept(OpcodeParamRel):
-    code = 121
     name = 'SETUP_EXCEPT'
 
-
+@_opcode(122)
 class OpcodeSetupFinally(OpcodeParamRel):
-    code = 122
     name = 'SETUP_FINALLY'
 
 
+@_opcode(123, '!has_new_code')
 class OpcodeReserveFast(Opcode):
     """Prepares fast slots. Arg is a const: dict or None."""
     __slots__ = 'names',
-    code = 123
     name = 'RESERVE_FAST'
-    flag = '!has_new_code'
 
     def read_params(self, bytecode):
         # TODO
@@ -783,36 +594,29 @@ class OpcodeReserveFast(Opcode):
         return ', '.join(self.names)
 
 
+@_opcode(124)
 class OpcodeLoadFast(OpcodeParamFast):
-    code = 124
     name = "LOAD_FAST"
 
-
+@_opcode(125)
 class OpcodeStoreFast(OpcodeParamFast):
-    code = 125
     name = "STORE_FAST"
 
-
+@_opcode(126)
 class OpcodeDeleteFast(OpcodeParamFast):
-    code = 126
     name = "DELETE_FAST"
 
-
+@_opcode(127, 'has_set_lineno')
 class OpcodeSetLineno(OpcodeParamNum):
-    code = 127
     name = "SET_LINENO"
-    flag = 'has_set_lineno'
 
-
+@_opcode(130, 'has_new_raise')
 class OpcodeRaiseVarargs(OpcodeParamNum):
-    code = 130
     name = "RAISE_VARARGS"
-    flag = 'has_new_raise'
 
 
 class OpcodeCallFunctionBase(Opcode):
     __slots__ = 'args', 'kwargs'
-    flag = 'has_new_code'
 
     def read_params(self, bytecode):
         param = bytecode.word(self.ext)
@@ -823,74 +627,49 @@ class OpcodeCallFunctionBase(Opcode):
         return "{}, {}".format(self.args, self.kwargs)
 
 
+@_opcode(131, 'has_new_code')
 class OpcodeCallFunction(OpcodeCallFunctionBase):
-    __slots__ = ()
-    code = 131
     name = "CALL_FUNCTION"
 
-
+@_opcode(132, 'has_new_code')
 class OpcodeMakeFunction(OpcodeParamNum):
-    code = 132
     name = "MAKE_FUNCTION"
-    flag = 'has_new_code'
 
-
+@_opcode(133, 'has_new_slice')
 class OpcodeBuildSlice(OpcodeParamNum):
-    code = 133
     name = "BUILD_SLICE"
-    flag = 'has_new_slice'
 
-
+@_opcode(134, 'has_closure')
 class OpcodeMakeClosure(OpcodeParamNum):
-    code = 134
     name = "MAKE_CLOSURE"
-    flag = 'has_closure'
 
-
+@_opcode(135, 'has_closure')
 class OpcodeLoadClosure(OpcodeParamNum):
-    code = 135
     name = "LOAD_CLOSURE"
-    flag = 'has_closure'
 
-
+@_opcode(136, 'has_closure')
 class OpcodeLoadDeref(OpcodeParamNum):
-    code = 136
     name = "LOAD_DEREF"
-    flag = 'has_closure'
 
-
+@_opcode(137, 'has_closure')
 class OpcodeStoreDeref(OpcodeParamNum):
-    code = 137
     name = "STORE_DEREF"
-    flag = 'has_closure'
 
-
+@_opcode(140, 'has_var_call')
 class OpcodeCallFunctionVar(OpcodeCallFunctionBase):
-    __slots__ = ()
-    code = 140
     name = "CALL_FUNCTION_VAR"
-    flag = 'has_var_call'
 
-
+@_opcode(141, 'has_var_call')
 class OpcodeCallFunctionKw(OpcodeCallFunctionBase):
-    __slots__ = ()
-    code = 141
     name = "CALL_FUNCTION_KW"
-    flag = 'has_var_call'
 
-
+@_opcode(142, 'has_var_call')
 class OpcodeCallFunctionVarKw(OpcodeCallFunctionBase):
-    __slots__ = ()
-    code = 142
     name = "CALL_FUNCTION_VAR_KW"
-    flag = 'has_var_call'
 
-
+@_opcode(143, 'has_extended_arg')
 class ExtendedArg(OpcodeParamNum):
-    __slots__ = ()
-    code = 143
     name = "EXTENDED_ARG"
-    flag = 'has_extended_arg'
 
 
 class Bytecode:
@@ -921,8 +700,8 @@ class Bytecode:
                 trg.inflow.append(op.pos)
 
     def get_op(self, pos, opc, ext):
-        for cls in OPCODES.get(opc, []):
-            if cls.version_ok(self.version):
+        for cls, flag in OPCODES.get(opc, []):
+            if self.version.match(flag):
                 return cls(self, pos, ext)
         raise PythonError("unknown opcode {}".format(opc))
 

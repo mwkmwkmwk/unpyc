@@ -1,0 +1,5 @@
+a = b'abc'
+b = 'abc'
+c = ''
+d = 'ab'
+e = 'ab'

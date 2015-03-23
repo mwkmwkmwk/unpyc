@@ -55,6 +55,7 @@ TESTS_10 = {
     'expr/dict': '10',
     'expr/cmp': '10',
     'expr/chain': '10',
+    'expr/chain2': '10',
     'expr/logic': '10',
     'expr/logic_const': '10',
     'expr/slice': '10',
@@ -206,6 +207,88 @@ TESTS_22.update({
     'stmt/inplace3': '22',
 })
 
+TESTS_23 = TESTS_22.copy()
+TESTS_23.update({
+})
+
+TESTS_24 = TESTS_23.copy()
+TESTS_24.update({
+    'marshal/int2': '24',
+})
+
+TESTS_25 = TESTS_24.copy()
+TESTS_25.update({
+    'marshal/complex': '25',
+    'marshal/float': '25',
+    'marshal/unicode': '25',
+    'stmt/exec_': '25',
+})
+
+TESTS_26 = TESTS_25.copy()
+TESTS_26.update({
+    'marshal/bytes': '26',
+})
+
+TESTS_27 = TESTS_26.copy()
+TESTS_27.update({
+})
+
+TESTS_30 = TESTS_26.copy()
+TESTS_30.update({
+    'stmt/continue3': '30',
+    'stmt/raise4': '30',
+    'marshal/int2': '30',
+    'marshal/str': '30',
+    'defs/fun5': '30',
+    'defs/lambda2': '30',
+    'stmt/except2': '30',
+    'binary/div': '30',
+    'names/fun3': '30',
+    'names/fun4': '30',
+})
+del TESTS_30['stmt/print_']
+del TESTS_30['stmt/print2']
+del TESTS_30['stmt/exec_']
+del TESTS_30['stmt/continue_']
+del TESTS_30['stmt/continue2']
+del TESTS_30['stmt/raise_']
+del TESTS_30['stmt/raise2']
+del TESTS_30['stmt/raise3']
+del TESTS_30['stmt/except_']
+del TESTS_30['expr/chain']
+del TESTS_30['marshal/unicode']
+del TESTS_30['marshal/int']
+del TESTS_30['unary/repr']
+del TESTS_30['names/fun']
+del TESTS_30['names/fun2']
+del TESTS_30['defs/fun']
+del TESTS_30['defs/fun4']
+del TESTS_30['defs/lambda_']
+
+TESTS_31 = TESTS_30.copy()
+TESTS_31.update({
+})
+
+TESTS_32 = TESTS_31.copy()
+TESTS_32.update({
+    'marshal/unicode': '32',
+    'marshal/float': '32',
+})
+
+TESTS_33 = TESTS_32.copy()
+TESTS_33.update({
+    'marshal/unicode': '25',
+    'marshal/float': '25',
+})
+
+TESTS_34 = TESTS_33.copy()
+TESTS_34.update({
+})
+
+TESTS_35 = TESTS_34.copy()
+TESTS_35.update({
+})
+
 VERSIONS = [
     ("1.0", "1.0.1", 'import', None, Pyc10, TESTS_10),
     ("1.1", "1.1", 'import', None, Pyc11, TESTS_11),
@@ -217,6 +300,17 @@ VERSIONS = [
     ("2.0", "2.0.1", 'compile', None, Pyc20, TESTS_20),
     ("2.1", "2.1.3", 'compile', None, Pyc21, TESTS_21),
     ("2.2", "2.2.3", 'compile', None, Pyc22, TESTS_22),
+    ("2.3", "2.3.7", 'compile', None, Pyc23, TESTS_23),
+    ("2.4", "2.4.6", 'compile', None, Pyc24, TESTS_24),
+    ("2.5", "2.5.6", 'compile', None, Pyc25, TESTS_25),
+    ("2.6", "2.6.9", 'compile', None, Pyc26, TESTS_26),
+    ("2.7", "2.7.9", 'compile', None, Pyc27, TESTS_27),
+    ("3.0", "3.0.1", 'compile', None, Pyc30, TESTS_30),
+    ("3.1", "3.1.5", 'compile', None, Pyc31, TESTS_31),
+    ("3.2", "3.2.6", 'compile', 'cpython-32', Pyc32, TESTS_32),
+    ("3.3", "3.3.6", 'compile', 'cpython-33', Pyc33, TESTS_33),
+    ("3.4", "3.4.3", 'compile', 'cpython-34', Pyc34, TESTS_34),
+    ("3.5", "3.5.0a2", 'compile', 'cpython-35', Pyc35, TESTS_35),
 ]
 
 for v in VERSIONS:
@@ -247,8 +341,12 @@ for v in VERSIONS:
         p = subprocess.Popen(['./python', 'Lib/compileall.py', str(subdir)], cwd=str(pydir), stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         p.wait()
     # now, the actual tests
-    for test, exp in tests.items():
-        pycfile = subdir / (test + '.pyc')
+    for test, exp in sorted(tests.items(), key=lambda x: x[0]):
+        if tag:
+            tdir, _, tname = test.rpartition('/')
+            pycfile = subdir / tdir / '__pycache__' / ('{}.{}.pyc'.format(tname, tag))
+        else:
+            pycfile = subdir / (test + '.pyc')
         if cmode == 'import':
             errfile = subdir / (test + '.log')
             with errfile.open('wb') as err:

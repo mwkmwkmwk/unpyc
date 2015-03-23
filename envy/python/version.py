@@ -160,6 +160,8 @@ class Pyc10(metaclass=PycVersion):
     has_frozenset = False
     # has binary float format in marshal
     has_bin_float = False
+    # has with statement
+    has_with = False
     # has class decorators
     has_cls_deco = False
     # generic py3k flag - unicode strings, kw-only args, ...
@@ -297,6 +299,7 @@ class Pyc25(Pyc24):
     name = "Python 2.5"
     has_frozenset = True
     has_bin_float = True
+    has_with = True
 
 class Pyc26(Pyc25):
     # 62151 used in prealpha

@@ -223,6 +223,7 @@ TESTS_25.update({
     'marshal/float': '25',
     'marshal/unicode': '25',
     'stmt/exec_': '25',
+    'stmt/with_': '25',
     'defs/cls': '25',
 })
 

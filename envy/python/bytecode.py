@@ -350,6 +350,10 @@ class OpcodeInplaceOr(Opcode):
 class OpcodeBreakLoop(Opcode):
     name = 'BREAK_LOOP'
 
+@_opcode(81, 'has_with')
+class OpcodeWithCleanup(Opcode):
+    name = 'WITH_CLEANUP'
+
 @_opcode(81, '!has_new_raise')
 class OpcodeRaiseException(Opcode):
     name = 'RAISE_EXCEPTION'

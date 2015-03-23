@@ -69,8 +69,6 @@ from .bytecode import *
 #   - None is now a keyword
 #   - decorators
 #   - genexp
-#   - listcomp uses LIST_APPEND
-#   - we have a nop
 #   - enter peephole:
 #
 #     - UNARY_NOT JUMP_IF_FALSE [POP] -> JUMP_IF_TRUE [POP]
@@ -423,6 +421,24 @@ def _store_visitor(op, *stack):
         def visit_store_multi_start(self, deco, comp, start, *args):
             dst, extra = func(self, deco, *args)
             return [
+                comp,
+                CompForLoop(start.loop, start.flow),
+                CompLevel(comp.meat, comp.items + [CompFor(dst, start.expr)])
+            ] + extra
+
+        @_visitor(op, MultiAssign, ForStart, *stack, flag='has_list_append')
+        def visit_store_multi_start(self, deco, ass, start, *args):
+            dst, extra = func(self, deco, *args)
+            if len(ass.dsts) != 1:
+                raise PythonError("multiassign in list comp too long")
+            if not isinstance(ass.src, ExprList) or ass.src.exprs:
+                raise PythonError("comp should start with an empty list")
+            expr = ExprListComp()
+            meat = OldListCompStart(expr, ass.dsts[0])
+            comp = CompLevel(meat, [])
+            return [
+                expr,
+                meat,
                 comp,
                 CompForLoop(start.loop, start.flow),
                 CompLevel(comp.meat, comp.items + [CompFor(dst, start.expr)])
@@ -1487,7 +1503,7 @@ def _visit_inplace_store_slice_ee(self, deco, inp, _rot):
 
 # list comprehensions
 
-@_visitor(OpcodeStoreName, DupAttr)
+@_visitor(OpcodeStoreName, DupAttr, flag='!has_list_append')
 def visit_listcomp_start(self, deco, dup):
     if (not isinstance(dup.expr, ExprList)
         or len(dup.expr.exprs) != 0
@@ -1508,7 +1524,7 @@ def visit_listcomp_start(self, deco, dup):
     meat = OldListCompStart(expr, ExprGlobal(self.param))
     return [expr, meat, CompLevel(meat, [])]
 
-@_visitor(OpcodeStoreFast, DupAttr)
+@_visitor(OpcodeStoreFast, DupAttr, flag='!has_list_append')
 def visit_listcomp_start(self, deco, dup):
     if (not isinstance(dup.expr, ExprList)
         or len(dup.expr.exprs) != 0
@@ -1518,7 +1534,7 @@ def visit_listcomp_start(self, deco, dup):
     meat = OldListCompStart(expr, deco.fast(self.param))
     return [expr, meat, CompLevel(meat, [])]
 
-@_visitor(OpcodePopTop, CompLevel, ExprCall)
+@_visitor(OpcodePopTop, CompLevel, ExprCall, flag='!has_list_append')
 def visit_listcomp_item(self, deco, comp, call):
     if not isinstance(comp.meat, OldListCompStart):
         raise PythonError("not an old list comp...")
@@ -1528,6 +1544,15 @@ def visit_listcomp_item(self, deco, comp, call):
         raise PythonError("funny args to list.append")
     arg = call.params[0][1]
     comp.meat.expr.comp = Comp(arg, comp.items)
+    return []
+
+@_visitor(OpcodeListAppend, CompLevel, Expr, Expr, flag='has_list_append')
+def visit_listcomp_item(self, deco, comp, tmp, val):
+    if not isinstance(comp.meat, OldListCompStart):
+        raise PythonError("not an old list comp...")
+    if comp.meat.tmp != tmp:
+        raise PythonError("list.append temp doesn't match")
+    comp.meat.expr.comp = Comp(val, comp.items)
     return []
 
 @_visitor(OpcodeDeleteName, OldListCompStart)

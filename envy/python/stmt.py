@@ -280,7 +280,10 @@ class StmtRaise(Stmt):
         if self.cls is None:
             yield "raise"
         elif self.val is None:
-            yield "raise {}".format(self.cls.show(None))
+            if self.tb is None:
+                yield "raise {}".format(self.cls.show(None))
+            else:
+                yield "raise {} from {}".format(self.cls.show(None), self.tb.show(None))
         elif self.tb is None:
             yield "raise {}, {}".format(self.cls.show(None), self.val.show(None))
         else:

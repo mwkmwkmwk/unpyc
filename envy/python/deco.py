@@ -111,7 +111,6 @@ from .bytecode import *
 #   - make closure change?
 #   - has some opcodes
 #   - nonlocal
-#   - only two-arg raise, and different
 #   - ellipsis allowed everywhere
 #   - list comprehensions are functions
 #   - still new with sequence
@@ -752,14 +751,24 @@ def _visit_raise_1(self, deco, cls, _):
 def _visit_raise_2(self, deco, cls, val):
     return StmtRaise(cls, val), []
 
-# Python 1.3+
-@_stmt_visitor(OpcodeRaiseVarargs, Exprs('param', 1))
+# Python 1.3-2.7
+@_stmt_visitor(OpcodeRaiseVarargs, Exprs('param', 1), flag='!has_raise_from')
 def _visit_raise_varargs(self, deco, exprs):
     if len(exprs) > 3:
         raise PythonError("too many args to raise")
     if len(exprs) == 0 and not deco.version.has_reraise:
         raise PythonError("too few args to raise")
     return StmtRaise(*exprs), []
+
+# Python 3
+@_stmt_visitor(OpcodeRaiseVarargs, Exprs('param', 1), flag='has_raise_from')
+def _visit_raise_from(self, deco, exprs):
+    if len(exprs) < 2:
+        return StmtRaise(*exprs), []
+    elif len(exprs) == 2:
+        return StmtRaise(exprs[0], None, exprs[1]), []
+    else:
+        raise PythonError("too many args to raise")
 
 # exec statement
 

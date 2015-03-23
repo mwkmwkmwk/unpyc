@@ -169,6 +169,8 @@ class Pyc10(metaclass=PycVersion):
     has_old_divide = True
     # has unary repr operator
     has_repr = True
+    # has raise x from y
+    has_raise_from = False
     # has source size in pyc
     has_size = False
     # has marshal optimized formats
@@ -316,6 +318,7 @@ class Pyc30(Pyc27):
     has_exec = False
     has_old_divide = False
     has_repr = False
+    has_raise_from = True
 
 class Pyc31(Pyc30):
     # 3141 used in prealpha

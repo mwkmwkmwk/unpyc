@@ -95,6 +95,8 @@ class Pyc10(metaclass=PycVersion):
     has_new_slice = False
     # has complex numbers
     has_complex = False
+    # has marshal 'I' code
+    has_marshal_int64 = False
     # has stacksize and lnotab
     has_stacksize = False
     # has assert statement
@@ -213,6 +215,7 @@ class Pyc15(Pyc14):
     """Introduces stacksize and lnotab."""
     code = _v(20121)
     name = "Python 1.5"
+    has_marshal_int64 = True
     has_stacksize = True
     has_assert = True
 
@@ -332,6 +335,7 @@ class Pyc32(Pyc31):
     name = "Python 3.2"
     has_dup_topx = False
     has_rot_four = False
+    has_marshal_int64 = False
 
 class Pyc33(Pyc32):
     # 3190 used in prealpha

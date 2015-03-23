@@ -488,12 +488,14 @@ def load_false(ctx, flag):
 # where it would normally have an int.  We deserialize them as ints, since
 # that's definitely what the compiler has seen if we come across one.
 #
-# For Python 3:
+# For Python 3.0:
 #
 # - ints that fit in 32 bits are represented by 'i'
+# - ints that fit in 64 bits are represented by 'I'
 # - larger ints are represented by 'l'
-# - 'I' is gone, and so is long
-# - both 'i' and 'l' are deserialized as int
+# - long is gone, everything is deserialized as int
+#
+# For Python 3.3: likewise, but 'I' is gone.
 #
 # Life is good.
 
@@ -501,7 +503,7 @@ def load_false(ctx, flag):
 def load_int(ctx, flag):
     return ctx.ref(MarshalInt(ctx.le4s()), flag)
 
-@_code('I', '!py3k')
+@_code('I', 'has_marshal_int64')
 def load_int64(ctx, flag):
     return ctx.ref(MarshalInt(ctx.le8s()), flag)
 

@@ -147,6 +147,8 @@ class Pyc10(metaclass=PycVersion):
     has_set_lineno = True
     # has peephole optimier
     has_peephole = False
+    # has LIST_APPEND opcode
+    has_list_append = True
     # has interned bytestrings in marshal
     has_str_intern = False
     # has sets and frozensets
@@ -272,6 +274,7 @@ class Pyc24(Pyc23):
     # 62051 used in a3
     code = _v(62061)
     name = "Python 2.4"
+    has_list_append = True
     has_str_intern = True
 
 class Pyc25(Pyc24):

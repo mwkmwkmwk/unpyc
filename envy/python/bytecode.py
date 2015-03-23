@@ -150,6 +150,10 @@ class OpcodeUnaryCall(Opcode):
 class OpcodeUnaryInvert(Opcode):
     name = 'UNARY_INVERT'
 
+@_opcode(18, 'has_list_append')
+class OpcodeListAppend(Opcode):
+    name = 'LIST_APPEND'
+
 @_opcode(19, 'has_power')
 class OpcodeBinaryPower(Opcode):
     name = 'BINARY_POWER'

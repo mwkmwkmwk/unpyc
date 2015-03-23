@@ -164,6 +164,8 @@ class Pyc10(metaclass=PycVersion):
     has_with = False
     # has class decorators
     has_cls_deco = False
+    # has STORE_MAP opcode
+    has_store_map = False
     # generic py3k flag - unicode strings, kw-only args, ...
     py3k = False
     # has complex (tuple) arguments - def f(a, (b, c)):
@@ -306,6 +308,7 @@ class Pyc26(Pyc25):
     code = _v(62161)
     name = "Python 2.6"
     has_cls_deco = True
+    has_store_map = True
 
 class Pyc27(Pyc26):
     # 62171 used in preaplha

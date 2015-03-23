@@ -250,6 +250,10 @@ class OpcodeDeleteSliceNE(Opcode):
 class OpcodeDeleteSliceEE(Opcode):
     name = 'DELETE_SLICE_EE'
 
+@_opcode(54, 'has_store_map')
+class OpcodeStoreMap(Opcode):
+    name = 'STORE_MAP'
+
 @_opcode(55, 'has_inplace')
 class OpcodeInplaceAdd(Opcode):
     name = 'INPLACE_ADD'

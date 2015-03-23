@@ -87,7 +87,6 @@ from .bytecode import *
 #
 # - py 2.6:
 #
-#   - STORE_MAP used for dict displays
 #   - except a as b
 #   - different with sequence
 #
@@ -569,7 +568,7 @@ def visit_build_list(self, deco, exprs):
 
 @_visitor(OpcodeBuildMap)
 def visit_build_map(self, deco):
-    if self.param:
+    if self.param and not deco.version.has_store_map:
         raise PythonError("Non-zero param for BUILD_MAP")
     return [ExprDict([])]
 
@@ -578,8 +577,13 @@ def visit_build_map_step(self, deco, dict_, _1, val, _2, key):
     dict_.items.append((key, val))
     return [dict_]
 
-@_visitor(OpcodeStoreSubscr, ExprDict, DupTop, Expr, Expr, RotThree, flag='!has_reversed_kv')
+@_visitor(OpcodeStoreSubscr, ExprDict, DupTop, Expr, Expr, RotThree, flag=('!has_reversed_kv', '!has_store_map'))
 def visit_build_map_step(self, deco, dict_, _1, key, val, _2):
+    dict_.items.append((key, val))
+    return [dict_]
+
+@_visitor(OpcodeStoreMap, ExprDict, Expr, Expr)
+def visit_build_map_step(self, deco, dict_, val, key):
     dict_.items.append((key, val))
     return [dict_]
 

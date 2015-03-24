@@ -259,10 +259,12 @@ OldListCompStart = namedtuple('OldListCompStart', ['expr', 'tmp'])
 CompLevel = namedtuple('CompLevel', ['meat', 'items'])
 
 Closure = namedtuple('Closure', ['var'])
+ClosuresTuple = namedtuple('ClosuresTuple', ['vars'])
 
 # a special marker to put in stack want lists - will match getattr(opcode, attr)
 # expressions and pass a list
 Exprs = namedtuple('Exprs', ['attr', 'factor'])
+UglyClosures = object()
 Closures = object()
 
 # visitors
@@ -289,6 +291,8 @@ class _Visitor:
             if isinstance(want, Exprs):
                 total += getattr(opcode, want.attr) * want.factor
             elif want is Closures:
+                total += opcode.param
+            elif want is UglyClosures:
                 # fuck you.
                 if not deco.stack:
                     return False
@@ -321,6 +325,14 @@ class _Visitor:
                     arg.append(expr if want.factor == 1 else exprs)
                 arg.reverse()
             elif want is Closures:
+                arg = []
+                for _ in range(opcode.param):
+                    expr = stack.pop()
+                    if not isinstance(expr, Closure):
+                        return False
+                    arg.append(expr)
+                arg.reverse()
+            elif want is UglyClosures:
                 arg = []
                 for _ in range(closure_num):
                     closure = stack.pop()
@@ -1323,9 +1335,17 @@ def _visit_set_func_args(self, deco, args, fun):
 def _visit_make_function(self, deco, args, code):
     return [ExprFunctionRaw(deco_code(code), args, [])]
 
-@_visitor(OpcodeMakeClosure, Closures, Exprs('param', 1), Code)
+@_visitor(OpcodeBuildTuple, Closures)
+def visit_closure_tuple(self, deco, closures):
+    return [ClosuresTuple([closure.var for closure in closures])]
+
+@_visitor(OpcodeMakeClosure, UglyClosures, Exprs('param', 1), Code, flag='!has_sane_closure')
 def _visit_make_function(self, deco, closures, args, code):
     return [ExprFunctionRaw(deco_code(code), args, closures)]
+
+@_visitor(OpcodeMakeClosure, ClosuresTuple, Exprs('param', 1), Code, flag='has_sane_closure')
+def _visit_make_function(self, deco, closures, args, code):
+    return [ExprFunctionRaw(deco_code(code), args, closures.vars)]
 
 @_visitor(OpcodeUnaryCall, ExprFunctionRaw)
 def _visit_unary_call(self, deco, fun):

@@ -164,6 +164,8 @@ class Pyc10(metaclass=PycVersion):
     has_bin_float = False
     # has with statement
     has_with = False
+    # closures go through BUILD_TUPLE
+    has_sane_closure = False
     # has class decorators
     has_cls_deco = False
     # has STORE_MAP opcode
@@ -335,6 +337,8 @@ class Pyc25(Pyc24):
     has_frozenset = True
     has_bin_float = True
     has_with = True
+    has_sane_closure = True
+    has_reversed_kv = True
 
 class Pyc26(Pyc25):
     # 62151 used in prealpha

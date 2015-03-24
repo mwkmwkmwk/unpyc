@@ -599,31 +599,19 @@ def visit_binary_call(self, deco, expr, params):
 
 @_visitor(OpcodeCallFunction, Expr, Exprs('args', 1), Exprs('kwargs', 2))
 def visit_call_function(self, deco, fun, args, kwargs):
-    for name, arg in kwargs:
-        if not isinstance(name, ExprString):
-            raise PythonError("kwarg not a string")
-    return [ExprCall(fun, [('', arg) for arg in args] + [(name.val.decode('ascii'), arg) for name, arg in kwargs])]
+    return [ExprCall(fun, [('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs])]
 
 @_visitor(OpcodeCallFunctionVar, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr)
 def visit_call_function(self, deco, fun, args, kwargs, vararg):
-    for name, arg in kwargs:
-        if not isinstance(name, ExprString):
-            raise PythonError("kwarg not a string")
-    return [ExprCall(fun, [('', arg) for arg in args] + [(name.val.decode('ascii'), arg) for name, arg in kwargs] + [('*', vararg)])]
+    return [ExprCall(fun, [('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('*', vararg)])]
 
 @_visitor(OpcodeCallFunctionKw, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr)
 def visit_call_function(self, deco, fun, args, kwargs, varkw):
-    for name, arg in kwargs:
-        if not isinstance(name, ExprString):
-            raise PythonError("kwarg not a string")
-    return [ExprCall(fun, [('', arg) for arg in args] + [(name.val.decode('ascii'), arg) for name, arg in kwargs] + [('**', varkw)])]
+    return [ExprCall(fun, [('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('**', varkw)])]
 
 @_visitor(OpcodeCallFunctionVarKw, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr, Expr)
 def visit_call_function(self, deco, fun, args, kwargs, vararg, varkw):
-    for name, arg in kwargs:
-        if not isinstance(name, ExprString):
-            raise PythonError("kwarg not a string")
-    return [ExprCall(fun, [('', arg) for arg in args] + [(name.val.decode('ascii'), arg) for name, arg in kwargs] + [('*', vararg), ('**', varkw)])]
+    return [ExprCall(fun, [('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('*', vararg), ('**', varkw)])]
 
 # expressions - load const
 
@@ -847,11 +835,7 @@ def _visit_import_name_attr(self, deco, import_):
 
 @_visitor(OpcodeImportName, ExprTuple, flag=('has_import_as', '!has_relative_import'))
 def _visit_import_name(self, deco, expr):
-    fromlist = []
-    for item in expr.exprs:
-        if not isinstance(item, ExprString):
-            raise PythonError("non-string in fromlist")
-        fromlist.append(item.val.decode('ascii'))
+    fromlist = [deco.string(item) for item in expr.exprs]
     if fromlist == ['*']:
         return [Import2Star(-1, self.param)]
     else:
@@ -859,11 +843,7 @@ def _visit_import_name(self, deco, expr):
 
 @_visitor(OpcodeImportName, ExprInt, ExprTuple, flag='has_relative_import')
 def _visit_import_name(self, deco, level, expr):
-    fromlist = []
-    for item in expr.exprs:
-        if not isinstance(item, ExprString):
-            raise PythonError("non-string in fromlist")
-        fromlist.append(item.val.decode('ascii'))
+    fromlist = [deco.string(item) for item in expr.exprs]
     if fromlist == ['*']:
         return [Import2Star(level.val, self.param)]
     else:
@@ -1357,11 +1337,11 @@ def _visit_unary_call(self, deco, fun):
 def visit_load_closure(self, deco):
     return [Closure(deco.deref(self.param))]
 
-@_visitor(OpcodeBuildClass, ExprString, ExprTuple, UnaryCall)
+@_visitor(OpcodeBuildClass, Expr, ExprTuple, UnaryCall)
 def _visit_build_class(self, deco, name, expr, call):
-    return [ExprClassRaw(name.val.decode('ascii'), expr.exprs, call.code)]
+    return [ExprClassRaw(deco.string(name), expr.exprs, call.code)]
 
-@_visitor(OpcodeBuildClass, ExprString, ExprTuple, ExprCall, flag='has_new_code')
+@_visitor(OpcodeBuildClass, Expr, ExprTuple, ExprCall, flag='has_new_code')
 def _visit_build_class(self, deco, name, expr, call):
     if call.params:
         raise PythonError("class call with params")
@@ -1372,7 +1352,7 @@ def _visit_build_class(self, deco, name, expr, call):
         raise PythonError("class call with a function with closures")
     if fun.defargs:
         raise PythonError("class call with a function with default arguments")
-    return [ExprClassRaw(name.val.decode('ascii'), expr.exprs, fun.code)]
+    return [ExprClassRaw(deco.string(name), expr.exprs, fun.code)]
 
 @_visitor(OpcodeLoadLocals)
 def _visit_load_locals(self, deco):
@@ -1662,6 +1642,16 @@ class DecoCtx:
         if fidx in range(len(self.code.freevars)):
             return ExprDeref(idx, self.code.freevars[fidx])
         raise PythonError("deref var out of range")
+
+    def string(self, expr):
+        if self.version.py3k:
+            if not isinstance(expr, ExprUnicode):
+                raise PythonError("wanted a string")
+            return expr.val
+        else:
+            if not isinstance(expr, ExprString):
+                raise PythonError("wanted a string")
+            return expr.val.decode('ascii')
 
 
 def deco_code(code):

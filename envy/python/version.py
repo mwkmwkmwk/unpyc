@@ -166,7 +166,11 @@ class Pyc10(metaclass=PycVersion):
     has_cls_deco = False
     # has STORE_MAP opcode
     has_store_map = False
-    # generic py3k flag - unicode strings, kw-only args, ...
+    # has SETUP_WITH
+    has_setup_with = False
+    # has EXTENDED_ARG at 145
+    has_earg_145 = False
+    # generic py3k flag - unicode strings, ...
     py3k = False
     # has complex (tuple) arguments - def f(a, (b, c)):
     has_complex_args = True
@@ -185,12 +189,38 @@ class Pyc10(metaclass=PycVersion):
     has_repr = True
     # has raise x from y
     has_raise_from = False
+    # has new-style build class
+    has_new_class = False
+    # has store locals
+    has_store_locals = False
+    # has UNPACK_EX
+    has_unpack_ex = False
+    # has set & dict comprehensions
+    has_setdict_comp = False
+    # has armor-plated except clauses
+    has_pop_except = False
+    # has kw-only arguments
+    has_kwonlyargs = False
+    # has new-style comprehension implementation
+    has_new_comp = False
+    # has new-style jumps (with pop)
+    has_new_jump = False
+    # has DUP_TOP_TWO
+    has_dup_two = False
+    # has DELETE_DEREF
+    has_delete_deref = False
     # has source size in pyc
     has_size = False
+    # has yield from
+    has_yield_from = False
     # has marshal optimized formats
     has_marshal_opt = False
     # has marshal reference support
     has_marshal_ref = False
+    # has LOAD_CLASS_DEREF
+    has_classderef = False
+    # has matrix multiplication
+    has_matmul = False
 
 class Pyc11(Pyc10):
     code = 0x999903
@@ -317,13 +347,18 @@ class Pyc27(Pyc26):
     # 62201 used in preaplha
     code = _v(62211)
     name = "Python 2.7"
+    has_setdict_comp = True
+    has_new_comp = True
+    has_setup_with = True
+    has_earg_145 = True
+    has_new_jump = True
 
 # Python 3
 
 # 3000, 3010, 3020, 3030, 3040, 3050, 3060, 3061, 3071, 3081, 3091, 3101
 # used in development branch
 
-class Pyc30(Pyc27):
+class Pyc30(Pyc26):
     # 3103 used in a1-a3
     # 3111 used in a4
     code = _v(3131)
@@ -340,11 +375,19 @@ class Pyc30(Pyc27):
     has_old_divide = False
     has_repr = False
     has_raise_from = True
+    has_store_locals = True
+    has_unpack_ex = True
+    has_new_class = True
+    has_setdict_comp = True
+    has_pop_except = True
+    has_kwonlyargs = True
 
 class Pyc31(Pyc30):
     # 3141 used in prealpha
     code = _v(3151)
     name = "Python 3.1"
+    has_new_comp = True
+    has_new_jump = True
 
 class Pyc32(Pyc31):
     # 3160 used in prealpha
@@ -353,7 +396,9 @@ class Pyc32(Pyc31):
     name = "Python 3.2"
     has_dup_topx = False
     has_rot_four = False
-    has_marshal_int64 = False
+    has_dup_two = True
+    has_setup_with = True
+    has_delete_deref = True
 
 class Pyc33(Pyc32):
     # 3190 used in prealpha
@@ -362,7 +407,9 @@ class Pyc33(Pyc32):
     # 3220 used in a1-a3
     code = _v(3230)
     name = "Python 3.3"
+    has_marshal_int64 = False
     has_size = True
+    has_yield_from = True
 
 class Pyc34(Pyc33):
     # 3250, 3260, 3270 used in prealpha
@@ -373,8 +420,11 @@ class Pyc34(Pyc33):
     name = "Python 3.4"
     has_marshal_opt = True
     has_marshal_ref = True
+    has_store_locals = False
+    has_classderef = True
 
 class Pyc35(Pyc34):
     # currently in alpha stage
     code = _v(3320)
     name = "Python 3.5"
+    has_matmul = True

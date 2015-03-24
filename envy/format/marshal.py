@@ -676,7 +676,7 @@ def load_code(ctx, flag):
     res = MarshalCode()
     ctx.ref(res, flag)
     res.argcount = ctx.lea()
-    if ctx.version.py3k:
+    if ctx.version.has_kwonlyargs:
         res.kwonlyargcount = ctx.le4()
     else:
         res.kwonlyargcount = 0

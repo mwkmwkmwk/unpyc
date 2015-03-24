@@ -502,6 +502,10 @@ def visit_set_lineno(self, deco):
 def visit_dup_top(self, deco):
     return [DupTop()]
 
+@_visitor(OpcodeDupTopTwo)
+def visit_dup_top(self, deco):
+    return [DupTwo()]
+
 @_visitor(OpcodeDupTopX)
 def visit_dup_topx(self, deco):
     if self.param == 2:

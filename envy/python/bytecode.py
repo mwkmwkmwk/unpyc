@@ -126,6 +126,10 @@ class OpcodeDupTop(Opcode):
 class OpcodeRotFour(Opcode):
     name = 'ROT_FOUR'
 
+@_opcode(5, 'has_dup_two')
+class OpcodeDupTopTwo(Opcode):
+    name = 'DUP_TOP_TWO'
+
 @_opcode(10)
 class OpcodeUnaryPositive(Opcode):
     name = 'UNARY_POSITIVE'
@@ -150,7 +154,19 @@ class OpcodeUnaryCall(Opcode):
 class OpcodeUnaryInvert(Opcode):
     name = 'UNARY_INVERT'
 
-@_opcode(18, 'has_list_append')
+@_opcode(16, 'has_matmul')
+class OpcodeBinaryMatrixMultiply(Opcode):
+    name = 'BINARY_MATRIX_MULTIPLY'
+
+@_opcode(17, 'has_matmul')
+class OpcodeInplaceMatrixMultiply(Opcode):
+    name = 'INPLACE_MATRIX_MULTIPLY'
+
+@_opcode(17, ('has_setdict_comp', '!has_new_comp'))
+class OpcodeSetAdd(Opcode):
+    name = 'SET_ADD'
+
+@_opcode(18, ('has_list_append', '!has_new_comp'))
 class OpcodeListAppend(Opcode):
     name = 'LIST_APPEND'
 
@@ -310,9 +326,21 @@ class OpcodeInplacePower(Opcode):
 class OpcodeGetIter(Opcode):
     name = 'GET_ITER'
 
+@_opcode(69, 'has_store_locals')
+class OpcodeStoreLocals(Opcode):
+    name = 'STORE_LOCALS'
+
 @_opcode(70)
 class OpcodePrintExpr(Opcode):
     name = 'PRINT_EXPR'
+
+@_opcode(71, 'has_new_class')
+class OpcodeLoadBuildClass(Opcode):
+    name = 'LOAD_BUILD_CLASS'
+
+@_opcode(72, 'has_yield_from')
+class OpcodeYieldFrom(Opcode):
+    name = 'YIELD_FROM'
 
 @_opcode(71, 'has_print')
 class OpcodePrintItem(Opcode):
@@ -362,7 +390,7 @@ class OpcodeWithCleanup(Opcode):
 class OpcodeRaiseException(Opcode):
     name = 'RAISE_EXCEPTION'
 
-@_opcode(82)
+@_opcode(82, '!has_new_class')
 class OpcodeLoadLocals(Opcode):
     name = 'LOAD_LOCALS'
 
@@ -396,9 +424,13 @@ class OpcodePopBlock(Opcode):
 class OpcodeEndFinally(Opcode):
     name = 'END_FINALLY'
 
-@_opcode(89)
+@_opcode(89, '!has_new_class')
 class OpcodeBuildClass(Opcode):
     name = 'BUILD_CLASS'
+
+@_opcode(89, 'has_pop_except')
+class OpcodePopExcept(Opcode):
+    name = 'POP_EXCEPT'
 
 
 # opcodes have an argument from here on
@@ -430,6 +462,27 @@ class OpcodeForIter(OpcodeParamRel):
 @_opcode(94, '!has_new_code')
 class OpcodeUnpackArg(OpcodeParamNum):
     name = "UNPACK_ARG"
+
+@_opcode(94, ('has_new_comp', 'has_earg_145'))
+@_opcode(145, ('has_new_comp', '!has_earg_145'))
+class OpcodeListAppendNew(OpcodeParamNum):
+    name = 'LIST_APPEND'
+
+@_opcode(94, 'has_unpack_ex')
+class OpcodeUnpackEx(Opcode):
+    __slots__ = 'before', 'after'
+    NAME = 'UNPACK_EX'
+
+    def read_params(self, bytecode):
+        param = bytecode.word(self.ext)
+        self.before = param & 0xff
+        self.after = param >> 8 & 0xff
+        if param & ~0xffff:
+            raise PythonError("funny unpack ex")
+
+    def print_params(self):
+        return "{}, {}".format(self.before, self.after)
+
 
 @_opcode(95)
 class OpcodeStoreAttr(OpcodeParamName):
@@ -488,15 +541,22 @@ class OpcodeBuildTuple(OpcodeParamNum):
 class OpcodeBuildList(OpcodeParamNum):
     name = "BUILD_LIST"
 
-@_opcode(104)
+@_opcode(104, 'has_setdict_comp')
+class OpcodeBuildSet(OpcodeParamNum):
+    name = "BUILD_SET"
+
+@_opcode(104, '!has_setdict_comp')
+@_opcode(105, 'has_setdict_comp')
 class OpcodeBuildMap(OpcodeParamNum):
     name = "BUILD_MAP"
 
-@_opcode(105)
+@_opcode(105, '!has_setdict_comp')
+@_opcode(106, 'has_setdict_comp')
 class OpcodeLoadAttr(OpcodeParamName):
     name = "LOAD_ATTR"
 
-@_opcode(106)
+@_opcode(106, '!has_setdict_comp')
+@_opcode(107, 'has_setdict_comp')
 class OpcodeCompareOp(Opcode):
     __slots__ = 'mode',
     name = "COMPARE_OP"
@@ -511,11 +571,13 @@ class OpcodeCompareOp(Opcode):
         return self.mode.name
 
 
-@_opcode(107)
+@_opcode(107, '!has_setdict_comp')
+@_opcode(108, 'has_setdict_comp')
 class OpcodeImportName(OpcodeParamName):
     name = "IMPORT_NAME"
 
-@_opcode(108)
+@_opcode(108, '!has_setdict_comp')
+@_opcode(109, 'has_setdict_comp')
 class OpcodeImportFrom(OpcodeParamName):
     name = "IMPORT_FROM"
 
@@ -527,13 +589,21 @@ class OpcodeAccessMode(OpcodeParamName):
 class OpcodeJumpForward(OpcodeParamRel):
     name = 'JUMP_FORWARD'
 
-@_opcode(111)
+@_opcode(111, '!has_new_jump')
 class OpcodeJumpIfFalse(OpcodeParamRel):
     name = 'JUMP_IF_FALSE'
 
-@_opcode(112)
+@_opcode(112, '!has_new_jump')
 class OpcodeJumpIfTrue(OpcodeParamRel):
     name = 'JUMP_IF_TRUE'
+
+@_opcode(111, 'has_new_jump')
+class OpcodeJumpIfFalseOrPop(OpcodeParamAbs):
+    name = 'JUMP_IF_FALSE_OR_POP'
+
+@_opcode(112, 'has_new_jump')
+class OpcodeJumpIfTrueOrPop(OpcodeParamAbs):
+    name = 'JUMP_IF_TRUE_OR_POP'
 
 @_opcode(113)
 class OpcodeJumpAbsolute(OpcodeParamAbs):
@@ -542,6 +612,14 @@ class OpcodeJumpAbsolute(OpcodeParamAbs):
 @_opcode(114, '!has_iter')
 class OpcodeForLoop(OpcodeParamRel):
     name = 'FOR_LOOP'
+
+@_opcode(114, 'has_new_jump')
+class OpcodePopJumpIfFalse(OpcodeParamAbs):
+    name = 'POP_JUMP_IF_FALSE'
+
+@_opcode(115, 'has_new_jump')
+class OpcodePopJumpIfTrue(OpcodeParamAbs):
+    name = 'POP_JUMP_IF_TRUE'
 
 # TODO: LOAD_LOCAL - appears unused...
 
@@ -634,25 +712,52 @@ class OpcodeCallFunctionBase(Opcode):
         param = bytecode.word(self.ext)
         self.args = param & 0xff
         self.kwargs = param >> 8 & 0xff
+        if param & ~0xffff:
+            raise PythonError("funny call function")
 
     def print_params(self):
         return "{}, {}".format(self.args, self.kwargs)
+
+
+class OpcodeMakeFunctionNewBase(Opcode):
+    __slots__ = 'args', 'kwargs', 'ann'
+
+    def read_params(self, bytecode):
+        param = bytecode.word(self.ext)
+        self.args = param & 0xff
+        self.kwargs = param >> 8 & 0xff
+        self.ann = param >> 16 & 0x7fff
+        if param & ~0x7fffffff:
+            raise PythonError("funny make function")
+
+    def print_params(self):
+        return "{}, {}, {}".format(self.args, self.kwargs, self.ann)
 
 
 @_opcode(131, 'has_new_code')
 class OpcodeCallFunction(OpcodeCallFunctionBase):
     name = "CALL_FUNCTION"
 
-@_opcode(132, 'has_new_code')
+@_opcode(132, ('has_new_code', '!has_kwonlyargs'))
 class OpcodeMakeFunction(OpcodeParamNum):
     name = "MAKE_FUNCTION"
+
+@_opcode(132, 'has_kwonlyargs')
+class OpcodeMakeFunctionNew(OpcodeMakeFunctionNewBase):
+    name = "MAKE_FUNCTION"
+
+# TODO: kwonlyargs version
 
 @_opcode(133, 'has_new_slice')
 class OpcodeBuildSlice(OpcodeParamNum):
     name = "BUILD_SLICE"
 
-@_opcode(134, 'has_closure')
+@_opcode(134, ('has_closure', '!has_kwonlyargs'))
 class OpcodeMakeClosure(OpcodeParamNum):
+    name = "MAKE_CLOSURE"
+
+@_opcode(134, 'has_kwonlyargs')
+class OpcodeMakeClosureNew(OpcodeMakeFunctionNewBase):
     name = "MAKE_CLOSURE"
 
 @_opcode(135, 'has_closure')
@@ -667,6 +772,10 @@ class OpcodeLoadDeref(OpcodeParamNum):
 class OpcodeStoreDeref(OpcodeParamNum):
     name = "STORE_DEREF"
 
+@_opcode(138, 'has_delete_deref')
+class OpcodeDeleteDeref(OpcodeParamNum):
+    name = "DELETE_DEREF"
+
 @_opcode(140, 'has_var_call')
 class OpcodeCallFunctionVar(OpcodeCallFunctionBase):
     name = "CALL_FUNCTION_VAR"
@@ -679,9 +788,27 @@ class OpcodeCallFunctionKw(OpcodeCallFunctionBase):
 class OpcodeCallFunctionVarKw(OpcodeCallFunctionBase):
     name = "CALL_FUNCTION_VAR_KW"
 
-@_opcode(143, 'has_extended_arg')
+@_opcode(143, 'has_setup_with')
+class OpcodeSetupWith(OpcodeParamRel):
+    name = 'SETUP_WITH'
+
+@_opcode(143, ('has_extended_arg', '!has_setup_with'))
+@_opcode(144, ('has_setup_with', '!has_earg_145'))
+@_opcode(145, ('has_setup_with', 'has_earg_145'))
 class ExtendedArg(OpcodeParamNum):
     name = "EXTENDED_ARG"
+
+@_opcode(146, 'has_new_comp')
+class OpcodeSetAddNew(OpcodeParamNum):
+    name = 'SET_ADD'
+
+@_opcode(147, 'has_new_comp')
+class OpcodeMapAddNew(OpcodeParamNum):
+    name = 'MAP_ADD'
+
+@_opcode(148, 'has_classderef')
+class OpcodeLoadClassDeref(OpcodeParamNum):
+    name = 'LOAD_CLASS_DEREF'
 
 
 class Bytecode:

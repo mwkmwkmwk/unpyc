@@ -182,9 +182,9 @@ RotFour = namedtuple('RotFour', [])
 Iter = namedtuple('Iter', ['expr'])
 
 Import = namedtuple('Import', ['name', 'items'])
-Import2Simple = namedtuple('Import2Simple', ['name', 'attrs'])
-Import2Star = namedtuple('Import2Star', ['name'])
-Import2From = namedtuple('Import2From', ['fromlist', 'name', 'exprs'])
+Import2Simple = namedtuple('Import2Simple', ['level', 'name', 'attrs'])
+Import2Star = namedtuple('Import2Star', ['level', 'name'])
+Import2From = namedtuple('Import2From', ['level', 'fromlist', 'name', 'exprs'])
 
 MultiAssign = namedtuple('MultiAssign', ['src', 'dsts'])
 
@@ -455,12 +455,12 @@ def _store_visitor(op, *stack):
             if import_.items:
                 raise PythonError("non-empty items for plain import")
             dst, extra = func(self, deco, *args)
-            return StmtImport(import_.name, [], dst), extra
+            return StmtImport(-1, import_.name, [], dst), extra
 
         @_stmt_visitor(op, Import2Simple, *stack)
         def _visit_store_name_import(self, deco, import_, *args):
             dst, extra = func(self, deco, *args)
-            return StmtImport(import_.name, import_.attrs, dst), extra
+            return StmtImport(import_.level, import_.name, import_.attrs, dst), extra
 
         return func
     return inner
@@ -817,7 +817,7 @@ def _visit_import_from_star(self, deco, import_, flag="!has_import_star"):
         raise NoMatch
     if import_.items:
         raise PythonError("non-empty items for star import")
-    return StmtImportStar(import_.name), [WantPop()]
+    return StmtImportStar(-1, import_.name), [WantPop()]
 
 @_visitor(OpcodeImportFrom, Import)
 def _visit_import_from(self, deco, import_):
@@ -828,20 +828,24 @@ def _visit_import_from(self, deco, import_):
 
 @_stmt_visitor(OpcodePopTop, Import)
 def _visit_import_from_end(self, deco, import_):
-    return StmtFromImport(import_.name, [(x, None) for x in import_.items]), []
+    return StmtFromImport(-1, import_.name, [(x, None) for x in import_.items]), []
 
 # imports - v2
 
-@_visitor(OpcodeImportName, ExprNone, flag='has_import_as')
+@_visitor(OpcodeImportName, ExprNone, flag=('has_import_as', '!has_relative_import'))
 def _visit_import_name(self, deco, expr):
-    return [Import2Simple(self.param, [])]
+    return [Import2Simple(-1, self.param, [])]
+
+@_visitor(OpcodeImportName, ExprInt, ExprNone, flag='has_relative_import')
+def _visit_import_name(self, deco, level, expr):
+    return [Import2Simple(level.val, self.param, [])]
 
 @_visitor(OpcodeLoadAttr, Import2Simple)
 def _visit_import_name_attr(self, deco, import_):
     import_.attrs.append(self.param)
     return [import_]
 
-@_visitor(OpcodeImportName, ExprTuple, flag='has_import_as')
+@_visitor(OpcodeImportName, ExprTuple, flag=('has_import_as', '!has_relative_import'))
 def _visit_import_name(self, deco, expr):
     fromlist = []
     for item in expr.exprs:
@@ -849,13 +853,25 @@ def _visit_import_name(self, deco, expr):
             raise PythonError("non-string in fromlist")
         fromlist.append(item.val.decode('ascii'))
     if fromlist == ['*']:
-        return [Import2Star(self.param)]
+        return [Import2Star(-1, self.param)]
     else:
-        return [Import2From(fromlist, self.param, [])]
+        return [Import2From(-1, fromlist, self.param, [])]
+
+@_visitor(OpcodeImportName, ExprInt, ExprTuple, flag='has_relative_import')
+def _visit_import_name(self, deco, level, expr):
+    fromlist = []
+    for item in expr.exprs:
+        if not isinstance(item, ExprString):
+            raise PythonError("non-string in fromlist")
+        fromlist.append(item.val.decode('ascii'))
+    if fromlist == ['*']:
+        return [Import2Star(level.val, self.param)]
+    else:
+        return [Import2From(level.val, fromlist, self.param, [])]
 
 @_stmt_visitor(OpcodeImportStar, Import2Star)
 def _visit_import_star(self, deco, import_):
-    return StmtImportStar(import_.name), []
+    return StmtImportStar(import_.level, import_.name), []
 
 @_visitor(OpcodeImportFrom, Import2From)
 def _visit_import_from(self, deco, import_):
@@ -867,7 +883,7 @@ def _visit_import_from(self, deco, import_):
 
 @_stmt_visitor(OpcodePopTop, Import2From)
 def _visit_import_from_end(self, deco, import_):
-    return StmtFromImport(import_.name, list(zip(import_.fromlist, import_.exprs))), []
+    return StmtFromImport(import_.level, import_.name, list(zip(import_.fromlist, import_.exprs))), []
 
 # if
 

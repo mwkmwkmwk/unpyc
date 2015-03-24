@@ -311,39 +311,44 @@ class StmtAssert(Stmt):
 
 
 class StmtImport(Stmt):
-    __slots__ = 'name', 'attrs', 'as_'
+    __slots__ = 'level', 'name', 'attrs', 'as_'
 
-    def __init__(self, name, attrs, as_):
+    def __init__(self, level, name, attrs, as_):
+        self.level = level
         self.name = name
         self.attrs = attrs
         self.as_ = as_
 
     def subprocess(self, process):
         return StmtImport(
+            self.level,
             self.name,
             self.attrs,
             process(self.as_)
         )
 
     def show(self):
-        yield "import {} as{} {}".format(self.name, ''.join('.' + attr for attr in self.attrs), self.as_.show(None))
+        yield "import {} {} as{} {}".format(self.level, self.name, ''.join('.' + attr for attr in self.attrs), self.as_.show(None))
 
 
 class StmtFromImport(Stmt):
-    __slots__ = 'name', 'items'
+    __slots__ = 'level', 'name', 'items'
 
-    def __init__(self, name, items):
+    def __init__(self, level, name, items):
+        self.level = level
         self.name = name
         self.items = items
 
     def subprocess(self, process):
         return StmtFromImport(
+            self.level,
             self.name,
             [(name, process(expr) if expr else None) for name, expr in self.items]
         )
 
     def show(self):
-        yield "from {} import {}".format(
+        yield "from {} {} import {}".format(
+            self.level,
             self.name,
             ', '.join(
                 "{} as {}".format(name, expr.show(None)) if expr else name
@@ -353,16 +358,17 @@ class StmtFromImport(Stmt):
 
 
 class StmtImportStar(Stmt):
-    __slots__ = 'name'
+    __slots__ = 'level', 'name'
 
-    def __init__(self, name):
+    def __init__(self, level, name):
+        self.level = level
         self.name = name
 
     def subprocess(self, process):
         return self
 
     def show(self):
-        yield "from {} import *".format(self.name)
+        yield "from {} {} import *".format(self.level, self.name)
 
 
 class StmtExec(Stmt):

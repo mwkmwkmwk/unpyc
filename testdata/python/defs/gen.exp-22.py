@@ -1,4 +1,4 @@
-from __future__ import generators as generators
+from -1 __future__ import generators as generators
 def f():
 	(yield $global[a])
 	(yield $global[b])

@@ -25,7 +25,7 @@ def g4():
 	del a$2
 	del d$0
 def g5():
-	from x import *
+	from -1 x import *
 	a$2 = 3
 	b$1 = c
 	b$1 = a$2

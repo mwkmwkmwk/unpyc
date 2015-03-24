@@ -1,37 +1,37 @@
 def g1():
-	import a as a$0
-	from z import b
+	import -1 a as a$0
+	from -1 z import b
 	def c():
 		pass
 	class d:
 		pass
 def g2():
-	import a as $global[a]
-	from z import b
+	import -1 a as $global[a]
+	from -1 z import b
 	def c():
 		pass
 	class d:
 		pass
 def g3():
 	exec z
-	import a as a
-	from z import b
+	import -1 a as a
+	from -1 z import b
 	def c():
 		pass
 	class d:
 		pass
 def g4():
 	exec z in None
-	import a as a
-	from z import b
+	import -1 a as a
+	from -1 z import b
 	def c():
 		pass
 	class d:
 		pass
 def g5():
-	from x import *
-	import a as a
-	from z import b
+	from -1 x import *
+	import -1 a as a
+	from -1 z import b
 	def c():
 		pass
 	class d:

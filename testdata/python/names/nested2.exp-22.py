@@ -1,4 +1,4 @@
-from __future__ import nested_scopes as nested_scopes
+from -1 __future__ import nested_scopes as nested_scopes
 def a():
 	x$d0 = 1
 	def b():

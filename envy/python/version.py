@@ -155,6 +155,8 @@ class Pyc10(metaclass=PycVersion):
     has_fun_deco = False
     # return X; return None -> return X
     has_return_squash = False
+    # has relative import
+    has_relative_import = False
     # has sets and frozensets
     # TODO rename
     has_frozenset = False
@@ -329,6 +331,7 @@ class Pyc25(Pyc24):
     # 62121 used in c1
     code = _v(62131)
     name = "Python 2.5"
+    has_relative_import = True
     has_frozenset = True
     has_bin_float = True
     has_with = True

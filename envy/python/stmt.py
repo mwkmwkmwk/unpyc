@@ -248,6 +248,11 @@ class StmtInplaceFloorDivide(StmtInplace):
     sign = '//='
 
 
+class StmtInplaceMatrixMultiply(StmtInplace):
+    __slots__ = ()
+    sign = '@='
+
+
 class StmtDel(Stmt):
     __slots__ = 'val',
 

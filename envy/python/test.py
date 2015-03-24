@@ -298,6 +298,8 @@ TESTS_34.update({
 
 TESTS_35 = TESTS_34.copy()
 TESTS_35.update({
+    'binary/matmul': '35',
+    'stmt/inplace4': '35',
 })
 
 VERSIONS = [

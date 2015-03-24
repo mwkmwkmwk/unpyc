@@ -384,6 +384,11 @@ class ExprFloorDiv(ExprBin):
     sign = '//'
 
 
+class ExprMatMul(ExprBin):
+    __slots__ = ()
+    sign = '@'
+
+
 # compares
 
 class ExprCmp(Expr):

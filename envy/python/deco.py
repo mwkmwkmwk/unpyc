@@ -143,7 +143,6 @@ from .bytecode import *
 #
 # - py 3.5:
 #
-#   - matmul
 #   - empty else is elided
 #
 # and for prettifier:
@@ -569,6 +568,7 @@ for otype, etype in {
     OpcodeBinaryXor: ExprXor,
     OpcodeBinaryTrueDivide: ExprTrueDiv,
     OpcodeBinaryFloorDivide: ExprFloorDiv,
+    OpcodeBinaryMatrixMultiply: ExprMatMul,
 }.items():
     _register_binary(otype, etype)
 
@@ -1406,6 +1406,7 @@ INPLACE_OPS = [
     (OpcodeInplaceXor, StmtInplaceXor),
     (OpcodeInplaceTrueDivide, StmtInplaceTrueDivide),
     (OpcodeInplaceFloorDivide, StmtInplaceFloorDivide),
+    (OpcodeInplaceMatrixMultiply, StmtInplaceMatrixMultiply),
 ]
 
 for op, stmt in INPLACE_OPS:

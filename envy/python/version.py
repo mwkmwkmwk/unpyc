@@ -215,6 +215,8 @@ class Pyc10(metaclass=PycVersion):
     has_dup_two = False
     # has DELETE_DEREF
     has_delete_deref = False
+    # has qualname attribute
+    has_qualname = False
     # has source size in pyc
     has_size = False
     # has yield from
@@ -418,6 +420,7 @@ class Pyc33(Pyc32):
     code = _v(3230)
     name = "Python 3.3"
     has_marshal_int64 = False
+    has_qualname = True
     has_size = True
     has_yield_from = True
 

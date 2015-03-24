@@ -1334,8 +1334,18 @@ def _visit_set_func_args(self, deco, args, fun):
 def _visit_make_function(self, deco, args, code):
     return [ExprFunctionRaw(deco_code(code), args, {}, [])]
 
-@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Code)
+@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Code, flag='!has_qualname')
 def _visit_make_function(self, deco, kwargs, args, code):
+    return [ExprFunctionRaw(
+        deco_code(code),
+        args,
+        {deco.string(name): arg for name, arg in kwargs},
+        []
+    )]
+
+@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Code, ExprUnicode, flag='has_qualname')
+def _visit_make_function(self, deco, kwargs, args, code, qualname):
+    # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),
         args,
@@ -1355,8 +1365,18 @@ def _visit_make_function(self, deco, closures, args, code):
 def _visit_make_function(self, deco, closures, args, code):
     return [ExprFunctionRaw(deco_code(code), args, {}, closures.vars)]
 
-@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('kwargs', 2), Exprs('args', 1), Code)
+@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('kwargs', 2), Exprs('args', 1), Code, flag='!has_qualname')
 def _visit_make_function(self, deco, closures, kwargs, args, code):
+    return [ExprFunctionRaw(
+        deco_code(code),
+        args,
+        {deco.string(name): arg for name, arg in kwargs},
+        closures.vars
+    )]
+
+@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('kwargs', 2), Exprs('args', 1), Code, ExprUnicode, flag='has_qualname')
+def _visit_make_function(self, deco, closures, kwargs, args, code, qualname):
+    # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),
         args,

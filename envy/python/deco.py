@@ -1597,9 +1597,13 @@ def visit_listcomp_end(self, deco, comp):
 
 # yield
 
-@_stmt_visitor(OpcodeYieldValue, Expr)
+@_stmt_visitor(OpcodeYieldValue, Expr, flag='!has_yield_expr')
 def _visit_yield_stmt(self, deco, expr):
     return StmtSingle(ExprYield(expr)), []
+
+@_visitor(OpcodeYieldValue, Expr, flag='has_yield_expr')
+def _visit_yield_stmt(self, deco, expr):
+    return [ExprYield(expr)]
 
 
 class DecoCtx:

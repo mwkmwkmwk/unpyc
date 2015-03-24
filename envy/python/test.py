@@ -229,6 +229,7 @@ TESTS_25.update({
     'stmt/with_': '25',
     'expr/misc': '25',
     'defs/cls': '25',
+    'defs/gen': '25',
     'names/global_': '25',
     'stmt/if_const': '25',
 })

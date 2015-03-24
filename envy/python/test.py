@@ -215,6 +215,10 @@ TESTS_24 = TESTS_23.copy()
 TESTS_24.update({
     'marshal/int2': '24',
     'defs/deco': '24',
+    'defs/fun': '24',
+    'names/fun': '24',
+    'names/fun2': '24',
+    'stmt/exec_': '24',
 })
 
 TESTS_25 = TESTS_24.copy()
@@ -222,9 +226,11 @@ TESTS_25.update({
     'marshal/complex': '25',
     'marshal/float': '25',
     'marshal/unicode': '25',
-    'stmt/exec_': '25',
     'stmt/with_': '25',
+    'expr/misc': '25',
     'defs/cls': '25',
+    'names/global_': '25',
+    'stmt/if_const': '25',
 })
 
 TESTS_26 = TESTS_25.copy()

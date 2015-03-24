@@ -230,6 +230,7 @@ TESTS_25.update({
     'expr/misc': '25',
     'defs/cls': '25',
     'defs/gen': '25',
+    'defs/gen2': '25',
     'names/global_': '25',
     'stmt/if_const': '25',
 })
@@ -290,6 +291,7 @@ TESTS_33 = TESTS_32.copy()
 TESTS_33.update({
     'marshal/unicode': '25',
     'marshal/float': '25',
+    'defs/gen3': '33',
 })
 
 TESTS_34 = TESTS_33.copy()

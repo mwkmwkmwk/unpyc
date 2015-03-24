@@ -78,7 +78,6 @@ from .bytecode import *
 #
 # - py 2.5:
 #
-#   - yield expression
 #   - relative imports
 #   - with
 #   - try / except / finally

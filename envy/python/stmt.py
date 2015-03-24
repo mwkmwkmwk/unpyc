@@ -2,15 +2,16 @@ from envy.show import indent
 from .helpers import PythonError
 
 class FunArgs:
-    __slots__ = 'args', 'defargs', 'vararg', 'kwargs', 'varkw'
+    __slots__ = 'args', 'defargs', 'vararg', 'kwargs', 'defkwargs', 'varkw'
 
-    def __init__(self, args, defargs, vararg, kwargs, varkw):
+    def __init__(self, args, defargs, vararg, kwargs, defkwargs, varkw):
         self.args = args
         if len(defargs) < len(args):
             defargs = [None] * (len(args) - len(defargs)) + defargs
         self.defargs = defargs
         self.vararg = vararg
         self.kwargs = kwargs
+        self.defkwargs = defkwargs
         self.varkw = varkw
 
     def subprocess(self, process):
@@ -19,15 +20,17 @@ class FunArgs:
             [process(arg) if arg else None for arg in self.defargs],
             process(self.vararg) if self.vararg else None,
             [process(arg) for arg in self.kwargs],
+            {name: process(arg) for name, arg in self.defkwargs.items()},
             process(self.varkw) if self.varkw else None,
         )
 
-    def setdefs(self, defargs):
+    def setdefs(self, defargs, defkwargs):
         return FunArgs(
             self.args,
             defargs,
             self.vararg,
             self.kwargs,
+            defkwargs,
             self.varkw
         )
 
@@ -40,7 +43,7 @@ class FunArgs:
             chunks.append(('*', self.vararg, None))
         elif self.kwargs:
             chunks.append(('*', None, None))
-        chunks.extend([('', arg, None) for arg in self.kwargs])
+        chunks.extend([('', arg, self.defkwargs.get(arg.name)) for arg in self.kwargs])
         if self.varkw:
             chunks.append(('**', self.varkw, None))
         return ', '.join(

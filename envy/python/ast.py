@@ -49,7 +49,7 @@ def ast_process(deco, version):
             # new code - simple arguments are determined from code attributes,
             # complex arguments (if any) are handled as assignment statements
             # at the beginning
-            args = node.code.code.args.setdefs(node.defargs)
+            args = node.code.code.args.setdefs(node.defargs, node.defkwargs)
             if version.has_complex_args:
                 # split leaking on purpose
                 for split, stmt in enumerate(stmts):
@@ -84,7 +84,7 @@ def ast_process(deco, version):
             # old code - the first statement should be $args unpacking
             if not stmts or not isinstance(stmts[0], StmtArgs):
                 raise PythonError("no $args in function def")
-            args = stmts[0].args.setdefs(node.defargs)
+            args = stmts[0].args.setdefs(node.defargs, node.defkwargs)
             split = 1
         return ExprFunction(
             node.code.code.name,

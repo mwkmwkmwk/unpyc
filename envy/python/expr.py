@@ -557,24 +557,30 @@ class ExprDeref(Expr):
 # functions - to be cleaned up by prettifier
 
 class ExprFunctionRaw(Expr):
-    __slots__ = 'code', 'defargs', 'closures'
+    __slots__ = 'code', 'defargs', 'defkwargs', 'closures'
 
-    def __init__(self, code, defargs=[], closures=[]):
+    def __init__(self, code, defargs=[], defkwargs=[], closures=[]):
         self.code = code
         self.defargs = defargs
+        self.defkwargs = defkwargs
         self.closures = closures
 
     def subprocess(self, process):
         return ExprFunctionRaw(
             process(self.code),
             [process(arg) for arg in self.defargs],
+            {name: process(arg) for name, arg in self.defkwargs.items()},
             [process(c) for c in self.closures]
         )
 
     def show(self, ctx):
         # TODO some better idea?
         if self.defargs or self.closures:
-            return '($functionraw {} ; {})'.format(', '.join(arg.show(None) for arg in self.defargs), ', '.join(c.show(None) for c in self.closures))
+            return '($functionraw {} ; {} ; {})'.format(
+                ', '.join(arg.show(None) for arg in self.defargs),
+                ', '.join('{}={}'.format(name, arg.show(None)) for name, arg in self.defkwargs.items()),
+                ', '.join(c.show(None) for c in self.closures)
+            )
         return '$functionraw'
 
 

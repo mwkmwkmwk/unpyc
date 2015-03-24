@@ -36,3 +36,18 @@ def h(i, *j, **k):
     pass
 
 x = lambda a, b=3, c=None, **d: d * c
+
+def x(a, b, *, c, d):
+    return 3
+
+def x(a, b, *c, d, e, **f):
+    return 4
+
+def x(a=1, b=2, *c, d=4, e, **f):
+    return 4
+
+def x(a=1, b=2, *c, d, e=5, **f):
+    return 4
+
+def x(a=1, b=2, *c, d=2, e=3, **f):
+    return 4

@@ -99,7 +99,7 @@ from .bytecode import *
 #
 #   - yeah, well, unicode is everywhere
 #   - extended unpack
-#   - kwdefaults, annotations
+#   - annotations
 #   - new build class
 #   - real funny except
 #   - make closure change?
@@ -683,13 +683,13 @@ def visit_build_slice(self, deco, exprs):
 
 @_stmt_visitor(OpcodeUnpackArg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], [], None, [], None)
+    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
     extra = [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
     return StmtArgs(res), extra
 
 @_stmt_visitor(OpcodeUnpackVararg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], [], None, [], None)
+    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
     extra = [UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
     return StmtArgs(res), extra
 
@@ -1321,18 +1321,27 @@ def _visit_except_end(self, deco, try_, block):
 
 @_visitor(OpcodeBuildFunction, Code)
 def _visit_build_function(self, deco, code):
-    return [ExprFunctionRaw(deco_code(code), [], [])]
+    return [ExprFunctionRaw(deco_code(code), [], {}, [])]
 
 @_visitor(OpcodeSetFuncArgs, ExprTuple, ExprFunctionRaw)
 def _visit_set_func_args(self, deco, args, fun):
     # bug alert: def f(a, b=1) is compiled as def f(a=1, b)
-    return [ExprFunctionRaw(fun.code, args.exprs, [])]
+    return [ExprFunctionRaw(fun.code, args.exprs, {}, [])]
 
 # make function - py 1.3+
 
 @_visitor(OpcodeMakeFunction, Exprs('param', 1), Code)
 def _visit_make_function(self, deco, args, code):
-    return [ExprFunctionRaw(deco_code(code), args, [])]
+    return [ExprFunctionRaw(deco_code(code), args, {}, [])]
+
+@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Code)
+def _visit_make_function(self, deco, kwargs, args, code):
+    return [ExprFunctionRaw(
+        deco_code(code),
+        args,
+        {deco.string(name): arg for name, arg in kwargs},
+        []
+    )]
 
 @_visitor(OpcodeBuildTuple, Closures)
 def visit_closure_tuple(self, deco, closures):
@@ -1340,11 +1349,20 @@ def visit_closure_tuple(self, deco, closures):
 
 @_visitor(OpcodeMakeClosure, UglyClosures, Exprs('param', 1), Code, flag='!has_sane_closure')
 def _visit_make_function(self, deco, closures, args, code):
-    return [ExprFunctionRaw(deco_code(code), args, closures)]
+    return [ExprFunctionRaw(deco_code(code), args, {}, closures)]
 
 @_visitor(OpcodeMakeClosure, ClosuresTuple, Exprs('param', 1), Code, flag='has_sane_closure')
 def _visit_make_function(self, deco, closures, args, code):
-    return [ExprFunctionRaw(deco_code(code), args, closures.vars)]
+    return [ExprFunctionRaw(deco_code(code), args, {}, closures.vars)]
+
+@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('kwargs', 2), Exprs('args', 1), Code)
+def _visit_make_function(self, deco, closures, kwargs, args, code):
+    return [ExprFunctionRaw(
+        deco_code(code),
+        args,
+        {deco.string(name): arg for name, arg in kwargs},
+        closures.vars
+    )]
 
 @_visitor(OpcodeUnaryCall, ExprFunctionRaw)
 def _visit_unary_call(self, deco, fun):
@@ -1369,7 +1387,7 @@ def _visit_build_class(self, deco, name, expr, call):
         raise PythonError("class call with non-function")
     if fun.closures:
         raise PythonError("class call with a function with closures")
-    if fun.defargs:
+    if fun.defargs or fun.defkwargs:
         raise PythonError("class call with a function with default arguments")
     return [ExprClassRaw(deco.string(name), expr.exprs, fun.code)]
 

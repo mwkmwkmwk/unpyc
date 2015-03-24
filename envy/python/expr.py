@@ -292,6 +292,11 @@ class ExprYield(ExprUn):
     sign = 'yield '
 
 
+class ExprYieldFrom(ExprUn):
+    __slots__ = ()
+    sign = 'yield from '
+
+
 # binary
 
 class ExprBin(Expr):

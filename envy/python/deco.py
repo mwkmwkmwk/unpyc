@@ -132,7 +132,6 @@ from .bytecode import *
 #
 # - py 3.3:
 #
-#   - yield from
 #   - qualnames
 #
 # - py 3.4:
@@ -1642,6 +1641,10 @@ def _visit_yield_stmt(self, deco, expr):
 @_visitor(OpcodeYieldValue, Expr, flag='has_yield_expr')
 def _visit_yield_stmt(self, deco, expr):
     return [ExprYield(expr)]
+
+@_visitor(OpcodeYieldFrom, Iter, ExprNone)
+def _visit_yield_from(self, deco, iter_, _):
+    return [ExprYieldFrom(iter_.expr)]
 
 
 class DecoCtx:

@@ -134,6 +134,15 @@ class ExprEllipsis(Expr):
     def show(self, ctx):
         return "..."
 
+class ExprBuildClass(Expr):
+    __slots__ = ()
+
+    def subprocess(self, process):
+        return self
+
+    def show(self, ctx):
+        return '#buildclass'
+
 # literals
 
 class ExprSimple(Expr):
@@ -624,56 +633,50 @@ class ExprFunction(Expr):
 
 
 class ExprClassRaw(Expr):
-    __slots__ = 'name', 'bases', 'code'
+    __slots__ = 'name', 'args', 'code'
 
-    def __init__(self, name, bases, code):
+    def __init__(self, name, args, code):
         self.name = name
-        self.bases = bases
+        self.args = args
         self.code = code
 
     def subprocess(self, process):
         return ExprClassRaw(
             self.name,
-            [process(base) for base in self.bases],
+            process(self.args),
             process(self.code)
         )
 
     def show(self, ctx):
-        if self.bases:
+        if self.args.args:
             return '$classraw {}({})'.format(
                 self.name,
-                ', '.join(
-                    base.show(None)
-                    for base in self.bases
-                )
+                self.args.show()
             )
         else:
             return '$classraw {}()'.format(self.name)
 
 
 class ExprClass(Expr):
-    __slots__ = 'name', 'bases', 'body'
+    __slots__ = 'name', 'args', 'body'
 
-    def __init__(self, name, bases, body):
+    def __init__(self, name, args, body):
         self.name = name
-        self.bases = bases
+        self.args = args
         self.body = body
 
     def subprocess(self, process):
         return ExprClass(
             self.name,
-            [process(base) for base in self.bases],
+            process(self.args),
             process(self.body)
         )
 
     def show(self, ctx):
-        if self.bases:
+        if self.args.args:
             return '$class {}({})'.format(
                 self.name,
-                ', '.join(
-                    base.show(None)
-                    for base in self.bases
-                )
+                self.args.show()
             )
         else:
             return '$class {}()'.format(self.name)

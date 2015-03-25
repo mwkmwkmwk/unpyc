@@ -1394,11 +1394,11 @@ def visit_load_closure(self, deco):
     return [Closure(deco.deref(self.param))]
 
 @_visitor(OpcodeBuildClass, Expr, ExprTuple, UnaryCall)
-def _visit_build_class(self, deco, name, expr, call):
-    return [ExprClassRaw(deco.string(name), expr.exprs, call.code)]
+def _visit_build_class(self, deco, name, bases, call):
+    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), call.code)]
 
 @_visitor(OpcodeBuildClass, Expr, ExprTuple, ExprCall, flag='has_new_code')
-def _visit_build_class(self, deco, name, expr, call):
+def _visit_build_class(self, deco, name, bases, call):
     if call.args.args:
         raise PythonError("class call with args")
     fun = call.expr
@@ -1408,7 +1408,7 @@ def _visit_build_class(self, deco, name, expr, call):
         raise PythonError("class call with a function with closures")
     if fun.defargs or fun.defkwargs:
         raise PythonError("class call with a function with default arguments")
-    return [ExprClassRaw(deco.string(name), expr.exprs, fun.code)]
+    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), fun.code)]
 
 @_visitor(OpcodeLoadLocals)
 def _visit_load_locals(self, deco):
@@ -1425,6 +1425,16 @@ def _visit_reserve_fast(self, deco):
 
     deco.varnames = self.names
     return []
+
+@_visitor(OpcodeLoadBuildClass)
+def _visit_load_build_class(self, deco):
+    return [ExprBuildClass()]
+
+@_stmt_visitor(OpcodeStoreLocals, ExprFast)
+def _visit_load_build_class(self, deco, fast):
+    if fast.idx != 0 or fast.name != '__locals__':
+        raise PythonError("funny locals store")
+    return StmtStartClass(), []
 
 # inplace assignments
 

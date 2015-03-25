@@ -24,14 +24,9 @@ class RootEval:
 
 def ast_process(deco, version):
 
-    # processing stage one:
+    # processing stage 1
     #
-    # - makes class/function expressions, and cleans their bodies from relevant stuff
-    # - cleans if statements: empty else suites are discarded, else suites consisting
-    #   of a single if statement are changed into elif
-    # - get rid of empty else suites on try except statements
-    # - converts $loop and $for/$while into proper for/while
-    # - for Python 1.0, convert all $print to expression statements
+    # - convert $buildclass and $classraw to $class, cleans their bodies
 
     def process_class_body(code, name):
         if code.code.name != name:
@@ -42,6 +37,47 @@ def ast_process(deco, version):
         if not block.stmts or not isinstance(block.stmts[-1], StmtEndClass):
             raise PythonError("no $endclass in class def")
         return Block(block.stmts[:-1])
+
+    def process_class_body_new(code, name):
+        if code.code.name != name:
+            raise PythonError("class name doesn't match code object")
+        block = code.block
+        if code.varnames != ['__locals__']:
+            raise PythonError("class has fast vars")
+        if not block.stmts or not isinstance(block.stmts[0], StmtStartClass):
+            raise PythonError("no $startclass in class def")
+        return Block(block.stmts[1:])
+
+    def process_1(node):
+        node = node.subprocess(process_1)
+        if isinstance(node, ExprCall) and isinstance(node.expr, ExprBuildClass):
+            args = node.args.args
+            if (len(args) < 2
+                or args[0][0]
+                or args[1][0]
+                or not isinstance(args[0][1], ExprFunctionRaw)
+                or not isinstance(args[1][1], ExprUnicode)
+            ):
+                raise PythonError("funny args to $buildclass")
+            name = args[1][1].val
+            fun = args[0][1]
+            if fun.closures or fun.defargs or fun.defkwargs:
+                raise PythonError("class function has def args")
+            return ExprClass(name, CallArgs(args[2:]), process_class_body_new(fun.code, name))
+        if isinstance(node, ExprClassRaw):
+            return ExprClass(node.name, node.args, process_class_body(node.code, node.name))
+        return node
+
+    deco = process_1(deco)
+
+    # processing stage 2
+    #
+    # - convert $functionraw to $function, cleans their bodies
+    # - cleans if statements: empty else suites are discarded, else suites consisting
+    #   of a single if statement are changed into elif
+    # - get rid of empty else suites on try except statements
+    # - converts $loop and $for/$while into proper for/while
+    # - for Python 1.0, convert all $print to expression statements
 
     def process_fun_body(node):
         stmts = node.code.block.stmts
@@ -140,7 +176,7 @@ def ast_process(deco, version):
                 return node
             if decorators and not version.has_cls_deco:
                 return node
-            return StmtClass(decorators, fun.name, fun.bases, fun.body)
+            return StmtClass(decorators, fun.name, fun.args, fun.body)
         else:
             return node
 
@@ -174,10 +210,8 @@ def ast_process(deco, version):
         else:
             raise PythonError("$loop with funny contents")
 
-    def process_one(node):
-        node = node.subprocess(process_one)
-        if isinstance(node, ExprClassRaw):
-            return ExprClass(node.name, node.bases, process_class_body(node.code, node.name))
+    def process_2(node):
+        node = node.subprocess(process_2)
         if isinstance(node, ExprFunctionRaw):
             return process_fun_body(node)
         if isinstance(node, StmtAssign):
@@ -192,9 +226,9 @@ def ast_process(deco, version):
             return StmtSingle(node.val)
         return node
 
-    deco = process_one(deco)
+    deco = process_2(deco)
 
-    # processing stage two
+    # processing stage 3
     #
     # - makes lambdas
     # - makes sure function/class-related junk is gone
@@ -209,8 +243,8 @@ def ast_process(deco, version):
             raise PythonError("lambda body has no return")
         return ExprLambda(node.args, stmts[0].val)
 
-    def process_two(node):
-        node = node.subprocess(process_two)
+    def process_3(node):
+        node = node.subprocess(process_3)
         if isinstance(node, ExprFunction):
             return process_lambda(node)
         elif isinstance(node, ExprClass):
@@ -221,7 +255,7 @@ def ast_process(deco, version):
             raise PythonError("$endclass still alive")
         return node
 
-    deco = process_two(deco)
+    deco = process_3(deco)
 
     # wrap the top level
     stmts = deco.block.stmts

@@ -41,12 +41,20 @@ def ast_process(deco, version):
     def process_class_body_new(code, name):
         if code.code.name != name:
             raise PythonError("class name doesn't match code object")
-        block = code.block
-        if code.varnames != ['__locals__']:
-            raise PythonError("class has fast vars")
-        if not block.stmts or not isinstance(block.stmts[0], StmtStartClass):
-            raise PythonError("no $startclass in class def")
-        return Block(block.stmts[1:])
+        stmts = code.block.stmts[:]
+        if version.has_store_locals:
+            if code.varnames != ['__locals__']:
+                raise PythonError("class has fast vars")
+            if not stmts or not isinstance(stmts[0], StmtStartClass):
+                raise PythonError("no $startclass in class def")
+            stmts = stmts[1:]
+        else:
+            if code.varnames != []:
+                raise PythonError("class has fast vars")
+        if stmts and isinstance(stmts[-1], StmtReturnClass):
+            return Block(stmts[:-1])
+        else:
+            return Block(stmts)
 
     def process_1(node):
         node = node.subprocess(process_1)

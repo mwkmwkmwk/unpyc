@@ -1436,6 +1436,12 @@ def _visit_load_build_class(self, deco, fast):
         raise PythonError("funny locals store")
     return StmtStartClass(), []
 
+@_stmt_visitor(OpcodeReturnValue, Closure)
+def _visit_return_locals(self, deco, closure):
+    if closure.var.name != '__class__':
+        raise PythonError("returning a funny closure")
+    return StmtReturnClass(), []
+
 # inplace assignments
 
 INPLACE_OPS = [
@@ -1721,7 +1727,7 @@ class DecoCtx:
     def string(self, expr):
         if self.version.py3k:
             if not isinstance(expr, ExprUnicode):
-                raise PythonError("wanted a string")
+                raise PythonError("wanted a string, got {}".format(expr))
             return expr.val
         else:
             if not isinstance(expr, ExprString):

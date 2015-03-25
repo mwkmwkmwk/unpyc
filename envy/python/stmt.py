@@ -697,6 +697,16 @@ class StmtEndClass(Stmt):
         yield '$endclass'
 
 
+class StmtReturnClass(Stmt):
+    __slots__ = ()
+
+    def subprocess(self, process):
+        return self
+
+    def show(self):
+        yield '$returnclass'
+
+
 class StmtStartClass(Stmt):
     __slots__ = ()
 

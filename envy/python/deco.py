@@ -1342,8 +1342,18 @@ def _visit_make_function(self, deco, kwargs, args, code):
         []
     )]
 
-@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Code, ExprUnicode, flag='has_qualname')
+@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Code, ExprUnicode, flag=('has_qualname', 'has_reversed_def_kwargs'))
 def _visit_make_function(self, deco, kwargs, args, code, qualname):
+    # XXX qualname
+    return [ExprFunctionRaw(
+        deco_code(code),
+        args,
+        {deco.string(name): arg for name, arg in kwargs},
+        []
+    )]
+
+@_visitor(OpcodeMakeFunctionNew, Exprs('args', 1), Exprs('kwargs', 2), Code, ExprUnicode, flag=('has_qualname', '!has_reversed_def_kwargs'))
+def _visit_make_function(self, deco, args, kwargs, code, qualname):
     # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),
@@ -1373,8 +1383,18 @@ def _visit_make_function(self, deco, closures, kwargs, args, code):
         closures.vars
     )]
 
-@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('kwargs', 2), Exprs('args', 1), Code, ExprUnicode, flag='has_qualname')
+@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('kwargs', 2), Exprs('args', 1), Code, ExprUnicode, flag=('has_qualname', 'has_reversed_def_kwargs'))
 def _visit_make_function(self, deco, closures, kwargs, args, code, qualname):
+    # XXX qualname
+    return [ExprFunctionRaw(
+        deco_code(code),
+        args,
+        {deco.string(name): arg for name, arg in kwargs},
+        closures.vars
+    )]
+
+@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('args', 1), Exprs('kwargs', 2), Code, ExprUnicode, flag=('has_qualname', '!has_reversed_def_kwargs'))
+def _visit_make_function(self, deco, closures, args, kwargs, code, qualname):
     # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),

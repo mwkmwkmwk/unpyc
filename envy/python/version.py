@@ -227,6 +227,8 @@ class Pyc10(metaclass=PycVersion):
     has_marshal_ref = False
     # has LOAD_CLASS_DEREF
     has_classderef = False
+    # default kwargs pushed before default args
+    has_reversed_def_kwargs = True
     # has matrix multiplication
     has_matmul = False
 
@@ -435,6 +437,7 @@ class Pyc34(Pyc33):
     has_marshal_ref = True
     has_store_locals = False
     has_classderef = True
+    has_reversed_def_kwargs = False
 
 class Pyc35(Pyc34):
     # currently in alpha stage

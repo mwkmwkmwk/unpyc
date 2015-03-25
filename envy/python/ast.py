@@ -102,14 +102,14 @@ def ast_process(deco, version):
     def undecorate(node):
         decorators = []
         while isinstance(node, ExprCall):
-            if len(node.params) != 1:
+            if len(node.args.args) != 1:
                 return None, None
-            if node.params[0][0]:
+            if node.args.args[0][0]:
                 return None, None
             if not isdecorator(node.expr):
                 return None, None
             decorators.append(node.expr)
-            node = node.params[0][1]
+            node = node.args.args[0][1]
         return decorators, node
 
     def process_def(node):

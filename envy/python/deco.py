@@ -605,23 +605,23 @@ def visit_build_map_step(self, deco, dict_, val, key):
 
 @_visitor(OpcodeBinaryCall, Expr, ExprTuple)
 def visit_binary_call(self, deco, expr, params):
-    return [ExprCall(expr, [('', arg) for arg in params.exprs])]
+    return [ExprCall(expr, CallArgs([('', arg) for arg in params.exprs]))]
 
 @_visitor(OpcodeCallFunction, Expr, Exprs('args', 1), Exprs('kwargs', 2))
 def visit_call_function(self, deco, fun, args, kwargs):
-    return [ExprCall(fun, [('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs])]
+    return [ExprCall(fun, CallArgs([('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs]))]
 
 @_visitor(OpcodeCallFunctionVar, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr)
 def visit_call_function(self, deco, fun, args, kwargs, vararg):
-    return [ExprCall(fun, [('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('*', vararg)])]
+    return [ExprCall(fun, CallArgs([('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('*', vararg)]))]
 
 @_visitor(OpcodeCallFunctionKw, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr)
 def visit_call_function(self, deco, fun, args, kwargs, varkw):
-    return [ExprCall(fun, [('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('**', varkw)])]
+    return [ExprCall(fun, CallArgs([('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('**', varkw)]))]
 
 @_visitor(OpcodeCallFunctionVarKw, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr, Expr)
 def visit_call_function(self, deco, fun, args, kwargs, vararg, varkw):
-    return [ExprCall(fun, [('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('*', vararg), ('**', varkw)])]
+    return [ExprCall(fun, CallArgs([('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('*', vararg), ('**', varkw)]))]
 
 # expressions - load const
 
@@ -1399,8 +1399,8 @@ def _visit_build_class(self, deco, name, expr, call):
 
 @_visitor(OpcodeBuildClass, Expr, ExprTuple, ExprCall, flag='has_new_code')
 def _visit_build_class(self, deco, name, expr, call):
-    if call.params:
-        raise PythonError("class call with params")
+    if call.args.args:
+        raise PythonError("class call with args")
     fun = call.expr
     if not isinstance(fun, ExprFunctionRaw):
         raise PythonError("class call with non-function")
@@ -1599,9 +1599,9 @@ def visit_listcomp_item(self, deco, comp, call):
         raise PythonError("not an old list comp...")
     if comp.meat.tmp != call.expr:
         raise PythonError("list.append temp doesn't match")
-    if len(call.params) != 1 or call.params[0][0] != '':
+    if len(call.args.args) != 1 or call.args.args[0][0] != '':
         raise PythonError("funny args to list.append")
-    arg = call.params[0][1]
+    arg = call.args.args[0][1]
     comp.meat.expr.comp = Comp(arg, comp.items)
     return []
 

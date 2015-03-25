@@ -16,6 +16,26 @@ from envy.format.marshal import (
 
 from .helpers import PythonError
 
+class CallArgs:
+    __slots__ = 'args'
+
+    def __init__(self, args):
+        self.args = args
+
+    def subprocess(self, process):
+        return CallArgs(
+            [(how, process(arg)) for how, arg in self.args]
+        )
+
+    def show(self):
+        return ', '.join(
+            "{}{}".format(
+                how if how in ('', '*', '**') else how + '=',
+                arg.show(None)
+            )
+            for how, arg in self.args
+        )
+
 class CmpOp(IntEnum):
     LT = 0
     LE = 1
@@ -467,28 +487,22 @@ class ExprSlice(Expr):
 # calls
 
 class ExprCall(Expr):
-    __slots__ = 'expr', 'params'
+    __slots__ = 'expr', 'args'
 
-    def __init__(self, expr, params):
+    def __init__(self, expr, args):
         self.expr = expr
-        self.params = params
+        self.args = args
 
     def subprocess(self, process):
         return ExprCall(
             process(self.expr),
-            [(how, process(param)) for how, param in self.params]
+            process(self.args),
         )
 
     def show(self, ctx):
         return '{}({})'.format(
             self.expr.show(ctx),
-            ', '.join(
-                "{}{}".format(
-                    how if how in ('', '*', '**') else how + '=',
-                    param.show(ctx)
-                )
-                for how, param in self.params
-            )
+            self.args.show()
         )
 
 

@@ -5,25 +5,15 @@ from .expr import Expr, ExprNone, CmpOp, ExprTuple, ExprString
 
 Flow = namedtuple('Flow', ['src', 'dst'])
 
-OPCODES = {}
 
-class OpcodeMeta(type):
-    def __new__(cls, name, bases, namespace):
-        if '__slots__' not in namespace:
-            namespace['__slots__'] = ()
-        return super(__class__, cls).__new__(cls, name, bases, namespace)
+# opcode classes
 
-def _opcode(opc, flag=None):
-    def inner(cls):
-        OPCODES.setdefault(opc, []).append((cls, flag))
-        return cls
-    return inner
-
-
-class Opcode(metaclass=OpcodeMeta):
+class Opcode:
     __slots__ = 'pos', 'ext', 'nextpos', 'version', 'outflow', 'inflow'
 
-    def __init__(self, bytecode, pos, ext):
+    @classmethod
+    def read(cls, bytecode, pos, ext):
+        self = cls.__new__(cls)
         self.pos = pos
         self.ext = ext or 0
         self.outflow = []
@@ -31,6 +21,7 @@ class Opcode(metaclass=OpcodeMeta):
         self.version = bytecode.version
         self.read_params(bytecode)
         self.nextpos = bytecode.pos
+        return self
 
     def read_params(self, bytecode):
         pass
@@ -61,20 +52,24 @@ class OpcodeParamNum(Opcode):
         return str(self.param)
 
 
-class OpcodeParamAbs(Opcode):
+class OpcodeFlow(Opcode):
     __slots__ = 'flow',
+
+    def print_params(self):
+        return str(self.flow.dst)
+
+
+class OpcodeParamAbs(OpcodeFlow):
+    __slots__ = ()
 
     def read_params(self, bytecode):
         target = bytecode.word(self.ext)
         self.flow = Flow(self.pos, target)
         self.outflow.append(target)
 
-    def print_params(self):
-        return str(self.flow.dst)
 
-
-class OpcodeParamRel(Opcode):
-    __slots__ = 'flow',
+class OpcodeParamRel(OpcodeFlow):
+    __slots__ = ()
 
     def read_params(self, bytecode):
         diff = bytecode.word(self.ext)
@@ -82,9 +77,6 @@ class OpcodeParamRel(Opcode):
         target = bytecode.pos + diff
         self.flow = Flow(self.pos, target)
         self.outflow.append(target)
-
-    def print_params(self):
-        return str(self.flow.dst)
 
 
 class OpcodeParamName(Opcode):
@@ -98,611 +90,6 @@ class OpcodeParamName(Opcode):
 
     def print_params(self):
         return self.param
-
-
-# TODO fix this
-OpcodeParamFast = OpcodeParamNum
-
-
-# opcodes start here
-
-@_opcode(1)
-class OpcodePopTop(Opcode):
-    name = 'POP_TOP'
-
-@_opcode(2)
-class OpcodeRotTwo(Opcode):
-    name = 'ROT_TWO'
-
-@_opcode(3)
-class OpcodeRotThree(Opcode):
-    name = 'ROT_THREE'
-
-@_opcode(4)
-class OpcodeDupTop(Opcode):
-    name = 'DUP_TOP'
-
-@_opcode(5, 'has_rot_four')
-class OpcodeRotFour(Opcode):
-    name = 'ROT_FOUR'
-
-@_opcode(5, 'has_dup_two')
-class OpcodeDupTopTwo(Opcode):
-    name = 'DUP_TOP_TWO'
-
-@_opcode(10)
-class OpcodeUnaryPositive(Opcode):
-    name = 'UNARY_POSITIVE'
-
-@_opcode(11)
-class OpcodeUnaryNegative(Opcode):
-    name = 'UNARY_NEGATIVE'
-
-@_opcode(12)
-class OpcodeUnaryNot(Opcode):
-    name = 'UNARY_NOT'
-
-@_opcode(13, 'has_repr')
-class OpcodeUnaryConvert(Opcode):
-    name = 'UNARY_CONVERT'
-
-@_opcode(14, '!has_new_code')
-class OpcodeUnaryCall(Opcode):
-    name = 'UNARY_CALL'
-
-@_opcode(15)
-class OpcodeUnaryInvert(Opcode):
-    name = 'UNARY_INVERT'
-
-@_opcode(16, 'has_matmul')
-class OpcodeBinaryMatrixMultiply(Opcode):
-    name = 'BINARY_MATRIX_MULTIPLY'
-
-@_opcode(17, 'has_matmul')
-class OpcodeInplaceMatrixMultiply(Opcode):
-    name = 'INPLACE_MATRIX_MULTIPLY'
-
-@_opcode(17, ('has_setdict_comp', '!has_new_comp'))
-class OpcodeSetAdd(Opcode):
-    name = 'SET_ADD'
-
-@_opcode(18, ('has_list_append', '!has_new_comp'))
-class OpcodeListAppend(Opcode):
-    name = 'LIST_APPEND'
-
-@_opcode(19, 'has_power')
-class OpcodeBinaryPower(Opcode):
-    name = 'BINARY_POWER'
-
-@_opcode(20)
-class OpcodeBinaryMultiply(Opcode):
-    name = 'BINARY_MULTIPLY'
-
-@_opcode(21, 'has_old_divide')
-class OpcodeBinaryDivide(Opcode):
-    name = 'BINARY_DIVIDE'
-
-@_opcode(22)
-class OpcodeBinaryModulo(Opcode):
-    name = 'BINARY_MODULO'
-
-@_opcode(23)
-class OpcodeBinaryAdd(Opcode):
-    name = 'BINARY_ADD'
-
-@_opcode(24)
-class OpcodeBinarySubstract(Opcode):
-    name = 'BINARY_SUBSTRACT'
-
-@_opcode(25)
-class OpcodeBinarySubscr(Opcode):
-    name = 'BINARY_SUBSCR'
-
-@_opcode(26, '!has_new_code')
-class OpcodeBinaryCall(Opcode):
-    name = 'BINARY_CALL'
-
-@_opcode(26, 'has_new_divide')
-class OpcodeBinaryFloorDivide(Opcode):
-    name = 'BINARY_FLOOR_DIVIDE'
-
-@_opcode(27, 'has_new_divide')
-class OpcodeBinaryTrueDivide(Opcode):
-    name = 'BINARY_TRUE_DIVIDE'
-
-@_opcode(28, 'has_new_divide')
-class OpcodeInplaceFloorDivide(Opcode):
-    name = 'INPLACE_FLOOR_DIVIDE'
-
-@_opcode(29, 'has_new_divide')
-class OpcodeInplaceTrueDivide(Opcode):
-    name = 'INPLACE_TRUE_DIVIDE'
-
-@_opcode(30, 'has_old_slice')
-class OpcodeSliceNN(Opcode):
-    name = 'SLICE_NN'
-
-@_opcode(31, 'has_old_slice')
-class OpcodeSliceEN(Opcode):
-    name = 'SLICE_EN'
-
-@_opcode(32, 'has_old_slice')
-class OpcodeSliceNE(Opcode):
-    name = 'SLICE_NE'
-
-@_opcode(33, 'has_old_slice')
-class OpcodeSliceEE(Opcode):
-    name = 'SLICE_EE'
-
-@_opcode(40, 'has_old_slice')
-class OpcodeStoreSliceNN(Opcode):
-    name = 'STORE_SLICE_NN'
-
-@_opcode(41, 'has_old_slice')
-class OpcodeStoreSliceEN(Opcode):
-    name = 'STORE_SLICE_EN'
-
-@_opcode(42, 'has_old_slice')
-class OpcodeStoreSliceNE(Opcode):
-    name = 'STORE_SLICE_NE'
-
-@_opcode(43, 'has_old_slice')
-class OpcodeStoreSliceEE(Opcode):
-    name = 'STORE_SLICE_EE'
-
-@_opcode(50, 'has_old_slice')
-class OpcodeDeleteSliceNN(Opcode):
-    name = 'DELETE_SLICE_NN'
-
-@_opcode(51, 'has_old_slice')
-class OpcodeDeleteSliceEN(Opcode):
-    name = 'DELETE_SLICE_EN'
-
-@_opcode(52, 'has_old_slice')
-class OpcodeDeleteSliceNE(Opcode):
-    name = 'DELETE_SLICE_NE'
-
-@_opcode(53, 'has_old_slice')
-class OpcodeDeleteSliceEE(Opcode):
-    name = 'DELETE_SLICE_EE'
-
-@_opcode(54, 'has_store_map')
-class OpcodeStoreMap(Opcode):
-    name = 'STORE_MAP'
-
-@_opcode(55, 'has_inplace')
-class OpcodeInplaceAdd(Opcode):
-    name = 'INPLACE_ADD'
-
-@_opcode(56, 'has_inplace')
-class OpcodeInplaceSubstract(Opcode):
-    name = 'INPLACE_SUBSTRACT'
-
-@_opcode(57, 'has_inplace')
-class OpcodeInplaceMultiply(Opcode):
-    name = 'INPLACE_MULTIPLY'
-
-@_opcode(58, ('has_inplace', 'has_old_divide'))
-class OpcodeInplaceDivide(Opcode):
-    name = 'INPLACE_DIVIDE'
-
-@_opcode(59, 'has_inplace')
-class OpcodeInplaceModulo(Opcode):
-    name = 'INPLACE_MODULO'
-
-@_opcode(60)
-class OpcodeStoreSubscr(Opcode):
-    name = 'STORE_SUBSCR'
-
-@_opcode(61)
-class OpcodeDeleteSubscr(Opcode):
-    name = 'DELETE_SUBSCR'
-
-@_opcode(62)
-class OpcodeBinaryLshift(Opcode):
-    name = 'BINARY_LSHIFT'
-
-@_opcode(63)
-class OpcodeBinaryRshift(Opcode):
-    name = 'BINARY_RSHIFT'
-
-@_opcode(64)
-class OpcodeBinaryAnd(Opcode):
-    name = 'BINARY_AND'
-
-@_opcode(65)
-class OpcodeBinaryXor(Opcode):
-    name = 'BINARY_XOR'
-
-@_opcode(66)
-class OpcodeBinaryOr(Opcode):
-    name = 'BINARY_OR'
-
-@_opcode(67, 'has_inplace')
-class OpcodeInplacePower(Opcode):
-    name = 'INPLACE_POWER'
-
-@_opcode(68, 'has_iter')
-class OpcodeGetIter(Opcode):
-    name = 'GET_ITER'
-
-@_opcode(69, 'has_store_locals')
-class OpcodeStoreLocals(Opcode):
-    name = 'STORE_LOCALS'
-
-@_opcode(70)
-class OpcodePrintExpr(Opcode):
-    name = 'PRINT_EXPR'
-
-@_opcode(71, 'has_new_class')
-class OpcodeLoadBuildClass(Opcode):
-    name = 'LOAD_BUILD_CLASS'
-
-@_opcode(72, 'has_yield_from')
-class OpcodeYieldFrom(Opcode):
-    name = 'YIELD_FROM'
-
-@_opcode(71, 'has_print')
-class OpcodePrintItem(Opcode):
-    name = 'PRINT_ITEM'
-
-@_opcode(72, 'has_print')
-class OpcodePrintNewline(Opcode):
-    name = 'PRINT_NEWLINE'
-
-@_opcode(73, 'has_print_to')
-class OpcodePrintItemTo(Opcode):
-    name = 'PRINT_ITEM_TO'
-
-@_opcode(74, 'has_print_to')
-class OpcodePrintNewlineTo(Opcode):
-    name = 'PRINT_NEWLINE_TO'
-
-@_opcode(75, 'has_inplace')
-class OpcodeInplaceLshift(Opcode):
-    name = 'INPLACE_LSHIFT'
-
-@_opcode(76, 'has_inplace')
-class OpcodeInplaceRshift(Opcode):
-    name = 'INPLACE_RSHIFT'
-
-@_opcode(77, 'has_inplace')
-class OpcodeInplaceAnd(Opcode):
-    name = 'INPLACE_AND'
-
-@_opcode(78, 'has_inplace')
-class OpcodeInplaceXor(Opcode):
-    name = 'INPLACE_XOR'
-
-@_opcode(79, 'has_inplace')
-class OpcodeInplaceOr(Opcode):
-    name = 'INPLACE_OR'
-
-@_opcode(80)
-class OpcodeBreakLoop(Opcode):
-    name = 'BREAK_LOOP'
-
-@_opcode(81, 'has_with')
-class OpcodeWithCleanup(Opcode):
-    name = 'WITH_CLEANUP'
-
-@_opcode(81, '!has_new_raise')
-class OpcodeRaiseException(Opcode):
-    name = 'RAISE_EXCEPTION'
-
-@_opcode(82, '!has_new_class')
-class OpcodeLoadLocals(Opcode):
-    name = 'LOAD_LOCALS'
-
-@_opcode(83)
-class OpcodeReturnValue(Opcode):
-    name = 'RETURN_VALUE'
-
-# TODO: LOAD_GLOBALS - appears unused...
-
-@_opcode(84, 'has_import_star')
-class OpcodeImportStar(Opcode):
-    name = 'IMPORT_STAR'
-
-@_opcode(85, 'has_exec')
-class OpcodeExecStmt(Opcode):
-    name = 'EXEC_STMT'
-
-@_opcode(86, '!has_new_code')
-class OpcodeBuildFunction(Opcode):
-    name = 'BUILD_FUNCTION'
-
-@_opcode(86, 'has_yield_stmt')
-class OpcodeYieldValue(Opcode):
-    name = 'YIELD_VALUE'
-
-@_opcode(87)
-class OpcodePopBlock(Opcode):
-    name = 'POP_BLOCK'
-
-@_opcode(88)
-class OpcodeEndFinally(Opcode):
-    name = 'END_FINALLY'
-
-@_opcode(89, '!has_new_class')
-class OpcodeBuildClass(Opcode):
-    name = 'BUILD_CLASS'
-
-@_opcode(89, 'has_pop_except')
-class OpcodePopExcept(Opcode):
-    name = 'POP_EXCEPT'
-
-
-# opcodes have an argument from here on
-
-@_opcode(90)
-class OpcodeStoreName(OpcodeParamName):
-    name = "STORE_NAME"
-
-@_opcode(91)
-class OpcodeDeleteName(OpcodeParamName):
-    name = "DELETE_NAME"
-
-@_opcode(92, '!has_unpack_sequence')
-class OpcodeUnpackTuple(OpcodeParamNum):
-    name = "UNPACK_TUPLE"
-
-@_opcode(92, 'has_unpack_sequence')
-class OpcodeUnpackSequence(OpcodeParamNum):
-    name = "UNPACK_SEQUENCE"
-
-@_opcode(93, '!has_unpack_sequence')
-class OpcodeUnpackList(OpcodeParamNum):
-    name = "UNPACK_LIST"
-
-@_opcode(93, 'has_iter')
-class OpcodeForIter(OpcodeParamRel):
-    name = 'FOR_ITER'
-
-@_opcode(94, '!has_new_code')
-class OpcodeUnpackArg(OpcodeParamNum):
-    name = "UNPACK_ARG"
-
-@_opcode(94, ('has_new_comp', 'has_earg_145'))
-@_opcode(145, ('has_new_comp', '!has_earg_145'))
-class OpcodeListAppendNew(OpcodeParamNum):
-    name = 'LIST_APPEND'
-
-@_opcode(94, 'has_unpack_ex')
-class OpcodeUnpackEx(Opcode):
-    __slots__ = 'before', 'after'
-    NAME = 'UNPACK_EX'
-
-    def read_params(self, bytecode):
-        param = bytecode.word(self.ext)
-        self.before = param & 0xff
-        self.after = param >> 8 & 0xff
-        if param & ~0xffff:
-            raise PythonError("funny unpack ex")
-
-    def print_params(self):
-        return "{}, {}".format(self.before, self.after)
-
-
-@_opcode(95)
-class OpcodeStoreAttr(OpcodeParamName):
-    name = "STORE_ATTR"
-
-@_opcode(96)
-class OpcodeDeleteAttr(OpcodeParamName):
-    name = "DELETE_ATTR"
-
-@_opcode(97)
-class OpcodeStoreGlobal(OpcodeParamName):
-    name = "STORE_GLOBAL"
-
-@_opcode(98)
-class OpcodeDeleteGlobal(OpcodeParamName):
-    name = "DELETE_GLOBAL"
-
-@_opcode(99, '!has_new_code')
-class OpcodeUnpackVararg(OpcodeParamNum):
-    name = "UNPACK_VARARG"
-
-@_opcode(99, 'has_dup_topx')
-class OpcodeDupTopX(OpcodeParamNum):
-    name = "DUP_TOPX"
-
-
-@_opcode(100)
-class OpcodeLoadConst(Opcode):
-    """$push(const)"""
-    __slots__ = 'const', 'idx'
-    name = 'LOAD_CONST'
-
-    def read_params(self, bytecode):
-        from .code import Code
-        self.const, self.idx = bytecode.get_const((Expr, Code), self.ext)
-
-    def print_params(self):
-        from .code import Code
-        if isinstance(self.const, Expr):
-            return self.const.show(None)
-        elif isinstance(self.const, Code):
-            return "<code {}>".format(self.idx)
-        else:
-            raise TypeError("unknown const")
-
-
-@_opcode(101)
-class OpcodeLoadName(OpcodeParamName):
-    name = "LOAD_NAME"
-
-@_opcode(102)
-class OpcodeBuildTuple(OpcodeParamNum):
-    name = "BUILD_TUPLE"
-
-@_opcode(103)
-class OpcodeBuildList(OpcodeParamNum):
-    name = "BUILD_LIST"
-
-@_opcode(104, 'has_setdict_comp')
-class OpcodeBuildSet(OpcodeParamNum):
-    name = "BUILD_SET"
-
-@_opcode(104, '!has_setdict_comp')
-@_opcode(105, 'has_setdict_comp')
-class OpcodeBuildMap(OpcodeParamNum):
-    name = "BUILD_MAP"
-
-@_opcode(105, '!has_setdict_comp')
-@_opcode(106, 'has_setdict_comp')
-class OpcodeLoadAttr(OpcodeParamName):
-    name = "LOAD_ATTR"
-
-@_opcode(106, '!has_setdict_comp')
-@_opcode(107, 'has_setdict_comp')
-class OpcodeCompareOp(Opcode):
-    __slots__ = 'mode',
-    name = "COMPARE_OP"
-
-    def read_params(self, bytecode):
-        try:
-            self.mode = CmpOp(bytecode.word(self.ext))
-        except ValueError:
-            raise PythonError("invalid cmp op")
-
-    def print_params(self):
-        return self.mode.name
-
-
-@_opcode(107, '!has_setdict_comp')
-@_opcode(108, 'has_setdict_comp')
-class OpcodeImportName(OpcodeParamName):
-    name = "IMPORT_NAME"
-
-@_opcode(108, '!has_setdict_comp')
-@_opcode(109, 'has_setdict_comp')
-class OpcodeImportFrom(OpcodeParamName):
-    name = "IMPORT_FROM"
-
-@_opcode(109, 'has_access')
-class OpcodeAccessMode(OpcodeParamName):
-    name = "ACCESS_MODE"
-
-@_opcode(110)
-class OpcodeJumpForward(OpcodeParamRel):
-    name = 'JUMP_FORWARD'
-
-@_opcode(111, '!has_new_jump')
-class OpcodeJumpIfFalse(OpcodeParamRel):
-    name = 'JUMP_IF_FALSE'
-
-@_opcode(112, '!has_new_jump')
-class OpcodeJumpIfTrue(OpcodeParamRel):
-    name = 'JUMP_IF_TRUE'
-
-@_opcode(111, 'has_new_jump')
-class OpcodeJumpIfFalseOrPop(OpcodeParamAbs):
-    name = 'JUMP_IF_FALSE_OR_POP'
-
-@_opcode(112, 'has_new_jump')
-class OpcodeJumpIfTrueOrPop(OpcodeParamAbs):
-    name = 'JUMP_IF_TRUE_OR_POP'
-
-@_opcode(113)
-class OpcodeJumpAbsolute(OpcodeParamAbs):
-    name = 'JUMP_ABSOLUTE'
-
-@_opcode(114, '!has_iter')
-class OpcodeForLoop(OpcodeParamRel):
-    name = 'FOR_LOOP'
-
-@_opcode(114, 'has_new_jump')
-class OpcodePopJumpIfFalse(OpcodeParamAbs):
-    name = 'POP_JUMP_IF_FALSE'
-
-@_opcode(115, 'has_new_jump')
-class OpcodePopJumpIfTrue(OpcodeParamAbs):
-    name = 'POP_JUMP_IF_TRUE'
-
-# TODO: LOAD_LOCAL - appears unused...
-
-
-@_opcode(116)
-class OpcodeLoadGlobal(OpcodeParamName):
-    name = "LOAD_GLOBAL"
-
-@_opcode(117, ('has_def_args', '!has_new_code'))
-class OpcodeSetFuncArgs(OpcodeParamNum):
-    name = "SET_FUNC_ARGS"
-
-@_opcode(119, 'has_new_continue')
-class OpcodeContinueLoop(OpcodeParamAbs):
-    name = 'CONTINUE_LOOP'
-
-
-@_opcode(120)
-class OpcodeSetupLoop(OpcodeParamRel):
-    name = 'SETUP_LOOP'
-
-@_opcode(121)
-class OpcodeSetupExcept(OpcodeParamRel):
-    name = 'SETUP_EXCEPT'
-
-@_opcode(122)
-class OpcodeSetupFinally(OpcodeParamRel):
-    name = 'SETUP_FINALLY'
-
-
-@_opcode(123, '!has_new_code')
-class OpcodeReserveFast(Opcode):
-    """Prepares fast slots. Arg is a const: dict or None."""
-    __slots__ = 'names',
-    name = 'RESERVE_FAST'
-
-    def read_params(self, bytecode):
-        # TODO
-        if bytecode.version.consts_is_list:
-            from .code import CodeDict
-            const, _ = bytecode.get_const((CodeDict, ExprNone), self.ext)
-            if isinstance(const, CodeDict):
-                self.names = const.names
-            elif isinstance(const, ExprNone):
-                self.names = []
-            else:
-                assert False
-        else:
-            const, _ = bytecode.get_const((ExprTuple, ExprNone), self.ext)
-            if isinstance(const, ExprTuple):
-                self.names = []
-                for name in const.exprs:
-                    if not isinstance(name, ExprString):
-                        raise PythonError("funny var name")
-                    self.names.append(name.val.decode('ascii'))
-            else:
-                self.names = None
-
-    def print_params(self):
-        if self.names is None:
-            return 'None'
-        return ', '.join(self.names)
-
-
-@_opcode(124)
-class OpcodeLoadFast(OpcodeParamFast):
-    name = "LOAD_FAST"
-
-@_opcode(125)
-class OpcodeStoreFast(OpcodeParamFast):
-    name = "STORE_FAST"
-
-@_opcode(126)
-class OpcodeDeleteFast(OpcodeParamFast):
-    name = "DELETE_FAST"
-
-@_opcode(127, 'has_set_lineno')
-class OpcodeSetLineno(OpcodeParamNum):
-    name = "SET_LINENO"
-
-@_opcode(130, 'has_new_raise')
-class OpcodeRaiseVarargs(OpcodeParamNum):
-    name = "RAISE_VARARGS"
 
 
 class OpcodeCallFunctionBase(Opcode):
@@ -734,82 +121,329 @@ class OpcodeMakeFunctionNewBase(Opcode):
         return "{}, {}, {}".format(self.args, self.kwargs, self.ann)
 
 
-@_opcode(131, 'has_new_code')
-class OpcodeCallFunction(OpcodeCallFunctionBase):
-    name = "CALL_FUNCTION"
+class OpcodeUnpackExBase(Opcode):
+    __slots__ = 'before', 'after'
 
-@_opcode(132, ('has_new_code', '!has_kwonlyargs'))
-class OpcodeMakeFunction(OpcodeParamNum):
-    name = "MAKE_FUNCTION"
+    def read_params(self, bytecode):
+        param = bytecode.word(self.ext)
+        self.before = param & 0xff
+        self.after = param >> 8 & 0xff
+        if param & ~0xffff:
+            raise PythonError("funny unpack ex")
 
-@_opcode(132, 'has_kwonlyargs')
-class OpcodeMakeFunctionNew(OpcodeMakeFunctionNewBase):
-    name = "MAKE_FUNCTION"
+    def print_params(self):
+        return "{}, {}".format(self.before, self.after)
 
-# TODO: kwonlyargs version
 
-@_opcode(133, 'has_new_slice')
-class OpcodeBuildSlice(OpcodeParamNum):
-    name = "BUILD_SLICE"
+class OpcodeLoadConstBase(Opcode):
+    __slots__ = 'const', 'idx'
 
-@_opcode(134, ('has_closure', '!has_kwonlyargs'))
-class OpcodeMakeClosure(OpcodeParamNum):
-    name = "MAKE_CLOSURE"
+    def read_params(self, bytecode):
+        from .code import Code
+        self.const, self.idx = bytecode.get_const((Expr, Code), self.ext)
 
-@_opcode(134, 'has_kwonlyargs')
-class OpcodeMakeClosureNew(OpcodeMakeFunctionNewBase):
-    name = "MAKE_CLOSURE"
+    def print_params(self):
+        from .code import Code
+        if isinstance(self.const, Expr):
+            return self.const.show(None)
+        elif isinstance(self.const, Code):
+            return "<code {}>".format(self.idx)
+        else:
+            raise TypeError("unknown const")
 
-@_opcode(135, 'has_closure')
-class OpcodeLoadClosure(OpcodeParamNum):
-    name = "LOAD_CLOSURE"
 
-@_opcode(136, 'has_closure')
-class OpcodeLoadDeref(OpcodeParamNum):
-    name = "LOAD_DEREF"
+class OpcodeCompareOpBase(Opcode):
+    __slots__ = 'mode',
 
-@_opcode(137, 'has_closure')
-class OpcodeStoreDeref(OpcodeParamNum):
-    name = "STORE_DEREF"
+    def read_params(self, bytecode):
+        try:
+            self.mode = CmpOp(bytecode.word(self.ext))
+        except ValueError:
+            raise PythonError("invalid cmp op")
 
-@_opcode(138, 'has_delete_deref')
-class OpcodeDeleteDeref(OpcodeParamNum):
-    name = "DELETE_DEREF"
+    def print_params(self):
+        return self.mode.name
 
-@_opcode(140, 'has_var_call')
-class OpcodeCallFunctionVar(OpcodeCallFunctionBase):
-    name = "CALL_FUNCTION_VAR"
 
-@_opcode(141, 'has_var_call')
-class OpcodeCallFunctionKw(OpcodeCallFunctionBase):
-    name = "CALL_FUNCTION_KW"
+class OpcodeReserveFastBase(Opcode):
+    """Prepares fast slots. Arg is a const: dict or None."""
+    __slots__ = 'names',
 
-@_opcode(142, 'has_var_call')
-class OpcodeCallFunctionVarKw(OpcodeCallFunctionBase):
-    name = "CALL_FUNCTION_VAR_KW"
+    def read_params(self, bytecode):
+        # TODO
+        if bytecode.version.consts_is_list:
+            from .code import CodeDict
+            const, _ = bytecode.get_const((CodeDict, ExprNone), self.ext)
+            if isinstance(const, CodeDict):
+                self.names = const.names
+            elif isinstance(const, ExprNone):
+                self.names = []
+            else:
+                assert False
+        else:
+            const, _ = bytecode.get_const((ExprTuple, ExprNone), self.ext)
+            if isinstance(const, ExprTuple):
+                self.names = []
+                for name in const.exprs:
+                    if not isinstance(name, ExprString):
+                        raise PythonError("funny var name")
+                    self.names.append(name.val.decode('ascii'))
+            else:
+                self.names = None
 
-@_opcode(143, 'has_setup_with')
-class OpcodeSetupWith(OpcodeParamRel):
-    name = 'SETUP_WITH'
+    def print_params(self):
+        if self.names is None:
+            return 'None'
+        return ', '.join(self.names)
 
-@_opcode(143, ('has_extended_arg', '!has_setup_with'))
-@_opcode(144, ('has_setup_with', '!has_earg_145'))
-@_opcode(145, ('has_setup_with', 'has_earg_145'))
-class ExtendedArg(OpcodeParamNum):
-    name = "EXTENDED_ARG"
 
-@_opcode(146, 'has_new_comp')
-class OpcodeSetAddNew(OpcodeParamNum):
-    name = 'SET_ADD'
+# opcode registration functions
 
-@_opcode(147, 'has_new_comp')
-class OpcodeMapAddNew(OpcodeParamNum):
-    name = 'MAP_ADD'
+OPCODES = {}
 
-@_opcode(148, 'has_classderef')
-class OpcodeLoadClassDeref(OpcodeParamNum):
-    name = 'LOAD_CLASS_DEREF'
+def op_maker(base):
+    def make_op_any(code, name, flag=None, multi=False):
+        camelname = 'Opcode' + ''.join(x.capitalize() for x in name.split('_'))
+        try:
+            cls = globals()[camelname]
+        except KeyError:
+            namespace = {
+                '__slots__': (),
+                'name': name,
+            }
+            cls = type(camelname, (base,), namespace)
+            globals()[camelname] = cls
+        else:
+            assert multi
+        OPCODES.setdefault(code, []).append((cls, flag))
+    return make_op_any
 
+make_op = op_maker(Opcode)
+make_op_name = op_maker(OpcodeParamName)
+make_op_num = op_maker(OpcodeParamNum)
+make_op_rel = op_maker(OpcodeParamRel)
+make_op_abs = op_maker(OpcodeParamAbs)
+make_op_call = op_maker(OpcodeCallFunctionBase)
+make_op_fun = op_maker(OpcodeMakeFunctionNewBase)
+make_op_uex = op_maker(OpcodeUnpackExBase)
+make_op_const = op_maker(OpcodeLoadConstBase)
+make_op_cmp = op_maker(OpcodeCompareOpBase)
+make_op_res = op_maker(OpcodeReserveFastBase)
+
+
+# opcodes start here
+
+make_op(1, 'POP_TOP')
+make_op(2, 'ROT_TWO')
+make_op(3, 'ROT_THREE')
+make_op(4, 'DUP_TOP')
+make_op(5, 'ROT_FOUR', 'has_rot_four')
+make_op(5, 'DUP_TWO', 'has_dup_two')
+
+make_op(10, 'UNARY_POSITIVE')
+make_op(11, 'UNARY_NEGATIVE')
+make_op(12, 'UNARY_NOT')
+make_op(13, 'UNARY_CONVERT', 'has_repr')
+make_op(14, 'UNARY_CALL', '!has_new_code')
+make_op(15, 'UNARY_INVERT')
+
+make_op(16, 'BINARY_MATRIX_MULTIPLY', 'has_matmul')
+make_op(17, 'INPLACE_MATRIX_MULTIPLY', 'has_matmul')
+
+make_op(17, 'SET_ADD', ('has_setdict_comp', '!has_new_comp'))
+make_op(18, 'LIST_APPEND', ('has_list_append', '!has_new_comp'))
+
+make_op(19, 'BINARY_POWER', 'has_power')
+make_op(20, 'BINARY_MULTIPLY')
+make_op(21, 'BINARY_DIVIDE', 'has_old_divide')
+make_op(22, 'BINARY_MODULO')
+make_op(23, 'BINARY_ADD')
+make_op(24, 'BINARY_SUBTRACT')
+make_op(25, 'BINARY_SUBSCR')
+make_op(26, 'BINARY_CALL', '!has_new_code')
+make_op(26, 'BINARY_FLOOR_DIVIDE', 'has_new_divide')
+make_op(27, 'BINARY_TRUE_DIVIDE', 'has_new_divide')
+make_op(28, 'INPLACE_FLOOR_DIVIDE', 'has_new_divide')
+make_op(29, 'INPLACE_TRUE_DIVIDE', 'has_new_divide')
+
+make_op(30, 'SLICE_N_N', 'has_old_slice')
+make_op(31, 'SLICE_E_N', 'has_old_slice')
+make_op(32, 'SLICE_N_E', 'has_old_slice')
+make_op(33, 'SLICE_E_E', 'has_old_slice')
+make_op(40, 'STORE_SLICE_N_N', 'has_old_slice')
+make_op(41, 'STORE_SLICE_E_N', 'has_old_slice')
+make_op(42, 'STORE_SLICE_N_E', 'has_old_slice')
+make_op(43, 'STORE_SLICE_E_E', 'has_old_slice')
+make_op(50, 'DELETE_SLICE_N_N', 'has_old_slice')
+make_op(51, 'DELETE_SLICE_E_N', 'has_old_slice')
+make_op(52, 'DELETE_SLICE_N_E', 'has_old_slice')
+make_op(53, 'DELETE_SLICE_E_E', 'has_old_slice')
+
+make_op(54, 'STORE_MAP', 'has_store_map')
+
+make_op(55, 'INPLACE_ADD', 'has_inplace')
+make_op(56, 'INPLACE_SUBTRACT', 'has_inplace')
+make_op(57, 'INPLACE_MULTIPLY', 'has_inplace')
+make_op(58, 'INPLACE_DIVIDE', ('has_inplace', 'has_old_divide'))
+make_op(59, 'INPLACE_MODULO', 'has_inplace')
+
+make_op(60, 'STORE_SUBSCR')
+make_op(61, 'DELETE_SUBSCR')
+
+make_op(62, 'BINARY_LSHIFT')
+make_op(63, 'BINARY_RSHIFT')
+make_op(64, 'BINARY_AND')
+make_op(65, 'BINARY_XOR')
+make_op(66, 'BINARY_OR')
+
+make_op(67, 'INPLACE_POWER', 'has_inplace')
+
+make_op(68, 'GET_ITER', 'has_iter')
+make_op(69, 'STORE_LOCALS', 'has_store_locals')
+make_op(70, 'PRINT_EXPR')
+
+make_op(71, 'PRINT_ITEM', 'has_print')
+make_op(72, 'PRINT_NEWLINE', 'has_print')
+make_op(73, 'PRINT_ITEM_TO', 'has_print_to')
+make_op(74, 'PRINT_NEWLINE_TO', 'has_print_to')
+
+make_op(71, 'LOAD_BUILD_CLASS', 'has_new_class')
+make_op(72, 'YIELD_FROM', 'has_yield_from')
+
+make_op(75, 'INPLACE_LSHIFT', 'has_inplace')
+make_op(76, 'INPLACE_RSHIFT', 'has_inplace')
+make_op(77, 'INPLACE_AND', 'has_inplace')
+make_op(78, 'INPLACE_XOR', 'has_inplace')
+make_op(79, 'INPLACE_OR', 'has_inplace')
+
+make_op(80, 'BREAK_LOOP')
+make_op(81, 'RAISE_EXCEPTION', '!has_new_raise')
+make_op(81, 'WITH_CLEANUP', 'has_with')
+make_op(82, 'LOAD_LOCALS', '!has_new_class')
+make_op(83, 'RETURN_VALUE')
+# TODO: LOAD_GLOBALS - appears unused...
+make_op(84, 'IMPORT_STAR', 'has_import_star')
+make_op(85, 'EXEC_STMT', 'has_exec')
+make_op(86, 'BUILD_FUNCTION', '!has_new_code')
+make_op(86, 'YIELD_VALUE', 'has_yield_stmt')
+make_op(87, 'POP_BLOCK')
+make_op(88, 'END_FINALLY')
+make_op(89, 'BUILD_CLASS', '!has_new_class')
+make_op(89, 'POP_EXCEPT', 'has_pop_except')
+
+# opcodes have an argument from here on
+
+make_op_name(90, 'STORE_NAME')
+make_op_name(91, 'DELETE_NAME')
+
+make_op_num(92, 'UNPACK_SEQUENCE', 'has_unpack_sequence')
+make_op_num(92, 'UNPACK_TUPLE', '!has_unpack_sequence')
+make_op_num(93, 'UNPACK_LIST', '!has_unpack_sequence')
+make_op_num(94, 'UNPACK_ARG', '!has_new_code')
+
+make_op_rel(93, 'FOR_ITER', 'has_iter')
+
+make_op_num(94, 'LIST_APPEND_NEW', 'has_earg_145', True)
+
+make_op_uex(94, 'UNPACK_EX', 'has_unpack_ex')
+
+make_op_name(95, 'STORE_ATTR')
+make_op_name(96, 'DELETE_ATTR')
+make_op_name(97, 'STORE_GLOBAL')
+make_op_name(98, 'DELETE_GLOBAL')
+
+make_op_num(99, 'UNPACK_VARARG', '!has_new_code')
+
+make_op_num(99, 'DUP_TOP_X', 'has_dup_topx')
+
+make_op_const(100, 'LOAD_CONST')
+make_op_name(101, 'LOAD_NAME')
+
+make_op_num(102, 'BUILD_TUPLE')
+make_op_num(103, 'BUILD_LIST')
+make_op_num(104, 'BUILD_MAP', '!has_setdict_comp', True)
+make_op_name(105, 'LOAD_ATTR', '!has_setdict_comp', True)
+make_op_cmp(106, 'COMPARE_OP', '!has_setdict_comp', True)
+make_op_name(107, 'IMPORT_NAME', '!has_setdict_comp', True)
+make_op_name(108, 'IMPORT_FROM', '!has_setdict_comp', True)
+make_op_name(109, 'ACCESS_MODE', 'has_access')
+
+make_op_num(104, 'BUILD_SET', 'has_setdict_comp')
+make_op_num(105, 'BUILD_MAP', 'has_setdict_comp', True)
+make_op_name(106, 'LOAD_ATTR', 'has_setdict_comp', True)
+make_op_cmp(107, 'COMPARE_OP', 'has_setdict_comp', True)
+make_op_name(108, 'IMPORT_NAME', 'has_setdict_comp', True)
+make_op_name(109, 'IMPORT_FROM', 'has_setdict_comp', True)
+
+make_op_rel(110, 'JUMP_FORWARD')
+
+make_op_rel(111, 'JUMP_IF_FALSE', '!has_new_jump')
+make_op_rel(112, 'JUMP_IF_TRUE', '!has_new_jump')
+
+make_op_abs(111, 'JUMP_IF_FALSE_OR_POP', 'has_new_jump')
+make_op_abs(112, 'JUMP_IF_TRUE_OR_POP', 'has_new_jump')
+
+make_op_abs(113, 'JUMP_ABSOLUTE')
+
+make_op_rel(114, 'FOR_LOOP', '!has_iter')
+
+make_op_abs(114, 'POP_JUMP_IF_FALSE', 'has_new_jump')
+make_op_abs(115, 'POP_JUMP_IF_TRUE', 'has_new_jump')
+
+# TODO: LOAD_LOCAL - appears unused...
+make_op_name(116, 'LOAD_GLOBAL')
+
+make_op_num(117, 'SET_FUNC_ARGS', ('has_def_args', '!has_new_code'))
+
+make_op_abs(119, 'CONTINUE_LOOP', 'has_new_continue')
+
+make_op_rel(120, 'SETUP_LOOP')
+make_op_rel(121, 'SETUP_EXCEPT')
+make_op_rel(122, 'SETUP_FINALLY')
+
+make_op_res(123, 'RESERVE_FAST', '!has_new_code')
+make_op_num(124, 'LOAD_FAST')
+make_op_num(125, 'STORE_FAST')
+make_op_num(126, 'DELETE_FAST')
+
+make_op_num(127, 'SET_LINENO', 'has_set_lineno')
+
+make_op_num(130, 'RAISE_VARARGS', 'has_new_raise')
+
+make_op_call(131, 'CALL_FUNCTION', 'has_new_code')
+
+make_op_num(132, 'MAKE_FUNCTION', ('has_new_code', '!has_kwonlyargs'))
+make_op_fun(132, 'MAKE_FUNCTION_NEW', 'has_kwonlyargs')
+
+make_op_num(133, 'BUILD_SLICE', 'has_new_slice')
+
+make_op_num(134, 'MAKE_CLOSURE', ('has_closure', '!has_kwonlyargs'))
+make_op_fun(134, 'MAKE_CLOSURE_NEW', 'has_kwonlyargs')
+
+make_op_num(135, 'LOAD_CLOSURE', 'has_closure')
+make_op_num(136, 'LOAD_DEREF', 'has_closure')
+make_op_num(137, 'STORE_DEREF', 'has_closure')
+make_op_num(138, 'DELETE_DEREF', 'has_delete_deref')
+
+make_op_call(140, 'CALL_FUNCTION_VAR', 'has_var_call')
+make_op_call(141, 'CALL_FUNCTION_KW', 'has_var_call')
+make_op_call(142, 'CALL_FUNCTION_VAR_KW', 'has_var_call')
+
+make_op_rel(143, 'SETUP_WITH', 'has_setup_with')
+
+# has special handling in the parser loop
+make_op_num(143, 'EXTENDED_ARG', ('has_extended_arg', '!has_setup_with'), True)
+make_op_num(144, 'EXTENDED_ARG', ('has_setup_with', '!has_earg_145'), True)
+make_op_num(145, 'EXTENDED_ARG', ('has_setup_with', 'has_earg_145'), True)
+
+make_op_num(145, 'LIST_APPEND_NEW', '!has_earg_145', True)
+make_op_num(146, 'SET_ADD_NEW', 'has_new_comp')
+make_op_num(147, 'MAP_ADD_NEW', 'has_new_comp')
+
+make_op_num(148, 'LOAD_CLASS_DEREF', 'has_classderef')
+
+
+# the reader
 
 class Bytecode:
     def __init__(self, version, code):
@@ -824,10 +458,10 @@ class Bytecode:
             pos = self.pos
             opc = self.byte()
             op = self.get_op(pos, opc, 0)
-            if isinstance(op, ExtendedArg):
+            if isinstance(op, OpcodeExtendedArg):
                 opc = self.byte()
                 op = self.get_op(pos, opc, op.param)
-                if isinstance(op, ExtendedArg):
+                if isinstance(op, OpcodeExtendedArg):
                     raise PythonError("funny, two EXTENDED_ARG in a row")
             self.ops.append(op)
             self.opdict[pos] = op
@@ -841,7 +475,7 @@ class Bytecode:
     def get_op(self, pos, opc, ext):
         for cls, flag in OPCODES.get(opc, []):
             if self.version.match(flag):
-                return cls(self, pos, ext)
+                return cls.read(self, pos, ext)
         raise PythonError("unknown opcode {}".format(opc))
 
     def bytes(self, num):
@@ -867,6 +501,8 @@ class Bytecode:
             raise PythonError("Const of type {} expected, got {}".format(cls, type(res)))
         return res, idx
 
+
+# lineno handling
 
 def parse_lnotab(firstlineno, lnotab, codelen):
     if len(lnotab) % 2:

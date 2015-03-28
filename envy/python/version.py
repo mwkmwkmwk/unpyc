@@ -389,6 +389,7 @@ class Pyc30(Pyc26):
     has_complex_args = False
     has_old_slice = False
     has_print = False
+    has_print_to = False
     has_exec = False
     has_old_divide = False
     has_repr = False

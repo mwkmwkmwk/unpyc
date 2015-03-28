@@ -191,7 +191,7 @@ class StmtInplaceAdd(StmtInplace):
     sign = '+='
 
 
-class StmtInplaceSubstract(StmtInplace):
+class StmtInplaceSubtract(StmtInplace):
     __slots__ = ()
     sign = '-='
 

@@ -511,7 +511,7 @@ def visit_set_lineno(self, deco):
 def visit_dup_top(self, deco):
     return [DupTop()]
 
-@_visitor(OpcodeDupTopTwo)
+@_visitor(OpcodeDupTwo)
 def visit_dup_top(self, deco):
     return [DupTwo()]
 
@@ -558,7 +558,7 @@ for otype, etype in {
     OpcodeBinaryDivide: ExprDiv,
     OpcodeBinaryModulo: ExprMod,
     OpcodeBinaryAdd: ExprAdd,
-    OpcodeBinarySubstract: ExprSub,
+    OpcodeBinarySubtract: ExprSub,
     OpcodeBinaryLshift: ExprShl,
     OpcodeBinaryRshift: ExprShr,
     OpcodeBinaryAnd: ExprAnd,
@@ -1466,7 +1466,7 @@ def _visit_return_locals(self, deco, closure):
 
 INPLACE_OPS = [
     (OpcodeInplaceAdd, StmtInplaceAdd),
-    (OpcodeInplaceSubstract, StmtInplaceSubstract),
+    (OpcodeInplaceSubtract, StmtInplaceSubtract),
     (OpcodeInplaceMultiply, StmtInplaceMultiply),
     (OpcodeInplaceDivide, StmtInplaceDivide),
     (OpcodeInplaceModulo, StmtInplaceModulo),

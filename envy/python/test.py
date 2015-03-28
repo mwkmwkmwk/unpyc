@@ -209,6 +209,11 @@ TESTS_22.update({
 
 TESTS_23 = TESTS_22.copy()
 TESTS_23.update({
+    'defs/gen': '23',
+    'expr/logic_const': '23',
+    'names/global_': '23',
+    'stmt/if_const': '23',
+    'stmt/if_logic_const': '23',
 })
 
 TESTS_24 = TESTS_23.copy()

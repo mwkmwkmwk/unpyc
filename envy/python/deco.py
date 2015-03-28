@@ -1654,7 +1654,7 @@ class DecoCtx:
             self.varnames = code.varnames
         else:
             self.varnames = None
-        ops = code.ops
+        ops = self.preproc(code.ops)
         inflow = process_flow(ops)
         for op in ops:
             flows = list(reversed(inflow[op.pos]))
@@ -1692,6 +1692,26 @@ class DecoCtx:
         if not isinstance(self.stack[0], Block):
             raise PythonError("weirdness on stack at the end")
         self.res = DecoCode(self.stack[0], code, self.varnames)
+
+    def preproc(self, ops):
+        if self.version.has_jump_true_const:
+            newops = []
+            fakejumps = {}
+            for idx in range(len(ops)):
+                op = ops[idx]
+                more = len(ops) - idx - 1
+                if (more >= 2
+                    and isinstance(op, OpcodeJumpForward)
+                    and isinstance(ops[idx+1], OpcodeJumpIfFalse)
+                    and isinstance(ops[idx+2], OpcodePopTop)
+                    and op.flow.dst == ops[idx+2].nextpos
+                ):
+                    fakejumps[op.flow.dst] = op.pos
+                    newops.append(OpcodeLoadConst(op.pos, op.nextpos, ExprAnyTrue(), None))
+                else:
+                    newops.append(op)
+            ops = newops
+        return ops
 
     def process(self, op):
         for visitor in _VISITORS.get(type(op), []):

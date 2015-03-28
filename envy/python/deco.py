@@ -241,10 +241,7 @@ DupSliceEN = namedtuple('DupSliceEN', ['expr', 'start'])
 DupSliceNE = namedtuple('DupSliceNE', ['expr', 'end'])
 DupSliceEE = namedtuple('DupSliceEE', ['expr', 'start', 'end'])
 
-InplaceName = namedtuple('InplaceName', ['name', 'src', 'stmt'])
-InplaceGlobal = namedtuple('InplaceGlobal', ['name', 'src', 'stmt'])
-InplaceFast = namedtuple('InplaceFast', ['idx', 'src', 'stmt'])
-InplaceDeref = namedtuple('InplaceDeref', ['idx', 'src', 'stmt'])
+InplaceSimple = namedtuple('InplaceSimple', ['dst', 'src', 'stmt'])
 InplaceAttr = namedtuple('InplaceAttr', ['expr', 'name', 'src', 'stmt'])
 InplaceSubscr = namedtuple('InplaceSubscr', ['expr', 'index', 'src', 'stmt'])
 InplaceSliceNN = namedtuple('InplaceSliceNN', ['expr', 'src', 'stmt'])
@@ -266,7 +263,8 @@ Closures = object()
 
 # regurgitables
 
-Store = namedtuple('Store', ['dst'])
+Store = namedtuple('Store', ['dst', 'extra'])
+Inplace = namedtuple('Inplace', ['stmt'])
 
 # visitors
 
@@ -377,107 +375,101 @@ def _stmt_visitor(op, *stack, **kwargs):
         return func
     return inner
 
+####
+
+@_stmt_visitor(Store, Expr)
+def visit_store_assign(self, deco, src):
+    return StmtAssign([self.dst], src), self.extra
+
+@_visitor(Store, Block, Expr, DupTop)
+def visit_store_multi_start(self, deco, block, src, _):
+    return [block, MultiAssign(src, [self.dst])] + self.extra
+
+@_visitor(Store, Block, MultiAssign, DupTop)
+def visit_store_multi_next(self, deco, block, multi, _):
+    multi.dsts.append(self.dst)
+    return [block, multi] + self.extra
+
+@_stmt_visitor(Store, MultiAssign)
+def visit_store_multi_end(self, deco, multi):
+    multi.dsts.append(self.dst)
+    stmt = StmtAssign(multi.dsts, multi.src)
+    return stmt, self.extra
+
+@_visitor(Store, UnpackSlot)
+def visit_store_unpack(self, deco, slot):
+    slot.expr.exprs[slot.idx] = self.dst
+    return self.extra
+
+@_visitor(Store, UnpackArgSlot)
+def visit_store_unpack_arg(self, deco, slot):
+    slot.args.args[slot.idx] = self.dst
+    return self.extra
+
+@_visitor(Store, UnpackVarargSlot)
+def visit_store_unpack_vararg(self, deco, slot):
+    slot.args.vararg = self.dst
+    return self.extra
+
+@_visitor(Store, Block, ForStart)
+def visit_store_multi_start(self, deco, block, start):
+    return [
+        block,
+        ForLoop(start.expr, self.dst, start.loop, start.flow),
+        Block([])
+    ] + self.extra
+
+@_visitor(Store, CompLevel, ForStart)
+def visit_store_multi_start(self, deco, comp, start):
+    return [
+        comp,
+        CompForLoop(start.loop, start.flow),
+        CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
+    ] + self.extra
+
+@_visitor(Store, MultiAssign, ForStart, flag='has_list_append')
+def visit_store_multi_start(self, deco, ass, start):
+    if len(ass.dsts) != 1:
+        raise PythonError("multiassign in list comp too long")
+    if not isinstance(ass.src, ExprList) or ass.src.exprs:
+        raise PythonError("comp should start with an empty list")
+    expr = ExprListComp()
+    meat = OldListCompStart(expr, ass.dsts[0])
+    comp = CompLevel(meat, [])
+    return [
+        expr,
+        meat,
+        comp,
+        CompForLoop(start.loop, start.flow),
+        CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
+    ] + self.extra
+
+@_visitor(Store, TryExceptMatchOk)
+def _visit_except_match_store(self, deco, match):
+    return [
+        TryExceptMatch(match.expr, self.dst, match.next),
+        Block([]),
+        WantPop()
+    ] + self.extra
+
+@_stmt_visitor(Store, Import)
+def _visit_store_name_import(self, deco, import_, *args):
+    if import_.items:
+        raise PythonError("non-empty items for plain import")
+    return StmtImport(-1, import_.name, [], self.dst), self.extra
+
+@_stmt_visitor(Store, Import2Simple)
+def _visit_store_name_import(self, deco, import_):
+    return StmtImport(import_.level, import_.name, import_.attrs, self.dst), self.extra
+
+####
+
 def _store_visitor(op, *stack):
     def inner(func):
-
-        @_stmt_visitor(op, Expr, *stack)
-        def visit_store_assign(self, deco, src, *args):
+        @_re_visitor(op, *stack)
+        def visit_store(self, deco, *args):
             dst, extra = func(self, deco, *args)
-            return StmtAssign([dst], src), extra
-
-        @_visitor(op, Block, Expr, DupTop, *stack)
-        def visit_store_multi_start(self, deco, block, src, _, *args):
-            dst, extra = func(self, deco, *args)
-            return [block, MultiAssign(src, [dst])] + extra
-
-        @_visitor(op, Block, MultiAssign, DupTop, *stack)
-        def visit_store_multi_next(self, deco, block, multi, _, *args):
-            dst, extra = func(self, deco, *args)
-            multi.dsts.append(dst)
-            return [block, multi] + extra
-
-        @_stmt_visitor(op, MultiAssign, *stack)
-        def visit_store_multi_end(self, deco, multi, *args):
-            dst, extra = func(self, deco, *args)
-            multi.dsts.append(dst)
-            stmt = StmtAssign(multi.dsts, multi.src)
-            return stmt, extra
-
-        @_visitor(op, UnpackSlot, *stack)
-        def visit_store_unpack(self, deco, slot, *args):
-            dst, extra = func(self, deco, *args)
-            slot.expr.exprs[slot.idx] = dst
-            return extra
-
-        @_visitor(op, UnpackArgSlot, *stack)
-        def visit_store_unpack_arg(self, deco, slot, *args):
-            dst, extra = func(self, deco, *args)
-            slot.args.args[slot.idx] = dst
-            return extra
-
-        @_visitor(op, UnpackVarargSlot, *stack)
-        def visit_store_unpack_vararg(self, deco, slot, *args):
-            dst, extra = func(self, deco, *args)
-            slot.args.vararg = dst
-            return extra
-
-        @_visitor(op, Block, ForStart, *stack)
-        def visit_store_multi_start(self, deco, block, start, *args):
-            dst, extra = func(self, deco, *args)
-            return [
-                block,
-                ForLoop(start.expr, dst, start.loop, start.flow),
-                Block([])
-            ] + extra
-
-        @_visitor(op, CompLevel, ForStart, *stack)
-        def visit_store_multi_start(self, deco, comp, start, *args):
-            dst, extra = func(self, deco, *args)
-            return [
-                comp,
-                CompForLoop(start.loop, start.flow),
-                CompLevel(comp.meat, comp.items + [CompFor(dst, start.expr)])
-            ] + extra
-
-        @_visitor(op, MultiAssign, ForStart, *stack, flag='has_list_append')
-        def visit_store_multi_start(self, deco, ass, start, *args):
-            dst, extra = func(self, deco, *args)
-            if len(ass.dsts) != 1:
-                raise PythonError("multiassign in list comp too long")
-            if not isinstance(ass.src, ExprList) or ass.src.exprs:
-                raise PythonError("comp should start with an empty list")
-            expr = ExprListComp()
-            meat = OldListCompStart(expr, ass.dsts[0])
-            comp = CompLevel(meat, [])
-            return [
-                expr,
-                meat,
-                comp,
-                CompForLoop(start.loop, start.flow),
-                CompLevel(comp.meat, comp.items + [CompFor(dst, start.expr)])
-            ] + extra
-
-        @_visitor(op, TryExceptMatchOk, *stack)
-        def _visit_except_match_store(self, deco, match, *args):
-            dst, extra = func(self, deco, *args)
-            return [
-                TryExceptMatch(match.expr, dst, match.next),
-                Block([]),
-                WantPop()
-            ] + extra
-
-        @_stmt_visitor(op, Import, *stack)
-        def _visit_store_name_import(self, deco, import_, *args):
-            if import_.items:
-                raise PythonError("non-empty items for plain import")
-            dst, extra = func(self, deco, *args)
-            return StmtImport(-1, import_.name, [], dst), extra
-
-        @_stmt_visitor(op, Import2Simple, *stack)
-        def _visit_store_name_import(self, deco, import_, *args):
-            dst, extra = func(self, deco, *args)
-            return StmtImport(import_.level, import_.name, import_.attrs, dst), extra
-
+            return [], Store(dst, extra)
         return func
     return inner
 
@@ -1471,6 +1463,11 @@ def _visit_return_locals(self, deco, closure):
 
 # inplace assignments
 
+def _register_inplace(otype, stype):
+    @_re_visitor(otype)
+    def _visit_inplace(self, deco):
+        return [], Inplace(stype)
+
 INPLACE_OPS = [
     (OpcodeInplaceAdd, StmtInplaceAdd),
     (OpcodeInplaceSubtract, StmtInplaceSubtract),
@@ -1489,45 +1486,38 @@ INPLACE_OPS = [
 ]
 
 for op, stmt in INPLACE_OPS:
-    @_visitor(op, ExprName, Expr)
-    def _visit_inplace_name(self, deco, name, src, stmt=stmt):
-        return [InplaceName(name.name, src, stmt)]
+    _register_inplace(op, stmt)
 
-    @_visitor(op, ExprGlobal, Expr)
-    def _visit_inplace_global(self, deco, name, src, stmt=stmt):
-        return [InplaceGlobal(name.name, src, stmt)]
+@_visitor(Inplace, ExprName, Expr)
+@_visitor(Inplace, ExprGlobal, Expr)
+@_visitor(Inplace, ExprFast, Expr)
+@_visitor(Inplace, ExprDeref, Expr)
+def _visit_inplace_simple(self, deco, dst, src):
+    return [InplaceSimple(dst, src, self.stmt)]
 
-    @_visitor(op, ExprFast, Expr)
-    def _visit_inplace_fast(self, deco, fast, src, stmt=stmt):
-        return [InplaceFast(fast.idx, src, stmt)]
+@_visitor(Inplace, DupAttr, Expr)
+def _visit_inplace_attr(self, deco, dup, src):
+    return [InplaceAttr(dup.expr, dup.name, src, self.stmt)]
 
-    @_visitor(op, ExprDeref, Expr)
-    def _visit_inplace_deref(self, deco, deref, src, stmt=stmt):
-        return [InplaceDeref(deref.idx, src, stmt)]
+@_visitor(Inplace, DupSubscr, Expr)
+def _visit_inplace_subscr(self, deco, dup, src):
+    return [InplaceSubscr(dup.expr, dup.index, src, self.stmt)]
 
-    @_visitor(op, DupAttr, Expr)
-    def _visit_inplace_attr(self, deco, dup, src, stmt=stmt):
-        return [InplaceAttr(dup.expr, dup.name, src, stmt)]
+@_visitor(Inplace, DupSliceNN, Expr)
+def _visit_inplace_slice_nn(self, deco, dup, src):
+    return [InplaceSliceNN(dup.expr, src, self.stmt)]
 
-    @_visitor(op, DupSubscr, Expr)
-    def _visit_inplace_subscr(self, deco, dup, src, stmt=stmt):
-        return [InplaceSubscr(dup.expr, dup.index, src, stmt)]
+@_visitor(Inplace, DupSliceEN, Expr)
+def _visit_inplace_slice_en(self, deco, dup, src):
+    return [InplaceSliceEN(dup.expr, dup.start, src, self.stmt)]
 
-    @_visitor(op, DupSliceNN, Expr)
-    def _visit_inplace_slice_nn(self, deco, dup, src, stmt=stmt):
-        return [InplaceSliceNN(dup.expr, src, stmt)]
+@_visitor(Inplace, DupSliceNE, Expr)
+def _visit_inplace_slice_ne(self, deco, dup, src):
+    return [InplaceSliceNE(dup.expr, dup.end, src, self.stmt)]
 
-    @_visitor(op, DupSliceEN, Expr)
-    def _visit_inplace_slice_en(self, deco, dup, src, stmt=stmt):
-        return [InplaceSliceEN(dup.expr, dup.start, src, stmt)]
-
-    @_visitor(op, DupSliceNE, Expr)
-    def _visit_inplace_slice_ne(self, deco, dup, src, stmt=stmt):
-        return [InplaceSliceNE(dup.expr, dup.end, src, stmt)]
-
-    @_visitor(op, DupSliceEE, Expr)
-    def _visit_inplace_slice_ee(self, deco, dup, src, stmt=stmt):
-        return [InplaceSliceEE(dup.expr, dup.start, dup.end, src, stmt)]
+@_visitor(Inplace, DupSliceEE, Expr)
+def _visit_inplace_slice_ee(self, deco, dup, src):
+    return [InplaceSliceEE(dup.expr, dup.start, dup.end, src, self.stmt)]
 
 @_visitor(OpcodeLoadAttr, Expr, DupTop)
 def _visit_load_attr_dup(self, deco, expr, _):
@@ -1553,29 +1543,11 @@ def _visit_slice_ne_dup(self, deco, a, b, _dup):
 def _visit_slice_ee_dup(self, deco, a, b, c, _dup):
     return [DupSliceEE(a, b, c)]
 
-@_stmt_visitor(OpcodeStoreName, InplaceName)
+@_stmt_visitor(Store, InplaceSimple)
 def _visit_inplace_store_name(self, deco, inp):
-    if inp.name != self.param:
-        raise PythonError("inplace name mismatch")
-    return inp.stmt(ExprName(inp.name), inp.src), []
-
-@_stmt_visitor(OpcodeStoreGlobal, InplaceGlobal)
-def _visit_inplace_store_global(self, deco, inp):
-    if inp.name != self.param:
-        raise PythonError("inplace name mismatch")
-    return inp.stmt(ExprGlobal(inp.name), inp.src), []
-
-@_stmt_visitor(OpcodeStoreFast, InplaceFast)
-def _visit_inplace_store_fast(self, deco, inp):
-    if inp.idx != self.param:
-        raise PythonError("inplace name mismatch")
-    return inp.stmt(deco.fast(inp.idx), inp.src), []
-
-@_stmt_visitor(OpcodeStoreDeref, InplaceDeref)
-def _visit_inplace_store_deref(self, deco, inp):
-    if inp.idx != self.param:
-        raise PythonError("inplace name mismatch")
-    return inp.stmt(deco.deref(inp.idx), inp.src), []
+    if inp.dst != self.dst:
+        raise PythonError("simple inplace dest mismatch")
+    return inp.stmt(inp.dst, inp.src), []
 
 @_stmt_visitor(OpcodeStoreAttr, InplaceAttr, RotTwo)
 def _visit_inplace_store_attr(self, deco, inp, _):
@@ -1605,35 +1577,17 @@ def _visit_inplace_store_slice_ee(self, deco, inp, _rot):
 
 # list comprehensions
 
-@_visitor(OpcodeStoreName, DupAttr, flag='!has_list_append')
+@_visitor(Store, DupAttr, flag='!has_list_append')
 def visit_listcomp_start(self, deco, dup):
+    if not isinstance(self.dst, (ExprName, ExprFast, ExprGlobal)):
+        raise NoMatch
     if (not isinstance(dup.expr, ExprList)
         or len(dup.expr.exprs) != 0
         or dup.name != 'append'):
         raise PythonError("weird listcomp start")
+    assert not self.extra
     expr = ExprListComp()
-    meat = OldListCompStart(expr, ExprName(self.param))
-    return [expr, meat, CompLevel(meat, [])]
-
-# you have to go out of your way to hit that one.
-@_visitor(OpcodeStoreGlobal, DupAttr, flag='has_listcomp_collide')
-def visit_listcomp_start(self, deco, dup):
-    if (not isinstance(dup.expr, ExprList)
-        or len(dup.expr.exprs) != 0
-        or dup.name != 'append'):
-        raise PythonError("weird listcomp start")
-    expr = ExprListComp()
-    meat = OldListCompStart(expr, ExprGlobal(self.param))
-    return [expr, meat, CompLevel(meat, [])]
-
-@_visitor(OpcodeStoreFast, DupAttr, flag='!has_list_append')
-def visit_listcomp_start(self, deco, dup):
-    if (not isinstance(dup.expr, ExprList)
-        or len(dup.expr.exprs) != 0
-        or dup.name != 'append'):
-        raise PythonError("weird listcomp start")
-    expr = ExprListComp()
-    meat = OldListCompStart(expr, deco.fast(self.param))
+    meat = OldListCompStart(expr, self.dst)
     return [expr, meat, CompLevel(meat, [])]
 
 @_visitor(OpcodePopTop, CompLevel, ExprCall, flag='!has_list_append')

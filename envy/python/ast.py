@@ -89,7 +89,7 @@ def ast_process(deco, version):
 
     def process_fun_body(node):
         stmts = node.code.block.stmts
-        if version.has_new_code:
+        if version.has_kwargs:
             # new code - simple arguments are determined from code attributes,
             # complex arguments (if any) are handled as assignment statements
             # at the beginning

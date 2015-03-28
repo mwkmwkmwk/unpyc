@@ -244,7 +244,7 @@ make_op(10, 'UNARY_POSITIVE')
 make_op(11, 'UNARY_NEGATIVE')
 make_op(12, 'UNARY_NOT')
 make_op(13, 'UNARY_CONVERT', 'has_repr')
-make_op(14, 'UNARY_CALL', '!has_new_code')
+make_op(14, 'UNARY_CALL', '!has_kwargs')
 make_op(15, 'UNARY_INVERT')
 
 make_op(16, 'BINARY_MATRIX_MULTIPLY', 'has_matmul')
@@ -260,7 +260,7 @@ make_op(22, 'BINARY_MODULO')
 make_op(23, 'BINARY_ADD')
 make_op(24, 'BINARY_SUBTRACT')
 make_op(25, 'BINARY_SUBSCR')
-make_op(26, 'BINARY_CALL', '!has_new_code')
+make_op(26, 'BINARY_CALL', '!has_kwargs')
 make_op(26, 'BINARY_FLOOR_DIVIDE', 'has_new_divide')
 make_op(27, 'BINARY_TRUE_DIVIDE', 'has_new_divide')
 make_op(28, 'INPLACE_FLOOR_DIVIDE', 'has_new_divide')
@@ -324,7 +324,7 @@ make_op(83, 'RETURN_VALUE')
 # TODO: LOAD_GLOBALS - appears unused...
 make_op(84, 'IMPORT_STAR', 'has_import_star')
 make_op(85, 'EXEC_STMT', 'has_exec')
-make_op(86, 'BUILD_FUNCTION', '!has_new_code')
+make_op(86, 'BUILD_FUNCTION', '!has_kwargs')
 make_op(86, 'YIELD_VALUE', 'has_yield_stmt')
 make_op(87, 'POP_BLOCK')
 make_op(88, 'END_FINALLY')
@@ -339,7 +339,7 @@ make_op_name(91, 'DELETE_NAME')
 make_op_num(92, 'UNPACK_SEQUENCE', 'has_unpack_sequence')
 make_op_num(92, 'UNPACK_TUPLE', '!has_unpack_sequence')
 make_op_num(93, 'UNPACK_LIST', '!has_unpack_sequence')
-make_op_num(94, 'UNPACK_ARG', '!has_new_code')
+make_op_num(94, 'UNPACK_ARG', '!has_kwargs')
 
 make_op_rel(93, 'FOR_ITER', 'has_iter')
 
@@ -352,7 +352,7 @@ make_op_name(96, 'DELETE_ATTR')
 make_op_name(97, 'STORE_GLOBAL')
 make_op_name(98, 'DELETE_GLOBAL')
 
-make_op_num(99, 'UNPACK_VARARG', '!has_new_code')
+make_op_num(99, 'UNPACK_VARARG', '!has_kwargs')
 
 make_op_num(99, 'DUP_TOP_X', 'has_dup_topx')
 
@@ -393,7 +393,7 @@ make_op_abs(115, 'POP_JUMP_IF_TRUE', 'has_new_jump')
 # TODO: LOAD_LOCAL - appears unused...
 make_op_name(116, 'LOAD_GLOBAL')
 
-make_op_num(117, 'SET_FUNC_ARGS', ('has_def_args', '!has_new_code'))
+make_op_num(117, 'SET_FUNC_ARGS', ('has_def_args', '!has_kwargs'))
 
 make_op_abs(119, 'CONTINUE_LOOP', 'has_new_continue')
 
@@ -401,7 +401,7 @@ make_op_rel(120, 'SETUP_LOOP')
 make_op_rel(121, 'SETUP_EXCEPT')
 make_op_rel(122, 'SETUP_FINALLY')
 
-make_op_res(123, 'RESERVE_FAST', '!has_new_code')
+make_op_res(123, 'RESERVE_FAST', '!has_kwargs')
 make_op_num(124, 'LOAD_FAST')
 make_op_num(125, 'STORE_FAST')
 make_op_num(126, 'DELETE_FAST')
@@ -410,9 +410,9 @@ make_op_num(127, 'SET_LINENO', 'has_set_lineno')
 
 make_op_num(130, 'RAISE_VARARGS', 'has_new_raise')
 
-make_op_call(131, 'CALL_FUNCTION', 'has_new_code')
+make_op_call(131, 'CALL_FUNCTION', 'has_kwargs')
 
-make_op_num(132, 'MAKE_FUNCTION', ('has_new_code', '!has_kwonlyargs'))
+make_op_num(132, 'MAKE_FUNCTION', ('has_kwargs', '!has_kwonlyargs'))
 make_op_fun(132, 'MAKE_FUNCTION_NEW', 'has_kwonlyargs')
 
 make_op_num(133, 'BUILD_SLICE', 'has_new_slice')

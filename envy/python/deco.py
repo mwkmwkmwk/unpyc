@@ -1417,7 +1417,7 @@ def visit_load_closure(self, deco):
 def _visit_build_class(self, deco, name, bases, call):
     return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), call.code)]
 
-@_visitor(OpcodeBuildClass, Expr, ExprTuple, ExprCall, flag='has_new_code')
+@_visitor(OpcodeBuildClass, Expr, ExprTuple, ExprCall, flag='has_kwargs')
 def _visit_build_class(self, deco, name, bases, call):
     if call.args.args:
         raise PythonError("class call with args")
@@ -1690,7 +1690,7 @@ class DecoCtx:
         self.bytecode = code.code
         self.code = code
         self.lineno = None
-        if self.version.has_new_code:
+        if self.version.has_kwargs:
             self.varnames = code.varnames
         else:
             self.varnames = None

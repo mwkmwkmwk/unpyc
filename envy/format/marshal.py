@@ -636,7 +636,7 @@ def load_frozenset(ctx, flag):
 
 # dict
 
-@_code('{', '!has_new_code')
+@_code('{', '!has_kwargs')
 def load_dict(ctx, flag):
     res = MarshalDict([])
     ctx.ref(res, flag)
@@ -650,7 +650,7 @@ def load_dict(ctx, flag):
 
 # code - old and new
 
-@_code('C', '!has_new_code')
+@_code('C', '!has_kwargs')
 def load_ancient_code(ctx, flag):
     res = MarshalCode()
     ctx.ref(res, flag)
@@ -671,7 +671,7 @@ def load_ancient_code(ctx, flag):
     res.lnotab = None
     return res
 
-@_code('c', 'has_new_code')
+@_code('c', 'has_kwargs')
 def load_code(ctx, flag):
     res = MarshalCode()
     ctx.ref(res, flag)

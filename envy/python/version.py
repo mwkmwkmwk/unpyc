@@ -81,8 +81,8 @@ class Pyc10(metaclass=PycVersion):
     always_print_expr = True
     # has default arguments
     has_def_args = False
-    # has new code marshal type, has co_varnames, doesn't have RESERVE_FAST - all for kwargs
-    has_new_code = False
+    # has kwargs - new code marshal type, co_varnames, no more RESERVE_FAST
+    has_kwargs = False
     # has 3-argument raise
     has_new_raise = False
     # has ellipsis (...)
@@ -248,7 +248,7 @@ class Pyc11(Pyc10):
 class Pyc13(Pyc11):
     code = _v(11913)
     name = "Python 1.3"
-    has_new_code = True
+    has_kwargs = True
     has_new_raise = True
 
 class Pyc14(Pyc13):

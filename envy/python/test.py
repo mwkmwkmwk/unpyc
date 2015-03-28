@@ -330,6 +330,10 @@ VERSIONS = [
 
 for v in VERSIONS:
     version, rversion, cmode, tag, pycver, tests = v
+    failed = 0
+    mismatch = 0
+    missing = 0
+    nopyc = 0
     if wanted and version not in wanted:
         continue
     subdir = test_dir / 'work' / version
@@ -372,10 +376,12 @@ for v in VERSIONS:
                 with errfile.open() as err:
                     for line in err.readlines():
                         print('\t{}'.format(line))
+                nopyc += 1
                 continue
             errfile.unlink()
         if not pycfile.exists():
             print("compiling {} did not succeed".format(test))
+            nopyc += 1
             continue
         try:
             with pycfile.open('rb') as fp:
@@ -386,6 +392,7 @@ for v in VERSIONS:
             res = [line + '\n' for line in ast.show()]
         except (PythonError, FormatError) as e:
             print("FAIL {}: {}".format(test, e))
+            failed += 1
         else:
             expfile = test_dir / (test + '.exp-{}.py'.format(exp))
             resfile = subdir / (test + '.res.py')
@@ -395,14 +402,19 @@ for v in VERSIONS:
                 print("no expected result for {}".format(test))
                 pycfile.unlink()
                 exp = None
+                missing += 1
             else:
                 with expfile.open() as expf:
                     exp = list(expf.readlines())
                 if exp != res:
                     print("Result mismatch for {}".format(test))
+                    mismatch += 1
             if exp != res:
                 with resfile.open("w") as resf:
                     for line in res:
                         resf.write(line)
             else:
                 pycfile.unlink()
+
+    if failed or mismatch or missing or nopyc:
+        print("STATS: {} failed, {} missing, {} mismatch, {} no pyc".format(failed, missing, mismatch, nopyc))

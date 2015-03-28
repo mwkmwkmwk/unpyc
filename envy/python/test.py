@@ -214,6 +214,7 @@ TESTS_23.update({
     'names/global_': '23',
     'stmt/if_const': '23',
     'stmt/if_logic_const': '23',
+    'stmt/while_const': '23',
 })
 
 TESTS_24 = TESTS_23.copy()

@@ -1708,6 +1708,8 @@ class DecoCtx:
                 ):
                     fakejumps[op.flow.dst] = op.pos
                     newops.append(OpcodeLoadConst(op.pos, op.nextpos, ExprAnyTrue(), None))
+                elif isinstance(op, (OpcodeJumpAbsolute, OpcodeContinueLoop)) and op.flow.dst in fakejumps:
+                    newops.append(type(op)(op.pos, op.nextpos, Flow(op.flow.src, fakejumps[op.flow.dst])))
                 else:
                     newops.append(op)
             ops = newops

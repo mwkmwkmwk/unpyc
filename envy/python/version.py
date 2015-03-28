@@ -176,8 +176,6 @@ class Pyc10(metaclass=PycVersion):
     has_store_map = False
     # has SETUP_WITH
     has_setup_with = False
-    # has EXTENDED_ARG at 145
-    has_earg_145 = False
     # generic py3k flag - unicode strings, ...
     py3k = False
     # has complex (tuple) arguments - def f(a, (b, c)):
@@ -368,7 +366,6 @@ class Pyc27(Pyc26):
     has_setdict_comp = True
     has_new_comp = True
     has_setup_with = True
-    has_earg_145 = True
     has_new_jump = True
 
 # Python 3

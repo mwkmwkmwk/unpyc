@@ -343,7 +343,7 @@ make_op_num(94, 'UNPACK_ARG', '!has_new_code')
 
 make_op_rel(93, 'FOR_ITER', 'has_iter')
 
-make_op_num(94, 'LIST_APPEND_NEW', 'has_earg_145', True)
+make_op_num(94, 'LIST_APPEND_NEW', ('has_new_comp', '!has_unpack_ex'), True)
 
 make_op_uex(94, 'UNPACK_EX', 'has_unpack_ex')
 
@@ -433,10 +433,10 @@ make_op_rel(143, 'SETUP_WITH', 'has_setup_with')
 
 # has special handling in the parser loop
 make_op_num(143, 'EXTENDED_ARG', ('has_extended_arg', '!has_setup_with'), True)
-make_op_num(144, 'EXTENDED_ARG', ('has_setup_with', '!has_earg_145'), True)
-make_op_num(145, 'EXTENDED_ARG', ('has_setup_with', 'has_earg_145'), True)
+make_op_num(144, 'EXTENDED_ARG', ('has_setup_with', 'has_unpack_ex'), True)
+make_op_num(145, 'EXTENDED_ARG', ('has_setup_with', '!has_unpack_ex'), True)
 
-make_op_num(145, 'LIST_APPEND_NEW', '!has_earg_145', True)
+make_op_num(145, 'LIST_APPEND_NEW', ('has_new_comp', 'has_unpack_ex'), True)
 make_op_num(146, 'SET_ADD_NEW', 'has_new_comp')
 make_op_num(147, 'MAP_ADD_NEW', 'has_new_comp')
 

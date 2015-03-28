@@ -264,6 +264,10 @@ Exprs = namedtuple('Exprs', ['attr', 'factor'])
 UglyClosures = object()
 Closures = object()
 
+# regurgitables
+
+Store = namedtuple('Store', ['dst'])
+
 # visitors
 
 class NoMatch(Exception):
@@ -281,7 +285,7 @@ class _Visitor:
 
     def visit(self, opcode, deco):
         if not deco.version.match(self.flag):
-            return False
+            raise NoMatch
         total = 0
         closure_num = None
         for want in self.wanted:
@@ -292,16 +296,16 @@ class _Visitor:
             elif want is UglyClosures:
                 # fuck you.
                 if not deco.stack:
-                    return False
+                    raise NoMatch
                 code = deco.stack[-1]
                 if not isinstance(code, Code):
-                    return False
+                    raise NoMatch
                 closure_num = len(code.freevars)
                 total += closure_num
             else:
                 total += 1
         if len(deco.stack) < total:
-            return False
+            raise NoMatch
         if total:
             stack = deco.stack[-total:]
         else:
@@ -316,7 +320,7 @@ class _Visitor:
                     for _ in range(want.factor):
                         expr = stack.pop()
                         if not isinstance(expr, Expr):
-                            return False
+                            raise NoMatch
                         exprs.append(expr)
                     exprs.reverse()
                     arg.append(expr if want.factor == 1 else exprs)
@@ -326,7 +330,7 @@ class _Visitor:
                 for _ in range(opcode.param):
                     expr = stack.pop()
                     if not isinstance(expr, Closure):
-                        return False
+                        raise NoMatch
                     arg.append(expr)
                 arg.reverse()
             elif want is UglyClosures:
@@ -334,29 +338,32 @@ class _Visitor:
                 for _ in range(closure_num):
                     closure = stack.pop()
                     if not isinstance(closure, Closure):
-                        return False
+                        raise NoMatch
                     arg.append(closure.var)
                 arg.reverse()
             else:
                 arg = stack.pop()
                 if not isinstance(arg, want):
-                    return False
+                    raise NoMatch
             args.append(arg)
         args.reverse()
-        try:
-            res = self.func(opcode, deco, *args)
-        except NoMatch:
-            return False
-        else:
-            if total:
-                deco.stack[-total:] = []
-            deco.stack += res
-            return True
+        newstack, res = self.func(opcode, deco, *args)
+        if total:
+            deco.stack[-total:] = []
+        deco.stack += newstack
+        return res
 
+def _re_visitor(op, *stack, **kwargs):
+    def inner(func):
+        _VISITORS.setdefault(op, []).append(_Visitor(func, stack, **kwargs))
+        return func
+    return inner
 
 def _visitor(op, *stack, **kwargs):
     def inner(func):
-        _VISITORS.setdefault(op, []).append(_Visitor(func, stack, **kwargs))
+        @_re_visitor(op, *stack, **kwargs)
+        def visit_normal(self, deco, *args):
+            return func(self, deco, *args), None
         return func
     return inner
 
@@ -1700,23 +1707,32 @@ class DecoCtx:
             while flows:
                 for idx, flow in enumerate(flows):
                     try:
-                        self.process(flow)
+                        fop = self.process(flow)
                     except NoMatch:
                         continue
                     flows.pop(idx)
+                    while fop is not None:
+                        try:
+                            fop = self.process(fop)
+                        except NoMatch:
+                            raise PythonError("no visitors matched for {}, [{}]".format(
+                                type(fop).__name__,
+                                ', '.join(type(x).__name__ for x in self.stack)
+                            ))
                     break
                 else:
                     raise PythonError("no visitors matched for {}, [{}]".format(
                         ', '.join(str(flow) for flow in flows),
                         ', '.join(type(x).__name__ for x in self.stack)
                     ))
-            try:
-                self.process(op)
-            except NoMatch:
-                raise PythonError("no visitors matched: {}, [{}]".format(
-                    type(op).__name__,
-                    ', '.join(type(x).__name__ for x in self.stack)
-                ))
+            while op is not None:
+                try:
+                    op = self.process(op)
+                except NoMatch:
+                    raise PythonError("no visitors matched: {}, [{}]".format(
+                        type(op).__name__,
+                        ', '.join(type(x).__name__ for x in self.stack)
+                    ))
         if len(self.stack) != 1:
             raise PythonError("stack non-empty at the end")
         if not isinstance(self.stack[0], Block):
@@ -1725,10 +1741,11 @@ class DecoCtx:
 
     def process(self, op):
         for visitor in _VISITORS.get(type(op), []):
-            if visitor.visit(op, self):
-                break
-        else:
-            raise NoMatch
+            try:
+                return visitor.visit(op, self)
+            except NoMatch:
+                pass
+        raise NoMatch
 
     def fast(self, idx):
         if self.varnames is None:

@@ -141,7 +141,16 @@ class ExprBuildClass(Expr):
         return self
 
     def show(self, ctx):
-        return '#buildclass'
+        return '$buildclass'
+
+class ExprAnyTrue(Expr):
+    __slots__ = ()
+
+    def subprocess(self, process):
+        return self
+
+    def show(self, ctx):
+        return '$true'
 
 # literals
 

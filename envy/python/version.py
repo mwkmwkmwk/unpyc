@@ -147,6 +147,8 @@ class Pyc10(metaclass=PycVersion):
     has_set_lineno = True
     # has peephole optimier
     has_peephole = False
+    # jumps over jump_if_false true const
+    has_jump_true_const = False
     # has LIST_APPEND opcode
     has_list_append = False
     # has interned bytestrings in marshal
@@ -318,6 +320,7 @@ class Pyc23(Pyc22):
     has_le4 = True
     has_set_lineno = False
     has_peephole = True
+    has_jump_true_const = True
 
 class Pyc24(Pyc23):
     # 62041 used in a1-a2
@@ -328,6 +331,7 @@ class Pyc24(Pyc23):
     has_str_intern = True
     has_fun_deco = True
     has_return_squash = True
+    has_jump_true_const = False
 
 class Pyc25(Pyc24):
     # 62071 used in prealpha

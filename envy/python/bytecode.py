@@ -9,22 +9,25 @@ Flow = namedtuple('Flow', ['src', 'dst'])
 # opcode classes
 
 class Opcode:
-    __slots__ = 'pos', 'nextpos', 'outflow', 'inflow'
+    __slots__ = 'pos', 'nextpos'
+
+    def __init__(self, pos, nextpos):
+        self.pos = pos
+        self.nextpos = nextpos
 
     def __str__(self):
         if hasattr(self, 'read_params'):
-            pstr = "\t{}".format(self.print_params())
+            return "{}\t{}".format(self.name, self.print_params())
         else:
-            pstr = ''
-        if self.inflow:
-            mark = self.pos
-        else:
-            mark = ''
-        return "{}\t{}{}".format(mark, self.name, pstr)
+            return self.name
 
 
 class OpcodeParamNum(Opcode):
     __slots__ = 'param',
+
+    def __init__(self, pos, nextpos, param):
+        super().__init__(pos, nextpos)
+        self.param = param
 
     def read_params(self, param, bytecode):
         self.param = param
@@ -36,6 +39,10 @@ class OpcodeParamNum(Opcode):
 class OpcodeFlow(Opcode):
     __slots__ = 'flow',
 
+    def __init__(self, pos, nextpos, flow):
+        super().__init__(pos, nextpos)
+        self.flow = flow
+
     def print_params(self):
         return str(self.flow.dst)
 
@@ -45,7 +52,6 @@ class OpcodeParamAbs(OpcodeFlow):
 
     def read_params(self, param, bytecode):
         self.flow = Flow(self.pos, param)
-        self.outflow.append(param)
 
 
 class OpcodeParamRel(OpcodeFlow):
@@ -55,11 +61,14 @@ class OpcodeParamRel(OpcodeFlow):
         # importantly, bytecode.pos is *end* of the insn
         target = bytecode.pos + param
         self.flow = Flow(self.pos, target)
-        self.outflow.append(target)
 
 
 class OpcodeParamName(Opcode):
     __slots__ = 'param',
+
+    def __init__(self, pos, nextpos, param):
+        super().__init__(pos, nextpos)
+        self.param = param
 
     def read_params(self, param, bytecode):
         if param not in range(len(bytecode.names)):
@@ -73,6 +82,11 @@ class OpcodeParamName(Opcode):
 class OpcodeCallFunctionBase(Opcode):
     __slots__ = 'args', 'kwargs'
 
+    def __init__(self, pos, nextpos, args, kwargs):
+        super().__init__(pos, nextpos)
+        self.args = args
+        self.kwargs = kwargs
+
     def read_params(self, param, bytecode):
         self.args = param & 0xff
         self.kwargs = param >> 8 & 0xff
@@ -85,6 +99,12 @@ class OpcodeCallFunctionBase(Opcode):
 
 class OpcodeMakeFunctionNewBase(Opcode):
     __slots__ = 'args', 'kwargs', 'ann'
+
+    def __init__(self, pos, nextpos, args, kwargs, ann):
+        super().__init__(pos, nextpos)
+        self.args = args
+        self.kwargs = kwargs
+        self.ann = ann
 
     def read_params(self, param, bytecode):
         self.args = param & 0xff
@@ -100,6 +120,11 @@ class OpcodeMakeFunctionNewBase(Opcode):
 class OpcodeUnpackExBase(Opcode):
     __slots__ = 'before', 'after'
 
+    def __init__(self, pos, nextpos, before, after):
+        super().__init__(pos, nextpos)
+        self.before = before
+        self.after = after
+
     def read_params(self, param, bytecode):
         self.before = param & 0xff
         self.after = param >> 8 & 0xff
@@ -112,6 +137,11 @@ class OpcodeUnpackExBase(Opcode):
 
 class OpcodeLoadConstBase(Opcode):
     __slots__ = 'const', 'idx'
+
+    def __init__(self, pos, nextpos, const, idx):
+        super().__init__(pos, nextpos)
+        self.const = const
+        self.idx = idx
 
     def read_params(self, param, bytecode):
         from .code import Code
@@ -128,21 +158,29 @@ class OpcodeLoadConstBase(Opcode):
 
 
 class OpcodeCompareOpBase(Opcode):
-    __slots__ = 'mode',
+    __slots__ = 'param',
+
+    def __init__(self, pos, nextpos, param):
+        super().__init__(pos, nextpos)
+        self.param = param
 
     def read_params(self, param, bytecode):
         try:
-            self.mode = CmpOp(param)
+            self.param = CmpOp(param)
         except ValueError:
             raise PythonError("invalid cmp op")
 
     def print_params(self):
-        return self.mode.name
+        return self.param.name
 
 
 class OpcodeReserveFastBase(Opcode):
     """Prepares fast slots. Arg is a const: dict or None."""
-    __slots__ = 'names',
+    __slots__ = 'param',
+
+    def __init__(self, pos, nextpos, param):
+        super().__init__(pos, nextpos)
+        self.param = param
 
     def read_params(self, param, bytecode):
         # TODO
@@ -150,26 +188,26 @@ class OpcodeReserveFastBase(Opcode):
             from .code import CodeDict
             const, _ = bytecode.get_const((CodeDict, ExprNone), param)
             if isinstance(const, CodeDict):
-                self.names = const.names
+                self.param = const.names
             elif isinstance(const, ExprNone):
-                self.names = []
+                self.param = []
             else:
                 assert False
         else:
             const, _ = bytecode.get_const((ExprTuple, ExprNone), param)
             if isinstance(const, ExprTuple):
-                self.names = []
+                self.param = []
                 for name in const.exprs:
                     if not isinstance(name, ExprString):
                         raise PythonError("funny var name")
-                    self.names.append(name.val.decode('ascii'))
+                    self.param.append(name.val.decode('ascii'))
             else:
-                self.names = None
+                self.param = None
 
     def print_params(self):
-        if self.names is None:
+        if self.param is None:
             return 'None'
-        return ', '.join(self.names)
+        return ', '.join(self.param)
 
 
 # opcode registration functions
@@ -420,14 +458,14 @@ make_op_num(148, 'LOAD_CLASS_DEREF', 'has_classderef')
 
 # the reader
 
-class Bytecode:
+class _BytecodeCtx:
     def __init__(self, version, code):
         self.version = version
         self.code = code.rawcode
         self.consts = code.consts
         self.names = code.names
         self.pos = 0
-        self.opdict = {}
+        opdict = {}
         self.ops = []
         while self.pos != len(self.code):
             pos = self.pos
@@ -437,13 +475,7 @@ class Bytecode:
                 if isinstance(op, OpcodeExtendedArg):
                     raise PythonError("funny, two EXTENDED_ARG in a row")
             self.ops.append(op)
-            self.opdict[pos] = op
-        for op in self.ops:
-            for out in op.outflow:
-                if out not in self.opdict:
-                    raise PythonError("invalid branch target")
-                trg = self.opdict[out]
-                trg.inflow.append(op.pos)
+            opdict[pos] = op
 
     def get_op(self, pos, ext):
         opc = self.bytes(1)[0]
@@ -451,8 +483,6 @@ class Bytecode:
             if self.version.match(flag):
                 op = cls.__new__(cls)
                 op.pos = pos
-                op.outflow = []
-                op.inflow = []
                 if hasattr(op, 'read_params'):
                     param = int.from_bytes(self.bytes(2), 'little') | ext << 16
                     op.read_params(param, self)
@@ -475,6 +505,21 @@ class Bytecode:
         if not isinstance(res, cls):
             raise PythonError("Const of type {} expected, got {}".format(cls, type(res)))
         return res, idx
+
+def parse_bytecode(version, code):
+    return _BytecodeCtx(version, code).ops
+
+
+def process_flow(ops):
+    inflow = {}
+    for op in ops:
+        inflow[op.pos] = []
+    for op in ops:
+        if hasattr(op, 'flow'):
+            if op.flow.dst not in inflow:
+                raise PythonError("funny flow target")
+            inflow[op.flow.dst].append(op.flow)
+    return inflow
 
 
 # lineno handling

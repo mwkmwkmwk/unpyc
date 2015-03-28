@@ -1,5 +1,5 @@
 from envy.format.marshal import MarshalCode, MarshalDict, MarshalString, MarshalInt
-from envy.python.bytecode import parse_lnotab, Bytecode
+from envy.python.bytecode import parse_lnotab, parse_bytecode, process_flow
 from envy.show import preindent, indent
 
 from .stmt import FunArgs
@@ -164,7 +164,7 @@ class Code:
         'names',
 
         'rawcode',
-        'code',
+        'ops',
         'firstlineno',
         'lnotab',
     )
@@ -217,7 +217,7 @@ class Code:
             self.lnotab = parse_lnotab(obj.firstlineno, obj.lnotab, len(obj.code))
         # code
         self.rawcode = obj.code
-        self.code = Bytecode(version, self)
+        self.ops = parse_bytecode(version, self)
 
     def _init_args(self, obj):
         if obj.argcount is None:
@@ -277,7 +277,11 @@ class Code:
         if self.stacksize is not None:
             yield "stacksize: {}".format(self.stacksize)
         yield "code:"
-        for op in self.code.ops:
-            yield "\t{}".format(op)
+        inflow = process_flow(self.ops)
+        for op in self.ops:
+            if inflow[op.pos]:
+                yield "\t{}\t{}".format(op.pos, op)
+            else:
+                yield "\t\t{}".format(op)
         if self.firstlineno is not None:
             yield "line: {} {}".format(self.firstlineno, self.lnotab)

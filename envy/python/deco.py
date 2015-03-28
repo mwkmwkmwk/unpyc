@@ -1013,18 +1013,18 @@ def _visit_assert_1(self, deco, orstart, exprs):
 
 @_visitor(OpcodeCompareOp, Expr, Expr)
 def _visit_cmp(self, deco, e1, e2):
-    if self.mode is CmpOp.EXC_MATCH:
+    if self.param is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [ExprCmp([e1, self.mode, e2])]
+    return [ExprCmp([e1, self.param, e2])]
 
 # chained comparisons
 
 # start #1
 @_visitor(OpcodeCompareOp, Expr, Expr, DupTop, RotThree)
 def _visit_cmp_start(self, deco, a, b, _dup, _rot):
-    if self.mode is CmpOp.EXC_MATCH:
+    if self.param is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareStart([a, self.mode, b], [])]
+    return [CompareStart([a, self.param, b], [])]
 
 # start #2 and middle #3
 @_visitor(OpcodeJumpIfFalse, CompareStart)
@@ -1034,16 +1034,16 @@ def _visit_cmp_jump(self, deco, cmp):
 # middle #2
 @_visitor(OpcodeCompareOp, Compare, Expr, DupTop, RotThree)
 def _visit_cmp_next(self, deco, cmp, expr, _dup, _rot):
-    if self.mode is CmpOp.EXC_MATCH:
+    if self.param is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareStart(cmp.items + [self.mode, expr], cmp.flows)]
+    return [CompareStart(cmp.items + [self.param, expr], cmp.flows)]
 
 # end #1
 @_visitor(OpcodeCompareOp, Compare, Expr)
 def _visit_cmp_last(self, deco, cmp, expr):
-    if self.mode is CmpOp.EXC_MATCH:
+    if self.param is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareLast(cmp.items + [self.mode, expr], cmp.flows)]
+    return [CompareLast(cmp.items + [self.param, expr], cmp.flows)]
 
 # end #2
 @_visitor(OpcodeJumpForward, CompareLast)
@@ -1240,7 +1240,7 @@ def _visit_except_end_try(self, deco, try_):
 def _visit_except_match_check(self, deco, try_, _, expr):
     if try_.any:
         raise PythonError("making an except match after blanket")
-    if self.mode != CmpOp.EXC_MATCH:
+    if self.param != CmpOp.EXC_MATCH:
         raise PythonError("funny except match")
     return [try_, TryExceptMatchMid(expr)]
 
@@ -1443,7 +1443,7 @@ def _visit_reserve_fast(self, deco):
     if deco.varnames is not None:
         raise PythonError("duplicate RESERVE_FAST")
 
-    deco.varnames = self.names
+    deco.varnames = self.param
     return []
 
 @_visitor(OpcodeLoadBuildClass)
@@ -1687,15 +1687,16 @@ class DecoCtx:
     def __init__(self, code):
         self.version = code.version
         self.stack = [Block([])]
-        self.bytecode = code.code
         self.code = code
         self.lineno = None
         if self.version.has_kwargs:
             self.varnames = code.varnames
         else:
             self.varnames = None
-        for op in self.bytecode.ops:
-            flows = [Flow(inflow, op.pos) for inflow in reversed(op.inflow)]
+        ops = code.ops
+        inflow = process_flow(ops)
+        for op in ops:
+            flows = list(reversed(inflow[op.pos]))
             while flows:
                 for idx, flow in enumerate(flows):
                     try:

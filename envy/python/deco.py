@@ -375,95 +375,6 @@ def _stmt_visitor(op, *stack, **kwargs):
         return func
     return inner
 
-####
-
-@_stmt_visitor(Store, Expr)
-def visit_store_assign(self, deco, src):
-    return StmtAssign([self.dst], src), self.extra
-
-@_visitor(Store, Block, Expr, DupTop)
-def visit_store_multi_start(self, deco, block, src, _):
-    return [block, MultiAssign(src, [self.dst])] + self.extra
-
-@_visitor(Store, Block, MultiAssign, DupTop)
-def visit_store_multi_next(self, deco, block, multi, _):
-    multi.dsts.append(self.dst)
-    return [block, multi] + self.extra
-
-@_stmt_visitor(Store, MultiAssign)
-def visit_store_multi_end(self, deco, multi):
-    multi.dsts.append(self.dst)
-    stmt = StmtAssign(multi.dsts, multi.src)
-    return stmt, self.extra
-
-@_visitor(Store, UnpackSlot)
-def visit_store_unpack(self, deco, slot):
-    slot.expr.exprs[slot.idx] = self.dst
-    return self.extra
-
-@_visitor(Store, UnpackArgSlot)
-def visit_store_unpack_arg(self, deco, slot):
-    slot.args.args[slot.idx] = self.dst
-    return self.extra
-
-@_visitor(Store, UnpackVarargSlot)
-def visit_store_unpack_vararg(self, deco, slot):
-    slot.args.vararg = self.dst
-    return self.extra
-
-@_visitor(Store, Block, ForStart)
-def visit_store_multi_start(self, deco, block, start):
-    return [
-        block,
-        ForLoop(start.expr, self.dst, start.loop, start.flow),
-        Block([])
-    ] + self.extra
-
-@_visitor(Store, CompLevel, ForStart)
-def visit_store_multi_start(self, deco, comp, start):
-    return [
-        comp,
-        CompForLoop(start.loop, start.flow),
-        CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
-    ] + self.extra
-
-@_visitor(Store, MultiAssign, ForStart, flag='has_list_append')
-def visit_store_multi_start(self, deco, ass, start):
-    if len(ass.dsts) != 1:
-        raise PythonError("multiassign in list comp too long")
-    if not isinstance(ass.src, ExprList) or ass.src.exprs:
-        raise PythonError("comp should start with an empty list")
-    expr = ExprListComp()
-    meat = OldListCompStart(expr, ass.dsts[0])
-    comp = CompLevel(meat, [])
-    return [
-        expr,
-        meat,
-        comp,
-        CompForLoop(start.loop, start.flow),
-        CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
-    ] + self.extra
-
-@_visitor(Store, TryExceptMatchOk)
-def _visit_except_match_store(self, deco, match):
-    return [
-        TryExceptMatch(match.expr, self.dst, match.next),
-        Block([]),
-        WantPop()
-    ] + self.extra
-
-@_stmt_visitor(Store, Import)
-def _visit_store_name_import(self, deco, import_, *args):
-    if import_.items:
-        raise PythonError("non-empty items for plain import")
-    return StmtImport(-1, import_.name, [], self.dst), self.extra
-
-@_stmt_visitor(Store, Import2Simple)
-def _visit_store_name_import(self, deco, import_):
-    return StmtImport(import_.level, import_.name, import_.attrs, self.dst), self.extra
-
-####
-
 def _store_visitor(op, *stack):
     def inner(func):
         @_re_visitor(op, *stack)
@@ -679,18 +590,6 @@ def visit_build_slice(self, deco, exprs):
 
 # list & tuple unpacking
 
-@_stmt_visitor(OpcodeUnpackArg)
-def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
-    extra = [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
-    return StmtArgs(res), extra
-
-@_stmt_visitor(OpcodeUnpackVararg)
-def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
-    extra = [UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
-    return StmtArgs(res), extra
-
 @_store_visitor(OpcodeUnpackTuple)
 def visit_unpack_tuple(self, deco):
     res = ExprTuple([None for _ in range(self.param)])
@@ -709,6 +608,35 @@ def visit_unpack_list(self, deco):
     extra = [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
     return res, extra
 
+@_visitor(Store, UnpackSlot)
+def visit_store_unpack(self, deco, slot):
+    slot.expr.exprs[slot.idx] = self.dst
+    return self.extra
+
+# old argument unpacking
+
+@_stmt_visitor(OpcodeUnpackArg)
+def visit_unpack_arg(self, deco):
+    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
+    extra = [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
+    return StmtArgs(res), extra
+
+@_stmt_visitor(OpcodeUnpackVararg)
+def visit_unpack_arg(self, deco):
+    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
+    extra = [UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
+    return StmtArgs(res), extra
+
+@_visitor(Store, UnpackArgSlot)
+def visit_store_unpack_arg(self, deco, slot):
+    slot.args.args[slot.idx] = self.dst
+    return self.extra
+
+@_visitor(Store, UnpackVarargSlot)
+def visit_store_unpack_vararg(self, deco, slot):
+    slot.args.vararg = self.dst
+    return self.extra
+
 # single expression statement
 
 @_stmt_visitor(OpcodePrintExpr, Expr)
@@ -718,6 +646,27 @@ def _visit_print_expr(self, deco, expr):
 @_stmt_visitor(OpcodePopTop, Expr, flag='!always_print_expr')
 def _visit_single_expr(self, deco, expr):
     return StmtSingle(expr), []
+
+# assignment
+
+@_stmt_visitor(Store, Expr)
+def visit_store_assign(self, deco, src):
+    return StmtAssign([self.dst], src), self.extra
+
+@_visitor(Store, Block, Expr, DupTop)
+def visit_store_multi_start(self, deco, block, src, _):
+    return [block, MultiAssign(src, [self.dst])] + self.extra
+
+@_visitor(Store, Block, MultiAssign, DupTop)
+def visit_store_multi_next(self, deco, block, multi, _):
+    multi.dsts.append(self.dst)
+    return [block, multi] + self.extra
+
+@_stmt_visitor(Store, MultiAssign)
+def visit_store_multi_end(self, deco, multi):
+    multi.dsts.append(self.dst)
+    stmt = StmtAssign(multi.dsts, multi.src)
+    return stmt, self.extra
 
 # print statement
 
@@ -808,6 +757,12 @@ def _visit_exec_3(self, deco, code, globals, locals):
 def _visit_import_name(self, deco):
     return [Import(self.param, [])]
 
+@_stmt_visitor(Store, Import)
+def _visit_store_name_import(self, deco, import_, *args):
+    if import_.items:
+        raise PythonError("non-empty items for plain import")
+    return StmtImport(-1, import_.name, [], self.dst), self.extra
+
 @_stmt_visitor(OpcodeImportFrom, Import)
 def _visit_import_from_star(self, deco, import_, flag="!has_import_star"):
     if self.param != '*':
@@ -841,6 +796,10 @@ def _visit_import_name(self, deco, level, expr):
 def _visit_import_name_attr(self, deco, import_):
     import_.attrs.append(self.param)
     return [import_]
+
+@_stmt_visitor(Store, Import2Simple)
+def _visit_store_name_import(self, deco, import_):
+    return StmtImport(import_.level, import_.name, import_.attrs, self.dst), self.extra
 
 @_visitor(OpcodeImportName, ExprTuple, flag=('has_import_as', '!has_relative_import'))
 def _visit_import_name(self, deco, expr):
@@ -1150,6 +1109,22 @@ def _visit_for_start(self, deco, expr, zero, loop):
         raise PythonError("funny for loop start")
     return [ForStart(expr, loop, self.flow)]
 
+@_visitor(Store, Block, ForStart)
+def visit_store_multi_start(self, deco, block, start):
+    return [
+        block,
+        ForLoop(start.expr, self.dst, start.loop, start.flow),
+        Block([])
+    ] + self.extra
+
+@_visitor(Store, CompLevel, ForStart)
+def visit_store_multi_start(self, deco, comp, start):
+    return [
+        comp,
+        CompForLoop(start.loop, start.flow),
+        CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
+    ] + self.extra
+
 @_stmt_visitor(OpcodeJumpAbsolute, ForLoop, Block)
 def _visit_for(self, deco, loop, inner):
     if loop.loop.cont:
@@ -1258,6 +1233,14 @@ def _visit_except_match_pop(self, deco, try_):
         Block([]),
         WantPop()
     ]
+
+@_visitor(Store, TryExceptMatchOk)
+def _visit_except_match_store(self, deco, match):
+    return [
+        TryExceptMatch(match.expr, self.dst, match.next),
+        Block([]),
+        WantPop()
+    ] + self.extra
 
 @_visitor(OpcodeJumpForward, TryExceptMid, TryExceptMatch, Block)
 def _visit_except_match_end(self, deco, try_, match, block):
@@ -1589,6 +1572,23 @@ def visit_listcomp_start(self, deco, dup):
     expr = ExprListComp()
     meat = OldListCompStart(expr, self.dst)
     return [expr, meat, CompLevel(meat, [])]
+
+@_visitor(Store, MultiAssign, ForStart, flag='has_list_append')
+def visit_store_multi_start(self, deco, ass, start):
+    if len(ass.dsts) != 1:
+        raise PythonError("multiassign in list comp too long")
+    if not isinstance(ass.src, ExprList) or ass.src.exprs:
+        raise PythonError("comp should start with an empty list")
+    expr = ExprListComp()
+    meat = OldListCompStart(expr, ass.dsts[0])
+    comp = CompLevel(meat, [])
+    return [
+        expr,
+        meat,
+        comp,
+        CompForLoop(start.loop, start.flow),
+        CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
+    ] + self.extra
 
 @_visitor(OpcodePopTop, CompLevel, ExprCall, flag='!has_list_append')
 def visit_listcomp_item(self, deco, comp, call):

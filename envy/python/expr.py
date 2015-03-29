@@ -642,18 +642,20 @@ class ExprFunction(Expr):
 
 
 class ExprClassRaw(Expr):
-    __slots__ = 'name', 'args', 'code'
+    __slots__ = 'name', 'args', 'code', 'closures'
 
-    def __init__(self, name, args, code):
+    def __init__(self, name, args, code, closures):
         self.name = name
         self.args = args
         self.code = code
+        self.closures = closures
 
     def subprocess(self, process):
         return ExprClassRaw(
             self.name,
             process(self.args),
-            process(self.code)
+            process(self.code),
+            [process(c) for c in self.closures]
         )
 
     def show(self, ctx):

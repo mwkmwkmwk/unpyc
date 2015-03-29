@@ -69,8 +69,9 @@ def ast_process(deco, version):
                 raise PythonError("funny args to $buildclass")
             name = args[1][1].val
             fun = args[0][1]
-            if fun.closures or fun.defargs or fun.defkwargs:
+            if fun.defargs or fun.defkwargs:
                 raise PythonError("class function has def args")
+            # TODO closure information lost here
             return ExprClass(name, CallArgs(args[2:]), process_class_body_new(fun.code, name))
         if isinstance(node, ExprClassRaw):
             return ExprClass(node.name, node.args, process_class_body(node.code, node.name))

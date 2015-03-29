@@ -1426,7 +1426,7 @@ def visit_load_closure(self, deco):
 
 @_visitor(OpcodeBuildClass, Expr, ExprTuple, UnaryCall)
 def _visit_build_class(self, deco, name, bases, call):
-    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), call.code)]
+    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), call.code, call.closures)]
 
 @_visitor(OpcodeBuildClass, Expr, ExprTuple, ExprCall, flag='has_kwargs')
 def _visit_build_class(self, deco, name, bases, call):
@@ -1435,11 +1435,9 @@ def _visit_build_class(self, deco, name, bases, call):
     fun = call.expr
     if not isinstance(fun, ExprFunctionRaw):
         raise PythonError("class call with non-function")
-    if fun.closures:
-        raise PythonError("class call with a function with closures")
     if fun.defargs or fun.defkwargs:
         raise PythonError("class call with a function with default arguments")
-    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), fun.code)]
+    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), fun.code, fun.closures)]
 
 @_visitor(OpcodeLoadLocals)
 def _visit_load_locals(self, deco):

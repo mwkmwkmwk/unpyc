@@ -266,6 +266,17 @@ Closures = object()
 Store = namedtuple('Store', ['dst', 'extra'])
 Inplace = namedtuple('Inplace', ['stmt'])
 
+# fake opcodes
+
+# a JUMP_ABSOLUTE that ends a loop
+class JumpAbsoluteEndLoop(OpcodeJumpAbsolute): pass
+# likewise, but for an infinite loop (while True)
+class JumpAbsoluteEndInfiniteLoop(OpcodeJumpAbsolute): pass
+# a JUMP_ABSOLUTE created by folding a JUMP_FORWARD to JUMP_FORWARD
+class JumpAbsoluteFolded(OpcodeJumpAbsolute): pass
+# a JUMP_ABSOLUTE created by a continue
+class JumpAbsoluteContinue(OpcodeJumpAbsolute): pass
+
 # visitors
 
 class NoMatch(Exception):
@@ -1045,7 +1056,7 @@ def _visit_loop(self, deco):
 
 # continue
 
-@_stmt_visitor(OpcodeJumpAbsolute)
+@_stmt_visitor(JumpAbsoluteContinue)
 def _visit_continue(self, deco):
     loop = None
     for item in reversed(deco.stack):
@@ -1093,7 +1104,7 @@ def _visit_continue(self, deco):
 
 # while loop
 
-@_stmt_visitor(OpcodeJumpAbsolute, Loop, WhileStart, Block)
+@_stmt_visitor(JumpAbsoluteEndLoop, Loop, WhileStart, Block)
 def _visit_while(self, deco, loop, start, inner):
     if loop.cont:
         raise NoMatch
@@ -1126,7 +1137,7 @@ def visit_store_multi_start(self, deco, comp, start):
         CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
     ] + self.extra
 
-@_stmt_visitor(OpcodeJumpAbsolute, ForLoop, Block)
+@_stmt_visitor(JumpAbsoluteEndLoop, ForLoop, Block)
 def _visit_for(self, deco, loop, inner):
     if loop.loop.cont:
         raise NoMatch
@@ -1134,7 +1145,7 @@ def _visit_for(self, deco, loop, inner):
         raise PythonError("mismatched for loop")
     return StmtForRaw(loop.expr, loop.dst, inner), [WantFlow(loop.flow)]
 
-@_visitor(OpcodeJumpAbsolute, CompLevel, CompForLoop)
+@_visitor(JumpAbsoluteEndLoop, CompLevel, CompForLoop)
 def _visit_for(self, deco, _, loop):
     if loop.loop.cont:
         raise NoMatch
@@ -1655,8 +1666,7 @@ class DecoCtx:
             self.varnames = code.varnames
         else:
             self.varnames = None
-        ops = self.preproc(code.ops)
-        inflow = process_flow(ops)
+        ops, inflow = self.preproc(code.ops)
         for op in ops:
             flows = list(reversed(inflow[op.pos]))
             while flows:
@@ -1695,6 +1705,7 @@ class DecoCtx:
         self.res = DecoCode(self.stack[0], code, self.varnames)
 
     def preproc(self, ops):
+        # first pass: undo jump over true const
         if self.version.has_jump_true_const:
             newops = []
             fakejumps = {}
@@ -1714,7 +1725,34 @@ class DecoCtx:
                 else:
                     newops.append(op)
             ops = newops
-        return ops
+        # second pass: figure out the kinds of absolute jumps
+        condflow = {op.pos: [] for op in ops}
+        for op in ops:
+            if isinstance(op, (OpcodeJumpIfTrue, OpcodeJumpIfFalse, OpcodeForLoop, OpcodeForIter, OpcodeSetupExcept)):
+                condflow[op.flow.dst].append(op.flow)
+        inflow = process_flow(ops)
+        newops = []
+        for op in ops:
+            if isinstance(op, OpcodeJumpAbsolute):
+                is_final = op.flow == max(inflow[op.flow.dst])
+                is_backwards = op.flow.dst <= op.pos
+                next_unreachable = not condflow[op.nextpos]
+                if not is_backwards:
+                    cls = JumpAbsoluteFolded
+                elif is_final:
+                    if not next_unreachable:
+                        cls = JumpAbsoluteEndLoop
+                    else:
+                        cls = JumpAbsoluteEndInfiniteLoop
+                elif next_unreachable:
+                    cls = JumpAbsoluteContinue
+                else:
+                    cls = JumpAbsoluteFolded
+                newops.append(cls(op.pos, op.nextpos, op.flow))
+            else:
+                newops.append(op)
+        ops = newops
+        return ops, inflow
 
     def process(self, op):
         for visitor in _VISITORS.get(type(op), []):

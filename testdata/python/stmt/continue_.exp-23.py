@@ -17,16 +17,14 @@ while a:
 while a:
 	if x:
 		a
-	else:
-		continue
+	continue
 while a:
 	if x:
 		continue
 while a:
 	if x:
 		continue
-	else:
-		continue
+	continue
 while a:
 	if x:
 		continue

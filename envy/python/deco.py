@@ -281,9 +281,9 @@ EndLoop = namedtuple('EndLoop', [])
 # fake opcodes
 
 class JumpUnconditional(OpcodeFlow): pass
+class JumpContinue(OpcodeFlow): pass
 class JumpSkipJunk(OpcodeFlow): pass
 
-class JumpContinue(OpcodeJumpAbsolute): pass
 
 FwdFlow = namedtuple('FwdFlow', ['flow'])
 RevFlow = namedtuple('RevFlow', ['flow'])
@@ -892,13 +892,23 @@ def _visit_flow(self, deco, want):
     else:
         return [WantFlow([flow for flow in want.flow if flow != self.flow])]
 
+@_re_visitor(JumpContinue, WantFlow)
+def _visit_extra(self, deco, extra):
+    return [], JumpContinue(self.pos, self.nextpos, self.flow + extra.flow)
+
 @_re_visitor(JumpUnconditional, WantFlow)
 def _visit_extra(self, deco, extra):
     return [], JumpUnconditional(self.pos, self.nextpos, self.flow + extra.flow)
 
+@_re_stmt_visitor(JumpContinue, FinalElse, Block)
+def _visit_if_end(self, deco, final, inner):
+    if not all(flow.dst == self.flow[0].dst for flow in final.flow):
+        raise NoMatch
+    return final.maker(inner), [], JumpContinue(self.pos, self.nextpos, self.flow + final.flow)
+
 @_re_stmt_visitor(JumpUnconditional, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
-    return final.maker(inner), [], type(self)(self.pos, self.nextpos, self.flow + final.flow)
+    return final.maker(inner), [], JumpUnconditional(self.pos, self.nextpos, self.flow + final.flow)
 
 @_re_stmt_visitor(FwdFlow, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
@@ -1089,9 +1099,10 @@ def _visit_continue(self, deco):
             raise NoMatch
     if loop is None:
         raise NoMatch
-    if self.flow not in loop.flow:
-        raise NoMatch
-    loop.flow.remove(self.flow)
+    for flow in self.flow:
+        if flow not in loop.flow:
+            raise NoMatch
+        loop.flow.remove(flow)
     return StmtContinue(), []
 
 @_stmt_visitor(OpcodeContinueLoop)
@@ -1786,7 +1797,7 @@ class DecoCtx:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                     insert_end = True
                 elif next_unreachable and not next_end_finally:
-                    op = JumpContinue(op.pos, op.nextpos, op.flow)
+                    op = JumpContinue(op.pos, op.nextpos, [op.flow])
                 else:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                 newops.append(op)

@@ -111,6 +111,7 @@ TESTS_10 = {
     'opt/if_while': '10',
     'opt/except_while': '10',
     'opt/deep': '10',
+    'opt/continue_': '10',
 }
 
 TESTS_11 = TESTS_10.copy()

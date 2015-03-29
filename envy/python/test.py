@@ -236,6 +236,8 @@ TESTS_23.update({
 TESTS_24 = TESTS_23.copy()
 TESTS_24.update({
     'marshal/int2': '24',
+    'expr/logic': '24',
+    'expr/logic_const': '24',
     'defs/deco': '24',
     'defs/fun': '24',
     'names/fun': '24',

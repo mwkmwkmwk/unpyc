@@ -157,6 +157,8 @@ class Pyc10(metaclass=PycVersion):
     has_fun_deco = False
     # return X; return None -> return X
     has_return_squash = False
+    # jump conditional to jump conditional is folded
+    has_jump_cond_fold = False
     # has relative import
     has_relative_import = False
     # has sets and frozensets
@@ -330,6 +332,7 @@ class Pyc24(Pyc23):
     has_fun_deco = True
     has_return_squash = True
     has_jump_true_const = False
+    has_jump_cond_fold = True
 
 class Pyc25(Pyc24):
     # 62071 used in prealpha

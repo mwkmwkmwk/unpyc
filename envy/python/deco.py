@@ -1712,6 +1712,24 @@ class DecoCtx:
                 else:
                     newops.append(op)
             ops = newops
+        # alt first pass: undo conditional jump folding for jumps with opposite polarisation
+        if self.version.has_jump_cond_fold:
+            after_jif = {}
+            after_jit = {}
+            for op in ops:
+                if isinstance(op, OpcodeJumpIfFalse):
+                    after_jif[op.nextpos] = op.pos
+                elif isinstance(op, OpcodeJumpIfTrue):
+                    after_jit[op.nextpos] = op.pos
+            newops = []
+            for op in ops:
+                if isinstance(op, OpcodeJumpIfFalse) and op.flow.dst in after_jit:
+                    newops.append(OpcodeJumpIfFalse(op.pos, op.nextpos, Flow(op.pos, after_jit[op.flow.dst])))
+                elif isinstance(op, OpcodeJumpIfTrue) and op.flow.dst in after_jif:
+                    newops.append(OpcodeJumpIfTrue(op.pos, op.nextpos, Flow(op.pos, after_jif[op.flow.dst])))
+                else:
+                    newops.append(op)
+            ops = newops
         # second pass: figure out the kinds of absolute jumps
         condflow = {op.pos: [] for op in ops}
         for op in ops:

@@ -188,6 +188,7 @@ TESTS_20.update({
     'comp/cond': '20',
     'comp/complex': '20',
     'comp/fun': '20',
+    'comp/cond_and': '20',
     'stmt/import_': '20',
     'stmt/import2': '20',
     'stmt/import3': '20',

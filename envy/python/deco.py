@@ -964,12 +964,10 @@ def _visit_and(self, deco, start, block, expr):
         raise PythonError("extra and statements")
     return [ExprBoolAnd(start.expr, expr)]
 
-@_visitor(FwdFlow, CompIfStart, Comp, Expr)
+@_visitor(FwdFlow, CompIfStart, CompLevel, Expr)
 def _visit_and(self, deco, start, comp, expr):
     if self.flow != start.flow:
         raise PythonError("funny and flow")
-    if block.stmts:
-        raise PythonError("extra and statements")
     return [ExprBoolAnd(start.expr, expr)]
 
 @_visitor(FwdFlow, AndStart, Expr)

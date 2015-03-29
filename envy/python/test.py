@@ -100,6 +100,16 @@ TESTS_10 = {
     # misc
     'misc/unpack': '10',
     'misc/empty': '10',
+    # optimization stuff
+    'opt/if_if': '10',
+    'opt/if_except': '10',
+    'opt/except_if': '10',
+    'opt/except_except': '10',
+    'opt/while_if': '10',
+    'opt/while_except': '10',
+    'opt/for_if': '10',
+    'opt/if_while': '10',
+    'opt/except_while': '10',
 }
 
 TESTS_11 = TESTS_10.copy()
@@ -110,6 +120,10 @@ TESTS_11.update({
     'defs/cls': '11',
     'names/nested': '11',
     'names/nested2': '11',
+    'opt/if_except_else': '11',
+    'opt/while_except_else': '11',
+    'opt/except_else_if': '11',
+    'opt/except_except_else': '11',
 })
 
 TESTS_12 = TESTS_11.copy()

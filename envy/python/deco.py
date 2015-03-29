@@ -1047,6 +1047,7 @@ def _visit_loop(self, deco):
 
 @_stmt_visitor(OpcodeJumpAbsolute)
 def _visit_continue(self, deco):
+    loop = None
     for item in reversed(deco.stack):
         if isinstance(item, Loop):
             loop = item
@@ -1058,7 +1059,7 @@ def _visit_continue(self, deco):
             pass
         else:
             raise NoMatch
-    if not loop.cont:
+    if loop is None or not loop.cont:
         raise NoMatch
     if loop.cont[-1] != self.flow:
         raise NoMatch

@@ -169,7 +169,8 @@ def ast_process(deco, version):
         decorators, fun = undecorate(node.expr)
 
         if isinstance(fun, ExprFunction):
-            if not fun.name or fun.name != name:
+            # TODO change endswith to proper mangling support
+            if not fun.name or not name.endswith(fun.name):
                 return node
             if decorators and not version.has_fun_deco:
                 return node
@@ -180,7 +181,7 @@ def ast_process(deco, version):
                 raise PythonError("function not terminated by return None")
             return StmtDef(decorators, fun.name, fun.args, fun.block)
         elif isinstance(fun, ExprClass):
-            if fun.name != name:
+            if not name.endswith(fun.name):
                 return node
             if decorators and not version.has_cls_deco:
                 return node

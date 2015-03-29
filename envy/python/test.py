@@ -121,6 +121,7 @@ TESTS_11.update({
     'defs/cls': '11',
     'names/nested': '11',
     'names/nested2': '11',
+    'names/nested3': '11',
     'opt/if_except_else': '11',
     'opt/while_except_else': '11',
     'opt/except_else_if': '11',
@@ -175,9 +176,10 @@ del TESTS_16['defs/fun3']
 
 TESTS_20 = TESTS_16.copy()
 TESTS_20.update({
-    'misc/huge': '20',
+    #'misc/huge': '20',
     'misc/unpack': '20',
     'names/nested2': '20',
+    'names/nested3': '20',
     'names/fun': '20',
     'names/fun2': '20',
     'comp/basic': '20',
@@ -196,6 +198,7 @@ TESTS_21 = TESTS_20.copy()
 TESTS_21.update({
     'names/nested': '21',
     'names/nested2': '21',
+    'names/nested3': '21',
     'names/fun': '21',
     'names/fun2': '21',
     'names/global_': '21',
@@ -215,6 +218,7 @@ TESTS_22.update({
     'defs/cls': '22',
     'names/nested': '22',
     'names/nested2': '22',
+    'names/nested3': '22',
     'names/fun': '22',
     'names/fun2': '22',
     'comp/fun': '22',
@@ -255,10 +259,18 @@ TESTS_25.update({
     'marshal/unicode': '25',
     'stmt/with_': '25',
     'expr/misc': '25',
+    'defs/fun': '25',
+    'defs/doc': '25',
+    'defs/doc2': '25',
     'defs/cls': '25',
     'defs/gen': '25',
     'defs/gen2': '25',
     'names/global_': '25',
+    'names/fun': '25',
+    'names/fun2': '25',
+    'names/nested': '25',
+    'names/nested2': '25',
+    'names/nested3': '25',
     'stmt/if_const': '25',
 })
 
@@ -266,6 +278,7 @@ TESTS_26 = TESTS_25.copy()
 TESTS_26.update({
     'marshal/bytes': '26',
     'defs/deco2': '26',
+    'names/fun': '24',
 })
 
 TESTS_27 = TESTS_26.copy()

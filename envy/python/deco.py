@@ -1377,16 +1377,16 @@ def _visit_make_function(self, deco, args, kwargs, code, qualname):
 def visit_closure_tuple(self, deco, closures):
     return [ClosuresTuple([closure.var for closure in closures])]
 
-@_visitor(OpcodeMakeClosure, UglyClosures, Exprs('param', 1), Code, flag='!has_sane_closure')
-def _visit_make_function(self, deco, closures, args, code):
+@_visitor(OpcodeMakeClosure, Exprs('param', 1), UglyClosures, Code, flag='!has_sane_closure')
+def _visit_make_function(self, deco, args, closures, code):
     return [ExprFunctionRaw(deco_code(code), args, {}, closures)]
 
-@_visitor(OpcodeMakeClosure, ClosuresTuple, Exprs('param', 1), Code, flag='has_sane_closure')
-def _visit_make_function(self, deco, closures, args, code):
+@_visitor(OpcodeMakeClosure, Exprs('param', 1), ClosuresTuple, Code, flag='has_sane_closure')
+def _visit_make_function(self, deco, args, closures, code):
     return [ExprFunctionRaw(deco_code(code), args, {}, closures.vars)]
 
-@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('kwargs', 2), Exprs('args', 1), Code, flag='!has_qualname')
-def _visit_make_function(self, deco, closures, kwargs, args, code):
+@_visitor(OpcodeMakeClosureNew, Exprs('kwargs', 2), Exprs('args', 1), ClosuresTuple, Code, flag='!has_qualname')
+def _visit_make_function(self, deco, kwargs, args, closures, code):
     return [ExprFunctionRaw(
         deco_code(code),
         args,
@@ -1394,8 +1394,8 @@ def _visit_make_function(self, deco, closures, kwargs, args, code):
         closures.vars
     )]
 
-@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('kwargs', 2), Exprs('args', 1), Code, ExprUnicode, flag=('has_qualname', 'has_reversed_def_kwargs'))
-def _visit_make_function(self, deco, closures, kwargs, args, code, qualname):
+@_visitor(OpcodeMakeClosureNew, Exprs('kwargs', 2), Exprs('args', 1), ClosuresTuple, Code, ExprUnicode, flag=('has_qualname', 'has_reversed_def_kwargs'))
+def _visit_make_function(self, deco, kwargs, args, closures, code, qualname):
     # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),
@@ -1404,8 +1404,8 @@ def _visit_make_function(self, deco, closures, kwargs, args, code, qualname):
         closures.vars
     )]
 
-@_visitor(OpcodeMakeClosureNew, ClosuresTuple, Exprs('args', 1), Exprs('kwargs', 2), Code, ExprUnicode, flag=('has_qualname', '!has_reversed_def_kwargs'))
-def _visit_make_function(self, deco, closures, args, kwargs, code, qualname):
+@_visitor(OpcodeMakeClosureNew, Exprs('args', 1), Exprs('kwargs', 2), ClosuresTuple, Code, ExprUnicode, flag=('has_qualname', '!has_reversed_def_kwargs'))
+def _visit_make_function(self, deco, args, kwargs, closures, code, qualname):
     # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),

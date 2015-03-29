@@ -110,6 +110,7 @@ TESTS_10 = {
     'opt/for_if': '10',
     'opt/if_while': '10',
     'opt/except_while': '10',
+    'opt/deep': '10',
 }
 
 TESTS_11 = TESTS_10.copy()
@@ -228,6 +229,7 @@ TESTS_23.update({
     'names/global_': '23',
     'stmt/if_const': '23',
     'stmt/if_logic_const': '23',
+    'stmt/continue_': '23',
     'stmt/while_const': '23',
 })
 

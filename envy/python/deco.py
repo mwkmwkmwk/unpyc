@@ -1426,7 +1426,7 @@ def visit_load_closure(self, deco):
 
 @_visitor(OpcodeBuildClass, Expr, ExprTuple, UnaryCall)
 def _visit_build_class(self, deco, name, bases, call):
-    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), call.code, call.closures)]
+    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), call.code, [])]
 
 @_visitor(OpcodeBuildClass, Expr, ExprTuple, ExprCall, flag='has_kwargs')
 def _visit_build_class(self, deco, name, bases, call):

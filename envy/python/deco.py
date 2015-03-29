@@ -167,11 +167,6 @@ from .bytecode import *
 # - deal with class/top __doc__ assignments
 # - verify function docstrings
 
-class EndKind(Enum):
-    UNKNOWN = 0
-    FINAL = 1
-    NORMAL = 2
-
 # funny intermediate stuff to put on stack
 
 DupTop = namedtuple('DupTop', [])
@@ -230,7 +225,7 @@ TryFinallyPending = namedtuple('TryFinallyPending', ['body', 'flow'])
 TryFinally = namedtuple('TryFinally', ['body'])
 
 TryExceptEndTry = namedtuple('TryExceptEndTry', ['flow', 'body'])
-TryExceptMid = namedtuple('TryExceptMid', ['else_', 'body', 'items', 'any', 'flows', 'kind'])
+TryExceptMid = namedtuple('TryExceptMid', ['else_', 'body', 'items', 'any', 'flows'])
 TryExceptMatchMid = namedtuple('TryExceptMatchMid', ['expr'])
 TryExceptMatchOk = namedtuple('TryExceptMatchOk', ['expr', 'next'])
 TryExceptMatch = namedtuple('TryExceptMatch', ['expr', 'dst', 'next'])
@@ -900,17 +895,11 @@ def _visit_if(self, deco, jump):
     return [OrStart(jump.expr, jump.flow)]
 
 @_visitor(JumpForwardFinal, Block, IfStart, Block)
-def _visit_if_else(self, deco, block, if_, body):
-    return [block, IfElse(if_.expr, body, self.flow), Block([]), WantPop(), WantFlow([if_.flow])]
-
 @_visitor(JumpAbsoluteFolded, Block, IfStart, Block)
 def _visit_if_else(self, deco, block, if_, body):
     return [block, FinalElse(self.flow, lambda else_: StmtIf([(if_.expr, body)], else_)), Block([]), WantPop(), WantFlow([if_.flow])]
 
 @_visitor(JumpForwardFinal, CompLevel, CompIfStart)
-def _visit_if_else(self, deco, comp, if_):
-    return [WantFlow(self.flow), WantPop(), WantFlow([if_.flow])]
-
 @_visitor(JumpAbsoluteFolded, CompLevel, CompIfStart)
 def _visit_if_else(self, deco, comp, if_):
     return [WantFlow(self.flow), WantPop(), WantFlow([if_.flow])]
@@ -941,16 +930,10 @@ def _visit_rot_four(self, deco):
     return [RotFour()]
 
 @_re_stmt_visitor(JumpForwardFinal, FinalElse, Block)
-def _visit_if_end(self, deco, final, inner):
-    return final.maker(inner), [], JumpForwardFinal(self.pos, self.nextpos, self.flow + final.flow)
-
 @_re_stmt_visitor(JumpAbsoluteFolded, FinalElse, Block)
-def _visit_if_end(self, deco, final, inner):
-    return final.maker(inner), [], JumpAbsoluteFolded(self.pos, self.nextpos, self.flow + final.flow)
-
 @_re_stmt_visitor(JumpAbsoluteEndLoop, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
-    return final.maker(inner), [], JumpAbsoluteEndLoop(self.pos, self.nextpos, self.flow + final.flow)
+    return final.maker(inner), [], type(self)(self.pos, self.nextpos, self.flow + final.flow)
 
 @_re_stmt_visitor(FwdFlow, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
@@ -1196,23 +1179,12 @@ def _visit_for(self, deco, loop, inner):
     return StmtForRaw(loop.expr, loop.dst, inner), [WantFlow([loop.flow])]
 
 @_re_visitor(JumpForwardFinal, WantFlow)
-def _visit_extra(self, deco, extra):
-    return [], JumpForwardFinal(self.pos, self.nextpos, self.flow + extra.flow)
-
 @_re_visitor(JumpAbsoluteEndLoop, WantFlow)
-def _visit_extra(self, deco, extra):
-    return [], JumpAbsoluteEndLoop(self.pos, self.nextpos, self.flow + extra.flow)
-
 @_re_visitor(JumpAbsoluteFolded, WantFlow)
 def _visit_extra(self, deco, extra):
-    return [], JumpAbsoluteFolded(self.pos, self.nextpos, self.flow + extra.flow)
+    return [], type(self)(self.pos, self.nextpos, self.flow + extra.flow)
 
 @_visitor(JumpAbsoluteEndLoop, CompLevel, CompForLoop)
-def _visit_for(self, deco, _, loop):
-    if sorted(loop.loop.flow) != sorted(self.flow):
-        raise PythonError("mismatched for loop")
-    return [WantFlow([loop.flow])]
-
 @_visitor(JumpAbsoluteEndInfiniteLoop, CompLevel, CompForLoop)
 def _visit_for(self, deco, _, loop):
     if sorted(loop.loop.flow) != sorted(self.flow):
@@ -1276,12 +1248,9 @@ def _visit_except_pop_try(self, deco, setup, block):
     return [TryExceptEndTry(setup.flow, block)]
 
 @_visitor(JumpForwardFinal, TryExceptEndTry)
-def _visit_except_end_try(self, deco, try_):
-    return [TryExceptMid(self.flow, try_.body, [], None, [], EndKind.UNKNOWN), WantFlow([try_.flow])]
-
 @_visitor(JumpAbsoluteFolded, TryExceptEndTry)
 def _visit_except_end_try(self, deco, try_):
-    return [TryExceptMid(None, try_.body, [], None, self.flow, EndKind.FINAL), WantFlow([try_.flow])]
+    return [TryExceptMid(self.flow, try_.body, [], None, []), WantFlow([try_.flow])]
 
 # except match clause:
 #
@@ -1325,26 +1294,8 @@ def _visit_except_match_store(self, deco, match):
     ] + self.extra
 
 @_visitor(JumpForwardFinal, TryExceptMid, TryExceptMatch, Block)
-def _visit_except_match_end(self, deco, try_, match, block):
-    if try_.kind is EndKind.FINAL:
-        raise PythonError("funny try except kind")
-    return [
-        TryExceptMid(
-            try_.else_,
-            try_.body,
-            try_.items + [(match.expr, match.dst, block)],
-            None,
-            try_.flows + self.flow,
-            EndKind.NORMAL
-        ),
-        WantPop(),
-        WantFlow([match.next])
-    ]
-
 @_visitor(JumpAbsoluteFolded, TryExceptMid, TryExceptMatch, Block)
 def _visit_except_match_end(self, deco, try_, match, block):
-    if try_.kind is EndKind.NORMAL:
-        raise PythonError("funny try except kind")
     return [
         TryExceptMid(
             try_.else_,
@@ -1352,7 +1303,6 @@ def _visit_except_match_end(self, deco, try_, match, block):
             try_.items + [(match.expr, match.dst, block)],
             None,
             try_.flows + self.flow,
-            EndKind.FINAL,
         ),
         WantPop(),
         WantFlow([match.next])
@@ -1371,24 +1321,8 @@ def _visit_except_any(self, deco, try_):
     ]
 
 @_visitor(JumpForwardFinal, TryExceptMid, TryExceptAny, Block)
-def _visit_except_any_end(self, deco, try_, _, block):
-    if try_.kind is EndKind.FINAL:
-        raise PythonError("funny try except kind")
-    return [
-        TryExceptMid(
-            try_.else_,
-            try_.body,
-            try_.items,
-            block,
-            try_.flows + self.flow,
-            EndKind.NORMAL
-        )
-    ]
-
 @_visitor(JumpAbsoluteFolded, TryExceptMid, TryExceptAny, Block)
 def _visit_except_any_end(self, deco, try_, _, block):
-    if try_.kind is EndKind.NORMAL:
-        raise PythonError("funny try except kind")
     return [
         TryExceptMid(
             try_.else_,
@@ -1396,34 +1330,16 @@ def _visit_except_any_end(self, deco, try_, _, block):
             try_.items,
             block,
             try_.flows + self.flow,
-            EndKind.FINAL,
         )
     ]
 
 @_visitor(OpcodeEndFinally, TryExceptMid)
 def _visit_except_end(self, deco, try_):
-    if try_.kind is EndKind.NORMAL:
-        return [
-            TryExceptElse(try_.body, try_.items, try_.any, try_.flows),
-            Block([]),
-            WantFlow(try_.else_)
-        ]
-    elif try_.kind is EndKind.FINAL:
-        if try_.else_ is None:
-            def make_except(else_):
-                if else_.stmts:
-                    raise PythonError("else skipped over, but not empty")
-                return StmtExcept(try_.body, try_.items, try_.any, else_)
-            return [
-                FinalElse(try_.flows, make_except),
-                Block([]),
-            ]
-        else:
-            return [
-                FinalElse(try_.flows, lambda else_: StmtExcept(try_.body, try_.items, try_.any, else_)),
-                Block([]),
-                WantFlow(try_.else_)
-            ]
+    return [
+        FinalElse(try_.flows, lambda else_: StmtExcept(try_.body, try_.items, try_.any, else_)),
+        Block([]),
+        WantFlow(try_.else_)
+    ]
 
 @_re_stmt_visitor(FwdFlow, TryExceptElse, Block)
 def _visit_except_end(self, deco, try_, block):

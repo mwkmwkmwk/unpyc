@@ -201,6 +201,7 @@ Compare = namedtuple('Compare', ['items', 'flows'])
 CompareLast = namedtuple('CompareLast', ['items', 'flows'])
 CompareNext = namedtuple('CompareNext', ['items', 'flows'])
 
+WantEndLoop = namedtuple('WantEndLoop', [])
 WantPop = namedtuple('WantPop', [])
 WantRotPop = namedtuple('WantRotPop', [])
 WantFlow = namedtuple('WantFlow', ['flow'])
@@ -251,6 +252,20 @@ ClosuresTuple = namedtuple('ClosuresTuple', ['vars'])
 
 FinalElse = namedtuple('FinalElse', ['flow', 'maker'])
 
+# final makers
+
+class FinalIf(namedtuple('FinalIf', ['expr', 'body'])):
+    def __call__(self, else_):
+        return StmtIf([(self.expr, self.body)], else_)
+
+class FinalLoop(namedtuple('FinalLoop', ['body'])):
+    def __call__(self, else_):
+        return StmtLoop(self.body, else_)
+
+class FinalExcept(namedtuple('FinalExcept', ['body', 'items', 'any'])):
+    def __call__(self, else_):
+        return StmtExcept(self.body, self.items, self.any, else_)
+
 # a special marker to put in stack want lists - will match getattr(opcode, attr)
 # expressions and pass a list
 Exprs = namedtuple('Exprs', ['attr', 'factor'])
@@ -261,6 +276,7 @@ Closures = object()
 
 Store = namedtuple('Store', ['dst', 'extra'])
 Inplace = namedtuple('Inplace', ['stmt'])
+EndLoop = namedtuple('EndLoop', [])
 
 # fake opcodes
 
@@ -897,10 +913,6 @@ def _visit_if_end(self, deco, final, inner, want):
 def _visit_if(self, deco, block, expr):
     return [block, IfStart(expr, self.flow), Block([]), WantPop()]
 
-@_visitor(OpcodeJumpIfFalse, Loop, Expr)
-def _visit_if(self, deco, loop, expr):
-    return [loop, WhileStart(expr, self.flow), Block([]), WantPop()]
-
 @_visitor(OpcodeJumpIfFalse, CompLevel, Expr)
 def _visit_if(self, deco, comp, expr):
     return [comp, CompIfStart(expr, self.flow), CompLevel(comp.meat, comp.items + [CompIf(expr)]), WantPop()]
@@ -915,7 +927,7 @@ def _visit_if(self, deco, expr):
 
 @_visitor(JumpUnconditional, Block, IfStart, Block)
 def _visit_if_else(self, deco, block, if_, body):
-    return [block, FinalElse(self.flow, lambda else_: StmtIf([(if_.expr, body)], else_)), Block([]), WantPop(), WantFlow([if_.flow])]
+    return [block, FinalElse(self.flow, FinalIf(if_.expr, body)), Block([]), WantPop(), WantFlow([if_.flow])]
 
 @_visitor(JumpUnconditional, CompLevel, CompIfStart)
 def _visit_if_else(self, deco, comp, if_):
@@ -1039,18 +1051,20 @@ def _visit_setup_loop(self, deco):
 
 @_visitor(OpcodePopBlock, SetupLoop, Block)
 def _visit_pop_loop(self, deco, setup, block):
-    return [FinalElse([setup.flow], lambda else_: StmtLoop(block, else_)), Block([])]
+    return [FinalElse([setup.flow], FinalLoop(block)), Block([])]
 
 # actual loops
 
-@_visitor(RevFlow, Loop)
-def _visit_cont_in(self, deco, loop):
+@_visitor(RevFlow, Loop, Block)
+def _visit_cont_in(self, deco, loop, block):
+    if block.stmts:
+        raise NoMatch
     loop.flow.append(self.flow)
-    return [loop]
+    return [loop, block]
 
 @_visitor(RevFlow)
 def _visit_loop(self, deco):
-    return [Loop([self.flow])]
+    return [Loop([self.flow]), Block([])]
 
 # continue
 
@@ -1102,16 +1116,25 @@ def _visit_continue(self, deco):
 
 # while loop
 
-@_stmt_visitor(JumpUnconditional, Loop, WhileStart, Block)
-def _visit_while(self, deco, loop, start, inner):
+@_stmt_visitor(EndLoop, Loop, Block, FinalElse, Block, WantPop, WantFlow)
+def _visit_while(self, deco, loop, blocka, final, blockb, _, want):
+    if blocka.stmts or blockb.stmts or not isinstance(final.maker, FinalIf):
+        raise NoMatch
+    if_ = final.maker
+    return StmtWhileRaw(if_.expr, if_.body), [WantPop(), want]
+
+@_stmt_visitor(JumpUnconditional, Loop, Block)
+def _visit_while(self, deco, loop, inner):
     if sorted(loop.flow) != sorted(self.flow):
         raise PythonError("funny while loop")
-    return StmtWhileRaw(start.expr, inner), [WantPop(), WantFlow([start.flow])]
+    return StmtWhileRaw(ExprAnyTrue(), inner), [WantPop(), WantEndLoop()]
 
 # for loop
 
-@_visitor(OpcodeForLoop, Expr, ExprInt, Loop)
-def _visit_for_start(self, deco, expr, zero, loop):
+@_visitor(OpcodeForLoop, Expr, ExprInt, Loop, Block)
+def _visit_for_start(self, deco, expr, zero, loop, block):
+    if block.stmts:
+        raise PythonError("junk in for")
     if zero.val != 0:
         raise PythonError("funny for loop start")
     return [ForStart(expr, loop, self.flow)]
@@ -1136,13 +1159,17 @@ def visit_store_multi_start(self, deco, comp, start):
 def _visit_for(self, deco, loop, inner):
     if sorted(loop.loop.flow) != sorted(self.flow):
         raise PythonError("mismatched for loop")
-    return StmtForRaw(loop.expr, loop.dst, inner), [WantFlow([loop.flow])]
+    return StmtForRaw(loop.expr, loop.dst, inner), [WantFlow([loop.flow]), WantEndLoop()]
 
 @_visitor(JumpUnconditional, CompLevel, CompForLoop)
 def _visit_for(self, deco, _, loop):
     if sorted(loop.loop.flow) != sorted(self.flow):
         raise PythonError("mismatched for loop")
-    return [WantFlow([loop.flow])]
+    return [WantFlow([loop.flow]), WantEndLoop()]
+
+@_visitor(EndLoop, WantEndLoop)
+def _visit_end_loop(self, deco, want):
+    return []
 
 # new for loop
 
@@ -1150,8 +1177,10 @@ def _visit_for(self, deco, _, loop):
 def visit_get_iter(self, deco, expr):
     return [Iter(expr)]
 
-@_visitor(OpcodeForIter, Iter, Loop)
-def _visit_for_iter(self, deco, iter_, loop):
+@_visitor(OpcodeForIter, Iter, Loop, Block)
+def _visit_for_iter(self, deco, iter_, loop, block):
+    if block.stmts:
+        raise PythonError("junk in for")
     return [ForStart(iter_.expr, loop, self.flow)]
 
 # break
@@ -1286,7 +1315,7 @@ def _visit_except_any_end(self, deco, try_, _, block):
 @_visitor(OpcodeEndFinally, TryExceptMid)
 def _visit_except_end(self, deco, try_):
     return [
-        FinalElse(try_.flows, lambda else_: StmtExcept(try_.body, try_.items, try_.any, else_)),
+        FinalElse(try_.flows, FinalExcept(try_.body, try_.items, try_.any)),
         Block([]),
         WantFlow(try_.else_)
     ]
@@ -1651,32 +1680,33 @@ class DecoCtx:
             self.varnames = None
         ops, inflow = self.preproc(code.ops)
         for op in ops:
-            flows = list(reversed(inflow[op.pos]))
-            while flows:
-                for idx, flow in enumerate(flows):
-                    if flow.dst > flow.src:
-                        flow = FwdFlow(flow)
-                    else:
-                        flow = RevFlow(flow)
-                    try:
-                        fop = self.process(flow)
-                    except NoMatch:
-                        continue
-                    flows.pop(idx)
-                    while fop is not None:
+            if hasattr(op, 'pos'):
+                flows = list(reversed(inflow[op.pos]))
+                while flows:
+                    for idx, flow in enumerate(flows):
+                        if flow.dst > flow.src:
+                            flow = FwdFlow(flow)
+                        else:
+                            flow = RevFlow(flow)
                         try:
-                            fop = self.process(fop)
+                            fop = self.process(flow)
                         except NoMatch:
-                            raise PythonError("no visitors matched for {}, [{}]".format(
-                                type(fop).__name__,
-                                ', '.join(type(x).__name__ for x in self.stack)
-                            ))
-                    break
-                else:
-                    raise PythonError("no visitors matched for {}, [{}]".format(
-                        ', '.join(str(flow) for flow in flows),
-                        ', '.join(type(x).__name__ for x in self.stack)
-                    ))
+                            continue
+                        flows.pop(idx)
+                        while fop is not None:
+                            try:
+                                fop = self.process(fop)
+                            except NoMatch:
+                                raise PythonError("no visitors matched for {}, [{}]".format(
+                                    type(fop).__name__,
+                                    ', '.join(type(x).__name__ for x in self.stack)
+                                ))
+                        break
+                    else:
+                        raise PythonError("no visitors matched for {}, [{}]".format(
+                            ', '.join(str(flow) for flow in flows),
+                            ', '.join(type(x).__name__ for x in self.stack)
+                        ))
             while op is not None:
                 try:
                     op = self.process(op)
@@ -1739,17 +1769,23 @@ class DecoCtx:
         newops = []
         for idx, op in enumerate(ops):
             if isinstance(op, OpcodeJumpAbsolute):
+                insert_end = False
                 is_final = op.flow == max(inflow[op.flow.dst])
                 is_backwards = op.flow.dst <= op.pos
                 next_unreachable = not condflow[op.nextpos]
                 next_end_finally = idx+1 < len(ops) and isinstance(ops[idx+1], OpcodeEndFinally)
-                if not is_backwards or is_final:
+                if not is_backwards:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
+                elif is_final:
+                    op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
+                    insert_end = True
                 elif next_unreachable and not next_end_finally:
                     op = JumpContinue(op.pos, op.nextpos, op.flow)
                 else:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                 newops.append(op)
+                if insert_end:
+                    newops.append(EndLoop())
             elif isinstance(op, OpcodeJumpForward):
                 newops.append(JumpUnconditional(op.pos, op.nextpos, [op.flow]))
             else:

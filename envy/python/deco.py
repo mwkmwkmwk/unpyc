@@ -271,18 +271,9 @@ Inplace = namedtuple('Inplace', ['stmt'])
 
 # fake opcodes
 
-class JumpWithExtra(OpcodeFlow): pass
+class JumpUnconditional(OpcodeFlow): pass
 
-# a JUMP_ABSOLUTE that ends a loop
-class JumpAbsoluteEndLoop(JumpWithExtra): pass
-# likewise, but for an infinite loop (while True)
-class JumpAbsoluteEndInfiniteLoop(JumpWithExtra): pass
-# a JUMP_ABSOLUTE created by folding a JUMP_FORWARD to JUMP_FORWARD
-class JumpAbsoluteFolded(JumpWithExtra): pass
-# a JUMP_ABSOLUTE created by a continue
-class JumpAbsoluteContinue(OpcodeJumpAbsolute): pass
-
-class JumpForwardFinal(JumpWithExtra): pass
+class JumpContinue(OpcodeJumpAbsolute): pass
 
 FwdFlow = namedtuple('FwdFlow', ['flow'])
 RevFlow = namedtuple('RevFlow', ['flow'])
@@ -894,13 +885,11 @@ def _visit_if(self, deco, jump):
 def _visit_if(self, deco, jump):
     return [OrStart(jump.expr, jump.flow)]
 
-@_visitor(JumpForwardFinal, Block, IfStart, Block)
-@_visitor(JumpAbsoluteFolded, Block, IfStart, Block)
+@_visitor(JumpUnconditional, Block, IfStart, Block)
 def _visit_if_else(self, deco, block, if_, body):
     return [block, FinalElse(self.flow, lambda else_: StmtIf([(if_.expr, body)], else_)), Block([]), WantPop(), WantFlow([if_.flow])]
 
-@_visitor(JumpForwardFinal, CompLevel, CompIfStart)
-@_visitor(JumpAbsoluteFolded, CompLevel, CompIfStart)
+@_visitor(JumpUnconditional, CompLevel, CompIfStart)
 def _visit_if_else(self, deco, comp, if_):
     return [WantFlow(self.flow), WantPop(), WantFlow([if_.flow])]
 
@@ -929,9 +918,7 @@ def _visit_want_rot_two(self, deco, want, _):
 def _visit_rot_four(self, deco):
     return [RotFour()]
 
-@_re_stmt_visitor(JumpForwardFinal, FinalElse, Block)
-@_re_stmt_visitor(JumpAbsoluteFolded, FinalElse, Block)
-@_re_stmt_visitor(JumpAbsoluteEndLoop, FinalElse, Block)
+@_re_stmt_visitor(JumpUnconditional, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
     return final.maker(inner), [], type(self)(self.pos, self.nextpos, self.flow + final.flow)
 
@@ -1050,7 +1037,7 @@ def _visit_cmp_last(self, deco, cmp, expr):
     return [CompareLast(cmp.items + [self.param, expr], cmp.flows)]
 
 # end #2
-@_visitor(JumpForwardFinal, CompareLast)
+@_visitor(JumpUnconditional, CompareLast)
 def _visit_cmp_last_jump(self, deco, cmp):
     return [
         ExprCmp(cmp.items),
@@ -1075,11 +1062,11 @@ def _visit_end_loop(self, deco, loop, inner):
         raise NoMatch
     return StmtLoop(loop.body, inner), []
 
-@_re_stmt_visitor(JumpForwardFinal, LoopElse, Block)
+@_re_stmt_visitor(JumpUnconditional, LoopElse, Block)
 def _visit_end_loop_final(self, deco, loop, inner):
     if loop.flow.dst != self.flow[0].dst:
         raise NoMatch
-    return StmtLoop(loop.body, inner), [], JumpForwardFinal(self.pos, self.nextpos, self.flow + [loop.flow])
+    return StmtLoop(loop.body, inner), [], JumpUnconditional(self.pos, self.nextpos, self.flow + [loop.flow])
 
 # actual loops
 
@@ -1094,7 +1081,7 @@ def _visit_loop(self, deco):
 
 # continue
 
-@_stmt_visitor(JumpAbsoluteContinue)
+@_stmt_visitor(JumpContinue)
 def _visit_continue(self, deco):
     loop = None
     for item in reversed(deco.stack):
@@ -1142,7 +1129,7 @@ def _visit_continue(self, deco):
 
 # while loop
 
-@_stmt_visitor(JumpAbsoluteEndLoop, Loop, WhileStart, Block)
+@_stmt_visitor(JumpUnconditional, Loop, WhileStart, Block)
 def _visit_while(self, deco, loop, start, inner):
     if sorted(loop.flow) != sorted(self.flow):
         raise PythonError("funny while loop")
@@ -1172,20 +1159,17 @@ def visit_store_multi_start(self, deco, comp, start):
         CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
     ] + self.extra
 
-@_stmt_visitor(JumpAbsoluteEndLoop, ForLoop, Block)
+@_stmt_visitor(JumpUnconditional, ForLoop, Block)
 def _visit_for(self, deco, loop, inner):
     if sorted(loop.loop.flow) != sorted(self.flow):
         raise PythonError("mismatched for loop")
     return StmtForRaw(loop.expr, loop.dst, inner), [WantFlow([loop.flow])]
 
-@_re_visitor(JumpForwardFinal, WantFlow)
-@_re_visitor(JumpAbsoluteEndLoop, WantFlow)
-@_re_visitor(JumpAbsoluteFolded, WantFlow)
+@_re_visitor(JumpUnconditional, WantFlow)
 def _visit_extra(self, deco, extra):
-    return [], type(self)(self.pos, self.nextpos, self.flow + extra.flow)
+    return [], JumpUnconditional(self.pos, self.nextpos, self.flow + extra.flow)
 
-@_visitor(JumpAbsoluteEndLoop, CompLevel, CompForLoop)
-@_visitor(JumpAbsoluteEndInfiniteLoop, CompLevel, CompForLoop)
+@_visitor(JumpUnconditional, CompLevel, CompForLoop)
 def _visit_for(self, deco, _, loop):
     if sorted(loop.loop.flow) != sorted(self.flow):
         raise PythonError("mismatched for loop")
@@ -1247,8 +1231,7 @@ def _visit_setup_except(self, deco):
 def _visit_except_pop_try(self, deco, setup, block):
     return [TryExceptEndTry(setup.flow, block)]
 
-@_visitor(JumpForwardFinal, TryExceptEndTry)
-@_visitor(JumpAbsoluteFolded, TryExceptEndTry)
+@_visitor(JumpUnconditional, TryExceptEndTry)
 def _visit_except_end_try(self, deco, try_):
     return [TryExceptMid(self.flow, try_.body, [], None, []), WantFlow([try_.flow])]
 
@@ -1293,8 +1276,7 @@ def _visit_except_match_store(self, deco, match):
         WantPop()
     ] + self.extra
 
-@_visitor(JumpForwardFinal, TryExceptMid, TryExceptMatch, Block)
-@_visitor(JumpAbsoluteFolded, TryExceptMid, TryExceptMatch, Block)
+@_visitor(JumpUnconditional, TryExceptMid, TryExceptMatch, Block)
 def _visit_except_match_end(self, deco, try_, match, block):
     return [
         TryExceptMid(
@@ -1320,8 +1302,7 @@ def _visit_except_any(self, deco, try_):
         WantPop()
     ]
 
-@_visitor(JumpForwardFinal, TryExceptMid, TryExceptAny, Block)
-@_visitor(JumpAbsoluteFolded, TryExceptMid, TryExceptAny, Block)
+@_visitor(JumpUnconditional, TryExceptMid, TryExceptAny, Block)
 def _visit_except_any_end(self, deco, try_, _, block):
     return [
         TryExceptMid(
@@ -1783,20 +1764,15 @@ class DecoCtx:
                 is_backwards = op.flow.dst <= op.pos
                 next_unreachable = not condflow[op.nextpos]
                 next_end_finally = idx+1 < len(ops) and isinstance(ops[idx+1], OpcodeEndFinally)
-                if not is_backwards:
-                    op = JumpAbsoluteFolded(op.pos, op.nextpos, [op.flow])
-                elif is_final:
-                    if not next_unreachable:
-                        op = JumpAbsoluteEndLoop(op.pos, op.nextpos, [op.flow])
-                    else:
-                        op = JumpAbsoluteEndInfiniteLoop(op.pos, op.nextpos, [op.flow])
+                if not is_backwards or is_final:
+                    op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                 elif next_unreachable and not next_end_finally:
-                    op = JumpAbsoluteContinue(op.pos, op.nextpos, op.flow)
+                    op = JumpContinue(op.pos, op.nextpos, op.flow)
                 else:
-                    op = JumpAbsoluteFolded(op.pos, op.nextpos, [op.flow])
+                    op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                 newops.append(op)
             elif isinstance(op, OpcodeJumpForward):
-                newops.append(JumpForwardFinal(op.pos, op.nextpos, [op.flow]))
+                newops.append(JumpUnconditional(op.pos, op.nextpos, [op.flow]))
             else:
                 newops.append(op)
         ops = newops

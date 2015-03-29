@@ -240,9 +240,12 @@ TESTS_24.update({
     'expr/logic_const': '24',
     'defs/deco': '24',
     'defs/fun': '24',
+    'defs/gen': '24',
     'names/fun': '24',
     'names/fun2': '24',
+    'names/global_': '24',
     'stmt/exec_': '24',
+    'stmt/if_const': '24',
 })
 
 TESTS_25 = TESTS_24.copy()

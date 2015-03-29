@@ -281,6 +281,7 @@ EndLoop = namedtuple('EndLoop', [])
 # fake opcodes
 
 class JumpUnconditional(OpcodeFlow): pass
+class JumpSkipJunk(OpcodeFlow): pass
 
 class JumpContinue(OpcodeJumpAbsolute): pass
 
@@ -908,6 +909,10 @@ def _visit_if_end(self, deco, final, inner, want):
     return final.maker(inner), [WantFlow(final.flow + want.flow)], self
 
 # if / and / or
+
+@_visitor(JumpSkipJunk, Block)
+def _visit_if(self, deco, block):
+    return [block, FinalElse([self.flow], FinalIf(ExprAnyTrue(), Block([]))), Block([]), WantPop()]
 
 @_visitor(OpcodeJumpIfFalse, Block, Expr)
 def _visit_if(self, deco, block, expr):
@@ -1761,21 +1766,24 @@ class DecoCtx:
                     newops.append(op)
             ops = newops
         # second pass: figure out the kinds of absolute jumps
-        condflow = {op.pos: [] for op in ops}
+        condflow = {op.nextpos: [] for op in ops}
         for op in ops:
             if isinstance(op, (OpcodeJumpIfTrue, OpcodeJumpIfFalse, OpcodeForLoop, OpcodeForIter, OpcodeSetupExcept)):
                 condflow[op.flow.dst].append(op.flow)
         inflow = process_flow(ops)
         newops = []
         for idx, op in enumerate(ops):
+            next_unreachable = not condflow[op.nextpos]
+            next_end_finally = idx+1 < len(ops) and isinstance(ops[idx+1], OpcodeEndFinally)
             if isinstance(op, OpcodeJumpAbsolute):
                 insert_end = False
                 is_final = op.flow == max(inflow[op.flow.dst])
                 is_backwards = op.flow.dst <= op.pos
-                next_unreachable = not condflow[op.nextpos]
-                next_end_finally = idx+1 < len(ops) and isinstance(ops[idx+1], OpcodeEndFinally)
                 if not is_backwards:
-                    op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
+                    if next_unreachable and not next_end_finally:
+                        op = JumpSkipJunk(op.pos, op.nextpos, op.flow)
+                    else:
+                        op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                 elif is_final:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                     insert_end = True
@@ -1787,7 +1795,11 @@ class DecoCtx:
                 if insert_end:
                     newops.append(EndLoop())
             elif isinstance(op, OpcodeJumpForward):
-                newops.append(JumpUnconditional(op.pos, op.nextpos, [op.flow]))
+                if next_unreachable and not next_end_finally:
+                    op = JumpSkipJunk(op.pos, op.nextpos, op.flow)
+                else:
+                    op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
+                newops.append(op)
             else:
                 newops.append(op)
         ops = newops

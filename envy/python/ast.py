@@ -163,7 +163,7 @@ def ast_process(deco, version):
         dst = node.dests[0]
 
         # TODO allow only ExprName, punt it before name resolve
-        if not isinstance(dst, (ExprName, ExprGlobal, ExprFast)):
+        if not isinstance(dst, (ExprName, ExprGlobal, ExprFast, ExprDeref)):
             return node
         name = dst.name
 

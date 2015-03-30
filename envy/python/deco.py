@@ -194,6 +194,8 @@ AndStart = namedtuple('AndStart', ['expr', 'flow'])
 IfStart = namedtuple('IfStart', ['expr', 'flow'])
 CompIfStart = namedtuple('CompIfStart', ['expr', 'flow'])
 OrStart = namedtuple('OrStart', ['expr', 'flow'])
+IfNotStart = namedtuple('IfNotStart', ['expr', 'flow'])
+CompIfNotStart = namedtuple('CompIfNotStart', ['expr', 'flow'])
 
 CompareStart = namedtuple('CompareStart', ['items', 'flows'])
 Compare = namedtuple('Compare', ['items', 'flows'])
@@ -785,6 +787,36 @@ def visit_print_newline_to(self, deco, expr):
 def _visit_return(self, deco, expr):
     return StmtReturn(expr), []
 
+# assert. ouch. has to be before raise.
+
+@_stmt_visitor(OpcodeRaiseVarargs, IfStart, Block, IfNotStart, Block, Exprs('param', 1), flag=('has_assert', '!has_short_assert'))
+def _visit_assert_1(self, deco, ifstart, block, orstart, block2, exprs):
+    if block.stmts or block2.stmts:
+        raise PythonError("extra assert statements")
+    if not isinstance(exprs[0], ExprGlobal) or exprs[0].name != 'AssertionError':
+        raise PythonError("hmm, I wanted an assert...")
+    if not isinstance(ifstart.expr, ExprGlobal) or ifstart.expr.name != '__debug__':
+        raise PythonError("hmm, I wanted an assert...")
+    if self.param == 1:
+        return StmtAssert(orstart.expr), [WantPop(), WantFlow([orstart.flow, ifstart.flow])]
+    elif self.param == 2:
+        return StmtAssert(orstart.expr, exprs[1]), [WantPop(), WantFlow([orstart.flow, ifstart.flow])]
+    else:
+        raise PythonError("funny assert params")
+
+@_stmt_visitor(OpcodeRaiseVarargs, IfNotStart, Block, Exprs('param', 1), flag='has_short_assert')
+def _visit_assert_1(self, deco, orstart, block, exprs):
+    if block.stmts:
+        raise PythonError("extra assert statements")
+    if not isinstance(exprs[0], ExprGlobal) or exprs[0].name != 'AssertionError':
+        raise PythonError("hmm, I wanted an assert...")
+    if self.param == 1:
+        return StmtAssert(orstart.expr), [WantPop(), WantFlow([orstart.flow])]
+    elif self.param == 2:
+        return StmtAssert(orstart.expr, exprs[1]), [WantPop(), WantFlow([orstart.flow])]
+    else:
+        raise PythonError("funny assert params")
+
 # raise statement
 
 # Python 1.0 - 1.2
@@ -965,6 +997,14 @@ def _visit_if(self, deco, comp, expr):
 def _visit_if(self, deco, expr):
     return [AndStart(expr, self.flow), WantPop()]
 
+@_visitor(OpcodeJumpIfTrue, Block, Expr)
+def _visit_if(self, deco, block, expr):
+    return [block, IfNotStart(expr, self.flow), Block([]), WantPop()]
+
+@_visitor(OpcodeJumpIfTrue, CompLevel, Expr)
+def _visit_if(self, deco, comp, expr):
+    return [comp, CompIfNotStart(expr, self.flow), CompLevel(comp.meat, comp.items + [CompIf(ExprNot(expr))]), WantPop()]
+
 @_visitor(OpcodeJumpIfTrue, Expr)
 def _visit_if(self, deco, expr):
     return [OrStart(expr, self.flow), WantPop()]
@@ -974,6 +1014,14 @@ def _visit_if_else(self, deco, block, if_, body):
     return [block, FinalElse(self.flow, FinalIf(if_.expr, body)), Block([]), WantPop(), WantFlow([if_.flow])]
 
 @_visitor(JumpUnconditional, CompLevel, CompIfStart)
+def _visit_if_else(self, deco, comp, if_):
+    return [WantFlow(self.flow), WantPop(), WantFlow([if_.flow])]
+
+@_visitor(JumpUnconditional, Block, IfNotStart, Block, flag='has_if_not_opt')
+def _visit_if_else(self, deco, block, if_, body):
+    return [block, FinalElse(self.flow, FinalIf(ExprNot(if_.expr), body)), Block([]), WantPop(), WantFlow([if_.flow])]
+
+@_visitor(JumpUnconditional, CompLevel, CompIfNotStart, flag='has_if_not_opt')
 def _visit_if_else(self, deco, comp, if_):
     return [WantFlow(self.flow), WantPop(), WantFlow([if_.flow])]
 
@@ -997,39 +1045,25 @@ def _visit_and(self, deco, start, expr):
         raise PythonError("funny and flow")
     return [ExprBoolAnd(start.expr, expr)]
 
+@_visitor(FwdFlow, IfNotStart, Block, Expr)
+def _visit_or(self, deco, start, block, expr):
+    if self.flow != start.flow:
+        raise PythonError("funny or flow")
+    if block.stmts:
+        raise PythonError("extra or statements")
+    return [ExprBoolOr(start.expr, expr)]
+
+@_visitor(FwdFlow, CompIfNotStart, CompLevel, Expr)
+def _visit_or(self, deco, start, comp, expr):
+    if self.flow != start.flow:
+        raise PythonError("funny or flow")
+    return [ExprBoolOr(start.expr, expr)]
+
 @_visitor(FwdFlow, OrStart, Expr)
 def _visit_or(self, deco, start, expr):
     if self.flow != start.flow:
         raise PythonError("funny or flow")
     return [ExprBoolOr(start.expr, expr)]
-
-# assert. ouch.
-
-@_stmt_visitor(OpcodeRaiseVarargs, IfStart, Block, OrStart, Exprs('param', 1), flag=('has_assert', '!has_short_assert'))
-def _visit_assert_1(self, deco, ifstart, block, orstart, exprs):
-    if block.stmts:
-        raise PythonError("extra assert statements")
-    if not isinstance(exprs[0], ExprGlobal) or exprs[0].name != 'AssertionError':
-        raise PythonError("hmm, I wanted an assert...")
-    if not isinstance(ifstart.expr, ExprGlobal) or ifstart.expr.name != '__debug__':
-        raise PythonError("hmm, I wanted an assert...")
-    if self.param == 1:
-        return StmtAssert(orstart.expr), [WantPop(), WantFlow([orstart.flow, ifstart.flow])]
-    elif self.param == 2:
-        return StmtAssert(orstart.expr, exprs[1]), [WantPop(), WantFlow([orstart.flow, ifstart.flow])]
-    else:
-        raise PythonError("funny assert params")
-
-@_stmt_visitor(OpcodeRaiseVarargs, OrStart, Exprs('param', 1), flag='has_short_assert')
-def _visit_assert_1(self, deco, orstart, exprs):
-    if not isinstance(exprs[0], ExprGlobal) or exprs[0].name != 'AssertionError':
-        raise PythonError("hmm, I wanted an assert...")
-    if self.param == 1:
-        return StmtAssert(orstart.expr), [WantPop(), WantFlow([orstart.flow])]
-    elif self.param == 2:
-        return StmtAssert(orstart.expr, exprs[1]), [WantPop(), WantFlow([orstart.flow])]
-    else:
-        raise PythonError("funny assert params")
 
 # comparisons
 

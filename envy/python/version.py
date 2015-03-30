@@ -157,6 +157,8 @@ class Pyc10(metaclass=PycVersion):
     has_nop = False
     # unpacking of just-built tuples and list is optimized to rots
     has_unpack_opt = False
+    # if not uses JUMP_IF_TRUE
+    has_if_not_opt = True
     # has function decorators
     has_fun_deco = False
     # return X; return None -> return X
@@ -333,6 +335,7 @@ class Pyc24a1(Pyc23):
     has_list_append = True
     has_nop = True
     has_unpack_opt = True
+    has_if_not_opt = True
 
 class Pyc24a3(Pyc24a1):
     code = _v(62051)

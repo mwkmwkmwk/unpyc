@@ -347,6 +347,7 @@ class Pyc24a3(Pyc24a1):
     has_jump_cond_fold = True
 
 class Pyc24(Pyc24a3):
+    # actually 2.4b1 and up
     code = _v(62061)
     name = "Python 2.4"
 

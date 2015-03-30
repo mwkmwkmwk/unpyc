@@ -1146,7 +1146,7 @@ def _visit_continue(self, deco):
         elif isinstance(item, ForLoop):
             loop = item.loop
             break
-        elif isinstance(item, (Block, IfStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
+        elif isinstance(item, (Block, IfStart, IfNotStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
         else:
             raise NoMatch
@@ -1170,7 +1170,7 @@ def _visit_continue(self, deco):
             break
         elif isinstance(item, SetupExcept):
             seen = True
-        elif isinstance(item, (Block, IfStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
+        elif isinstance(item, (Block, IfStart, IfNotStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
         else:
             raise NoMatch

@@ -258,6 +258,7 @@ TESTS_24a3.update({
     'stmt/if_const': '24',
     'expr/logic': '24',
     'expr/logic_const': '24',
+    'misc/unpack': '24',
 })
 
 TESTS_24 = TESTS_24a3.copy()

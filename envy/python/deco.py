@@ -665,6 +665,32 @@ def visit_store_unpack(self, deco, slot):
     slot.expr.exprs[slot.idx] = self.dst
     return self.extra
 
+# optimized unpacking
+
+@_stmt_visitor(JumpSkipJunk, Expr, Expr, RotTwo, flag=('has_unpack_opt', 'has_nop'))
+def visit_unpack_opt_two_skip(self, deco, a, b, _):
+    src = ExprTuple([a, b])
+    dst = ExprTuple([None, None])
+    return StmtAssign([dst], src), [UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow([self.flow])]
+
+@_stmt_visitor(JumpSkipJunk, Expr, Expr, Expr, RotThree, RotTwo, flag=('has_unpack_opt', 'has_nop'))
+def visit_unpack_opt_three_skip(self, deco, a, b, c, _1, _2):
+    src = ExprTuple([a, b, c])
+    dst = ExprTuple([None, None, None])
+    return StmtAssign([dst], src), [UnpackSlot(dst, 2), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow([self.flow])]
+
+@_stmt_visitor(Store, Expr, Expr, RotTwo, flag=('has_unpack_opt', '!has_nop'))
+def visit_unpack_opt_two_skip(self, deco, a, b, _):
+    src = ExprTuple([a, b])
+    dst = ExprTuple([self.dst, None])
+    return StmtAssign([dst], src), [UnpackSlot(dst, 1)] + self.extra
+
+@_stmt_visitor(Store, Expr, Expr, Expr, RotThree, RotTwo, flag=('has_unpack_opt', '!has_nop'))
+def visit_unpack_opt_three_skip(self, deco, a, b, c, _1, _2):
+    src = ExprTuple([a, b, c])
+    dst = ExprTuple([self.dst, None, None])
+    return StmtAssign([dst], src), [UnpackSlot(dst, 2), UnpackSlot(dst, 1)] + self.extra
+
 # old argument unpacking
 
 @_stmt_visitor(OpcodeUnpackArg)

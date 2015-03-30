@@ -155,6 +155,8 @@ class Pyc10(metaclass=PycVersion):
     has_list_append = False
     # has NOP opcode that can actually make it to the bytecode
     has_nop = False
+    # unpacking of just-built tuples and list is optimized to rots
+    has_unpack_opt = False
     # has function decorators
     has_fun_deco = False
     # return X; return None -> return X
@@ -330,6 +332,7 @@ class Pyc24a1(Pyc23):
     has_str_intern = True
     has_list_append = True
     has_nop = True
+    has_unpack_opt = True
 
 class Pyc24a3(Pyc24a1):
     code = _v(62051)

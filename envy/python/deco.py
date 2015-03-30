@@ -192,7 +192,6 @@ UnpackVarargSlot = namedtuple('UnpackVarargSlot', ['args'])
 
 AndStart = namedtuple('AndStart', ['expr', 'flow'])
 IfStart = namedtuple('IfStart', ['expr', 'flow'])
-WhileStart = namedtuple('WhileStart', ['expr', 'flow'])
 CompIfStart = namedtuple('CompIfStart', ['expr', 'flow'])
 OrStart = namedtuple('OrStart', ['expr', 'flow'])
 
@@ -978,14 +977,6 @@ def _visit_if_else(self, deco, block, if_, body):
 def _visit_if_else(self, deco, comp, if_):
     return [WantFlow(self.flow), WantPop(), WantFlow([if_.flow])]
 
-@_visitor(FwdFlow, WhileStart, Block, Expr)
-def _visit_and(self, deco, start, block, expr):
-    if self.flow != start.flow:
-        raise PythonError("funny and flow")
-    if block.stmts:
-        raise PythonError("extra and statements")
-    return [ExprBoolAnd(start.expr, expr)]
-
 @_visitor(FwdFlow, IfStart, Block, Expr)
 def _visit_and(self, deco, start, block, expr):
     if self.flow != start.flow:
@@ -1121,7 +1112,7 @@ def _visit_continue(self, deco):
         elif isinstance(item, ForLoop):
             loop = item.loop
             break
-        elif isinstance(item, (Block, WhileStart, IfStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
+        elif isinstance(item, (Block, IfStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
         else:
             raise NoMatch
@@ -1145,7 +1136,7 @@ def _visit_continue(self, deco):
             break
         elif isinstance(item, SetupExcept):
             seen = True
-        elif isinstance(item, (Block, WhileStart, IfStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
+        elif isinstance(item, (Block, IfStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
         else:
             raise NoMatch

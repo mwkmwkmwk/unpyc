@@ -189,6 +189,7 @@ TESTS_20.update({
     'comp/complex': '20',
     'comp/fun': '20',
     'comp/cond_and': '20',
+    'comp/cond_const': '20',
     'stmt/import_': '20',
     'stmt/import2': '20',
     'stmt/import3': '20',
@@ -231,6 +232,7 @@ TESTS_22.update({
 TESTS_23 = TESTS_22.copy()
 TESTS_23.update({
     'defs/gen': '23',
+    'comp/cond_const': '23',
     'expr/logic_const': '23',
     'names/global_': '23',
     'stmt/if_const': '23',

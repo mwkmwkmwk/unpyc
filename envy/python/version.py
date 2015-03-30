@@ -371,7 +371,14 @@ class Pyc27(Pyc26):
     has_setup_with = True
     has_new_jump = True
 
+# 62213 used in pypy 1.5
+# 62217 used in pypy 2.1
+# 62218 used in pypy 2.3
+
 # Python 3
+
+# 16 used by pypy3-2.1.0
+# 48 used by pypy3-2.3.0
 
 # 3000, 3010, 3020, 3030, 3040, 3050, 3060, 3061, 3071, 3081, 3091, 3101
 # used in development branch

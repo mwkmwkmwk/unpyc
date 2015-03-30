@@ -804,7 +804,7 @@ def _visit_assert_1(self, deco, ifstart, block, orstart, block2, exprs):
     else:
         raise PythonError("funny assert params")
 
-@_stmt_visitor(FwdFlow, IfNotStart, Block, flag='has_short_assert')
+@_stmt_visitor(FwdFlow, IfNotStart, Block, flag=('has_short_assert', '!has_raise_from'))
 def _visit_assert_2(self, deco, start, body):
     if self.flow != start.flow:
         raise NoMatch
@@ -816,6 +816,28 @@ def _visit_assert_2(self, deco, start, body):
     ):
         raise PythonError("that's not an assert")
     return StmtAssert(start.expr, body.stmts[0].val), [WantPop()]
+
+@_stmt_visitor(FwdFlow, IfNotStart, Block, flag=('has_short_assert', 'has_raise_from'))
+def _visit_assert_2(self, deco, start, body):
+    if self.flow != start.flow:
+        raise NoMatch
+    if (len(body.stmts) != 1
+        or not isinstance(body.stmts[0], StmtRaise)
+        or body.stmts[0].tb is not None
+    ):
+        raise PythonError("that's not an assert")
+    val = body.stmts[0].cls
+    if isinstance(val, ExprGlobal) and val.name == 'AssertionError':
+        return StmtAssert(start.expr), [WantPop()]
+    elif (isinstance(val, ExprCall)
+        and isinstance(val.expr, ExprGlobal)
+        and val.expr.name == 'AssertionError'
+        and len(val.args.args) == 1
+        and not val.args.args[0][0]
+    ):
+        return StmtAssert(start.expr, val.args.args[0][1]), [WantPop()]
+    else:
+        raise PythonError("that's still not an assert")
 
 # raise statement
 

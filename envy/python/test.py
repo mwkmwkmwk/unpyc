@@ -98,6 +98,7 @@ TESTS_10 = {
     'stmt/except_': '10',
     'stmt/finally_': '10',
     'stmt/fake_assert': '10',
+    'stmt/fake_assert2': '10',
     # misc
     'misc/unpack': '10',
     'misc/empty': '10',
@@ -129,6 +130,7 @@ TESTS_11.update({
     'opt/except_else_if': '11',
     'opt/except_except_else': '11',
     'stmt/fake_assert': '11',
+    'stmt/fake_assert2': '11',
 })
 
 TESTS_12 = TESTS_11.copy()
@@ -325,6 +327,7 @@ del TESTS_30['stmt/raise_']
 del TESTS_30['stmt/raise2']
 del TESTS_30['stmt/raise3']
 del TESTS_30['stmt/except_']
+del TESTS_30['stmt/fake_assert']
 del TESTS_30['expr/chain']
 del TESTS_30['marshal/unicode']
 del TESTS_30['marshal/int']

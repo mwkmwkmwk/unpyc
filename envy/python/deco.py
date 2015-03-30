@@ -804,18 +804,18 @@ def _visit_assert_1(self, deco, ifstart, block, orstart, block2, exprs):
     else:
         raise PythonError("funny assert params")
 
-@_stmt_visitor(OpcodeRaiseVarargs, IfNotStart, Block, Exprs('param', 1), flag='has_short_assert')
-def _visit_assert_1(self, deco, orstart, block, exprs):
-    if block.stmts:
-        raise PythonError("extra assert statements")
-    if not isinstance(exprs[0], ExprGlobal) or exprs[0].name != 'AssertionError':
-        raise PythonError("hmm, I wanted an assert...")
-    if self.param == 1:
-        return StmtAssert(orstart.expr), [WantPop(), WantFlow([orstart.flow])]
-    elif self.param == 2:
-        return StmtAssert(orstart.expr, exprs[1]), [WantPop(), WantFlow([orstart.flow])]
-    else:
-        raise PythonError("funny assert params")
+@_stmt_visitor(FwdFlow, IfNotStart, Block, flag='has_short_assert')
+def _visit_assert_2(self, deco, start, body):
+    if self.flow != start.flow:
+        raise NoMatch
+    if (len(body.stmts) != 1
+        or not isinstance(body.stmts[0], StmtRaise)
+        or not isinstance(body.stmts[0].cls, ExprGlobal)
+        or body.stmts[0].cls.name != 'AssertionError'
+        or body.stmts[0].tb is not None
+    ):
+        raise PythonError("that's not an assert")
+    return StmtAssert(start.expr, body.stmts[0].val), [WantPop()]
 
 # raise statement
 

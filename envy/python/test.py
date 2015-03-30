@@ -165,6 +165,7 @@ TESTS_15.update({
     'defs/doc2': '15',
     'stmt/assert_': '15',
     'stmt/if_const': '15',
+    'opt/assert_logic': '15',
 })
 
 TESTS_16 = TESTS_15.copy()

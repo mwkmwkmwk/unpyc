@@ -241,11 +241,13 @@ TESTS_23.update({
     'stmt/while_const': '23',
 })
 
-TESTS_24 = TESTS_23.copy()
-TESTS_24.update({
+TESTS_24a1 = TESTS_23.copy()
+TESTS_24a1.update({
     'marshal/int2': '24',
-    'expr/logic': '24',
-    'expr/logic_const': '24',
+})
+
+TESTS_24a3 = TESTS_24a1.copy()
+TESTS_24a3.update({
     'defs/deco': '24',
     'defs/fun': '24',
     'defs/gen': '24',
@@ -254,6 +256,12 @@ TESTS_24.update({
     'names/global_': '24',
     'stmt/exec_': '24',
     'stmt/if_const': '24',
+    'expr/logic': '24',
+    'expr/logic_const': '24',
+})
+
+TESTS_24 = TESTS_24a3.copy()
+TESTS_24.update({
 })
 
 TESTS_25 = TESTS_24.copy()
@@ -360,6 +368,8 @@ VERSIONS = [
     ("2.1", "2.1.3", 'compile', None, Pyc21, TESTS_21),
     ("2.2", "2.2.3", 'compile', None, Pyc22, TESTS_22),
     ("2.3", "2.3.7", 'compile', None, Pyc23, TESTS_23),
+    ("2.4a1", "2.4a1", 'compile', None, Pyc24a1, TESTS_24a1),
+    ("2.4a3", "2.4a3", 'compile', None, Pyc24a3, TESTS_24a3),
     ("2.4", "2.4.6", 'compile', None, Pyc24, TESTS_24),
     ("2.5", "2.5.6", 'compile', None, Pyc25, TESTS_25),
     ("2.6", "2.6.9", 'compile', None, Pyc26, TESTS_26),

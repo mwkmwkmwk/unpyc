@@ -149,10 +149,12 @@ class Pyc10(metaclass=PycVersion):
     has_peephole = False
     # jumps over jump_if_false true const
     has_jump_true_const = False
-    # has LIST_APPEND opcode
-    has_list_append = False
     # has interned bytestrings in marshal
     has_str_intern = False
+    # has LIST_APPEND opcode
+    has_list_append = False
+    # has NOP opcode that can actually make it to the bytecode
+    has_nop = False
     # has function decorators
     has_fun_deco = False
     # return X; return None -> return X
@@ -322,17 +324,25 @@ class Pyc23(Pyc22):
     has_peephole = True
     has_jump_true_const = True
 
-class Pyc24(Pyc23):
-    # 62041 used in a1-a2
-    # 62051 used in a3
-    code = _v(62061)
-    name = "Python 2.4"
-    has_list_append = True
+class Pyc24a1(Pyc23):
+    code = _v(62041)
+    name = "Python 2.4a1"
     has_str_intern = True
-    has_fun_deco = True
+    has_list_append = True
+    has_nop = True
+
+class Pyc24a3(Pyc24a1):
+    code = _v(62051)
+    name = "Python 2.4a3"
+    has_nop = False
     has_return_squash = True
     has_jump_true_const = False
+    has_fun_deco = True
     has_jump_cond_fold = True
+
+class Pyc24(Pyc24a3):
+    code = _v(62061)
+    name = "Python 2.4"
 
 class Pyc25(Pyc24):
     # 62071 used in prealpha

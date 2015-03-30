@@ -447,6 +447,10 @@ def visit_set_lineno(self, deco):
     deco.lineno = self.param
     return []
 
+@_visitor(OpcodeNop)
+def _visit_nop(self, deco):
+    return []
+
 # stack ops
 
 @_visitor(OpcodeDupTop)

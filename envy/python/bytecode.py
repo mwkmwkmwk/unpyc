@@ -253,6 +253,7 @@ make_op(4, 'DUP_TOP')
 make_op(5, 'ROT_FOUR', 'has_rot_four')
 make_op(5, 'DUP_TWO', 'has_dup_two')
 
+make_op(9, 'NOP', 'has_nop')
 make_op(10, 'UNARY_POSITIVE')
 make_op(11, 'UNARY_NEGATIVE')
 make_op(12, 'UNARY_NOT')

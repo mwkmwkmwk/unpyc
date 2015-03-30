@@ -97,6 +97,7 @@ TESTS_10 = {
     'stmt/while_const': '10',
     'stmt/except_': '10',
     'stmt/finally_': '10',
+    'stmt/fake_assert': '10',
     # misc
     'misc/unpack': '10',
     'misc/empty': '10',
@@ -127,6 +128,7 @@ TESTS_11.update({
     'opt/while_except_else': '11',
     'opt/except_else_if': '11',
     'opt/except_except_else': '11',
+    'stmt/fake_assert': '11',
 })
 
 TESTS_12 = TESTS_11.copy()

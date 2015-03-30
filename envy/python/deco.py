@@ -732,14 +732,14 @@ def _visit_single_expr(self, deco, expr):
 def visit_store_assign(self, deco, src):
     return StmtAssign([self.dst], src), self.extra
 
-@_visitor(Store, Block, Expr, DupTop)
-def visit_store_multi_start(self, deco, block, src, _):
-    return [block, MultiAssign(src, [self.dst])] + self.extra
+@_visitor(Store, Expr, DupTop)
+def visit_store_multi_start(self, deco, src, _):
+    return [MultiAssign(src, [self.dst])] + self.extra
 
-@_visitor(Store, Block, MultiAssign, DupTop)
-def visit_store_multi_next(self, deco, block, multi, _):
+@_visitor(Store, MultiAssign, DupTop)
+def visit_store_multi_next(self, deco, multi, _):
     multi.dsts.append(self.dst)
-    return [block, multi] + self.extra
+    return [multi] + self.extra
 
 @_stmt_visitor(Store, MultiAssign)
 def visit_store_multi_end(self, deco, multi):

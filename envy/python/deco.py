@@ -356,7 +356,7 @@ def _visitor(op, *stack, **kwargs):
     def inner(func):
         @_re_visitor(op, *stack, **kwargs)
         def visit_normal(self, deco, *args):
-            return func(self, deco, *args), None
+            return func(self, deco, *args), []
         return func
     return inner
 
@@ -385,7 +385,7 @@ def _store_visitor(op, *stack):
         @_re_visitor(op, *stack)
         def visit_store(self, deco, *args):
             dst, extra = func(self, deco, *args)
-            return [], Store(dst, extra)
+            return [], [Store(dst, extra)]
         return func
     return inner
 
@@ -977,29 +977,29 @@ def _visit_flow(self, deco, want):
 
 @_re_visitor(JumpContinue, WantFlow)
 def _visit_extra(self, deco, extra):
-    return [], JumpContinue(self.pos, self.nextpos, self.flow + extra.flow)
+    return [], [JumpContinue(self.pos, self.nextpos, self.flow + extra.flow)]
 
 @_re_visitor(JumpUnconditional, WantFlow)
 def _visit_extra(self, deco, extra):
-    return [], JumpUnconditional(self.pos, self.nextpos, self.flow + extra.flow)
+    return [], [JumpUnconditional(self.pos, self.nextpos, self.flow + extra.flow)]
 
 @_re_stmt_visitor(JumpContinue, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
     if not all(flow.dst == self.flow[0].dst for flow in final.flow):
         raise NoMatch
-    return final.maker(inner), [], JumpContinue(self.pos, self.nextpos, self.flow + final.flow)
+    return final.maker(inner), [], [JumpContinue(self.pos, self.nextpos, self.flow + final.flow)]
 
 @_re_stmt_visitor(JumpUnconditional, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
-    return final.maker(inner), [], JumpUnconditional(self.pos, self.nextpos, self.flow + final.flow)
+    return final.maker(inner), [], [JumpUnconditional(self.pos, self.nextpos, self.flow + final.flow)]
 
 @_re_stmt_visitor(FwdFlow, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
-    return final.maker(inner), [WantFlow(final.flow)], self
+    return final.maker(inner), [WantFlow(final.flow)], [self]
 
 @_re_stmt_visitor(FwdFlow, FinalElse, Block, WantFlow)
 def _visit_if_end(self, deco, final, inner, want):
-    return final.maker(inner), [WantFlow(final.flow + want.flow)], self
+    return final.maker(inner), [WantFlow(final.flow + want.flow)], [self]
 
 # if / and / or
 
@@ -1592,7 +1592,7 @@ def _visit_return_locals(self, deco, closure):
 def _register_inplace(otype, stype):
     @_re_visitor(otype)
     def _visit_inplace(self, deco):
-        return [], Inplace(stype)
+        return [], [Inplace(stype)]
 
 INPLACE_OPS = [
     (OpcodeInplaceAdd, StmtInplaceAdd),
@@ -1808,13 +1808,14 @@ class DecoCtx:
                         else:
                             flow = RevFlow(flow)
                         try:
-                            fop = self.process(flow)
+                            re = self.process(flow)
                         except NoMatch:
                             continue
                         flows.pop(idx)
-                        while fop is not None:
+                        while re:
                             try:
-                                fop = self.process(fop)
+                                nre = self.process(re[0])
+                                re = nre + re[1:]
                             except NoMatch:
                                 raise PythonError("no visitors matched for {}, [{}]".format(
                                     type(fop).__name__,
@@ -1826,9 +1827,11 @@ class DecoCtx:
                             ', '.join(str(flow) for flow in flows),
                             ', '.join(type(x).__name__ for x in self.stack)
                         ))
-            while op is not None:
+            re = [op]
+            while re:
                 try:
-                    op = self.process(op)
+                    nre = self.process(re[0])
+                    re = nre + re[1:]
                 except NoMatch:
                     raise PythonError("no visitors matched: {}, [{}]".format(
                         type(op).__name__,

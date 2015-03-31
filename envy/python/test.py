@@ -102,6 +102,7 @@ TESTS_10 = {
     # misc
     'misc/unpack': '10',
     'misc/empty': '10',
+    'misc/dup_code': '10',
     # optimization stuff
     'opt/if_if': '10',
     'opt/if_except': '10',

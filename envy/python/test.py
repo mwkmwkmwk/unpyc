@@ -482,7 +482,6 @@ for v in VERSIONS:
                 resfile.unlink()
             if not expfile.exists():
                 print("no expected result for {}".format(test))
-                pycfile.unlink()
                 exp = None
                 missing += 1
             else:
@@ -495,8 +494,6 @@ for v in VERSIONS:
                 with resfile.open("w") as resf:
                     for line in res:
                         resf.write(line)
-            else:
-                pycfile.unlink()
 
     if failed or mismatch or missing or nopyc:
         print("STATS: {} failed, {} missing, {} mismatch, {} no pyc".format(failed, missing, mismatch, nopyc))

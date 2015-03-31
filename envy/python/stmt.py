@@ -298,6 +298,23 @@ class StmtRaise(Stmt):
             yield "raise {}, {}, {}".format(self.cls.show(None), self.val.show(None), self.tb.show(None))
 
 
+class StmtListAppend(Stmt):
+    __slots__ = 'tmp', 'val'
+
+    def __init__(self, tmp, val):
+        self.tmp = tmp
+        self.val = val
+
+    def subprocess(self, process):
+        return StmtListAppend(
+            process(self.tmp),
+            process(self.val)
+        )
+
+    def show(self):
+        yield "$listappend {}, {}".format(self.tmp.show(None), self.val.show(None))
+
+
 class StmtAssert(Stmt):
     __slots__ = 'expr', 'msg'
 

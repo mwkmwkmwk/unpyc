@@ -528,6 +528,22 @@ class StmtForRaw(Stmt):
         yield from indent(self.body.show())
 
 
+class StmtForTop(Stmt):
+    __slots__ = 'expr', 'dst', 'body'
+
+    def __init__(self, expr, dst, body):
+        self.expr = expr
+        self.dst = dst
+        self.body = body
+
+    def subprocess(self, process):
+        return StmtForTop(process(self.expr), process(self.dst), process(self.body))
+
+    def show(self):
+        yield "$top {} in {}:".format(self.dst.show(None), self.expr.show(None))
+        yield from indent(self.body.show())
+
+
 class StmtFor(Stmt):
     __slots__ = 'expr', 'dst', 'body', 'else_'
 

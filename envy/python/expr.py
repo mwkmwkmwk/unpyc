@@ -260,6 +260,33 @@ class ExprListComp(Expr):
         return ExprListComp(process(self.comp))
 
 
+class ExprGenExp(Expr):
+    __slots__ = ('comp')
+
+    def __init__(self, comp=None):
+        self.comp = comp
+
+    def show(self, ctx):
+        return '({})'.format(self.comp.show())
+
+    def subprocess(self, process):
+        return ExprGenExp(process(self.comp))
+
+
+class ExprCallComp(Expr):
+    __slots__ = 'fun', 'expr'
+
+    def __init__(self, fun, expr):
+        self.fun = fun
+        self.expr = expr
+
+    def subprocess(self, process):
+        return ExprCallComp(process(self.fun), process(self.expr))
+
+    def show(self, ctx):
+        return '$callcomp({})'.format(self.expr.show(None))
+
+
 class ExprDict(Expr):
     __slots__ = 'items',
 

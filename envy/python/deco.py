@@ -6,6 +6,7 @@ from .stmt import *
 from .expr import *
 from .code import Code
 from .bytecode import *
+from .ast import uncomp
 
 # TODO:
 #
@@ -47,7 +48,6 @@ from .bytecode import *
 # - py 2.4:
 #
 #   - None is now a keyword
-#   - genexp
 #   - enter peephole:
 #
 #     - UNARY_NOT JUMP_IF_FALSE [POP] -> JUMP_IF_TRUE [POP]
@@ -182,7 +182,9 @@ SetupExcept = namedtuple('SetupExcept', ['flow'])
 Loop = namedtuple('Loop', ['flow'])
 While = namedtuple('While', ['expr', 'end', 'block'])
 ForStart = namedtuple('ForStart', ['expr', 'loop', 'flow'])
+TopForStart = namedtuple('TopForStart', ['expr', 'loop', 'flow'])
 ForLoop = namedtuple('ForLoop', ['expr', 'dst', 'loop', 'flow'])
+TopForLoop = namedtuple('TopForLoop', ['expr', 'dst', 'loop', 'flow'])
 
 TryFinallyPending = namedtuple('TryFinallyPending', ['body', 'flow'])
 TryFinally = namedtuple('TryFinally', ['body'])
@@ -1177,6 +1179,25 @@ def _visit_for_iter(self, deco, iter_, loop, block):
         raise PythonError("junk in for")
     return [ForStart(iter_.expr, loop, self.flow)]
 
+@_visitor(OpcodeForIter, Expr, Loop, Block)
+def _visit_for_iter(self, deco, expr, loop, block):
+    if block.stmts:
+        raise PythonError("junk in for")
+    return [TopForStart(expr, loop, self.flow)]
+
+@_visitor(Store, TopForStart)
+def visit_store_multi_start(self, deco, start):
+    return [
+        TopForLoop(start.expr, self.dst, start.loop, start.flow),
+        Block([])
+    ]
+
+@_visitor(JumpUnconditional, TopForLoop, Block)
+def _visit_for(self, deco, loop, inner):
+    if sorted(loop.loop.flow) != sorted(self.flow):
+        raise PythonError("mismatched for loop")
+    return [StmtForTop(loop.expr, loop.dst, inner), WantFlow([loop.flow]), WantEndLoop()]
+
 # break
 
 @_visitor(OpcodeBreakLoop)
@@ -1606,25 +1627,6 @@ def _visit_inplace_store_slice_ee(self, deco, inp, _rot):
 
 # list comprehensions
 
-def uncomp(stmt):
-    items = []
-    while True:
-        if isinstance(stmt, StmtForRaw):
-            if len(stmt.body.stmts) != 1:
-                raise PythonError("multi-stmt for in comp")
-            items.append(CompFor(stmt.dst, stmt.expr))
-            stmt = stmt.body.stmts[0]
-        elif isinstance(stmt, StmtIf):
-            if not (len(stmt.items) == 1
-                and len(stmt.items[0][1].stmts) == 1
-                and len(stmt.else_.stmts) == 0
-            ):
-                raise PythonError("funny if in comp")
-            items.append(CompIf(stmt.items[0][0]))
-            stmt = stmt.items[0][1].stmts[0]
-        else:
-            return stmt, items
-
 @_visitor(Store, DupAttr, flag='!has_list_append')
 def visit_listcomp_start(self, deco, dup):
     if not isinstance(self.dst, (ExprName, ExprFast, ExprGlobal)):
@@ -1637,7 +1639,7 @@ def visit_listcomp_start(self, deco, dup):
 
 @_visitor(StmtForRaw, OldListCompStart, flag='!has_list_append')
 def _visit_listcomp(self, deco, start):
-    stmt, items = uncomp(self)
+    stmt, items = uncomp(self, False, False)
     if not (isinstance(stmt, StmtSingle)
         and isinstance(stmt.val, ExprCall)
         and stmt.val.expr == start.tmp
@@ -1654,7 +1656,7 @@ def _visit_listcomp(self, deco, ass):
     if not isinstance(ass.src, ExprList) or ass.src.exprs:
         raise PythonError("comp should start with an empty list")
     tmp = ass.dsts[0]
-    stmt, items = uncomp(self)
+    stmt, items = uncomp(self, False, False)
     if not (isinstance(stmt, StmtListAppend)
         and stmt.tmp == tmp
     ):
@@ -1670,6 +1672,16 @@ def visit_listcomp_end(self, deco, comp):
 @_visitor(OpcodeListAppend, Expr, Expr, flag='has_list_append')
 def visit_listcomp_item(self, deco, tmp, val):
     return [StmtListAppend(tmp, val)]
+
+@_visitor(OpcodeCallFunction, ExprFunctionRaw, Iter)
+def visit_call_function(self, deco, fun, arg):
+    if (fun.defargs
+        or fun.defkwargs
+        or self.args != 1
+        or self.kwargs != 0
+    ):
+        raise NoMatch
+    return [ExprCallComp(fun, arg.expr)]
 
 
 # yield

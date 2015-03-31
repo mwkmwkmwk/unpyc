@@ -251,6 +251,15 @@ TESTS_23.update({
 TESTS_24a1 = TESTS_23.copy()
 TESTS_24a1.update({
     'marshal/int2': '24',
+    'genexp/basic': '24',
+    'genexp/nested': '24',
+    'genexp/cond': '24',
+    'genexp/complex': '24',
+    'genexp/fun': '24',
+    'genexp/cond_and': '24',
+    'genexp/cond_const': '24',
+    'genexp/cond_not': '24',
+    'genexp/ctx': '24',
 })
 
 TESTS_24a3 = TESTS_24a1.copy()
@@ -292,6 +301,7 @@ TESTS_25.update({
     'names/nested2': '25',
     'names/nested3': '25',
     'stmt/if_const': '25',
+    'genexp/nested': '25',
 })
 
 TESTS_26 = TESTS_25.copy()

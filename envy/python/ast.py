@@ -3,6 +3,59 @@ from .helpers import PythonError
 from .stmt import *
 from .expr import *
 
+def uncomp(stmt, want_loop, want_top):
+    items = []
+    top = None
+    while True:
+        was_loop = False
+        if isinstance(stmt, StmtLoop):
+            if not want_loop:
+                raise PythonError("got $loop in comp, didn't want it")
+            if was_loop:
+                raise PythonError("double $loop in comp")
+            if len(stmt.body.stmts) != 1:
+                raise PythonError("funny $loop")
+            if stmt.else_.stmts:
+                raise PythonError("$loop with else in comp")
+            stmt = stmt.body.stmts[0]
+            was_loop = True
+        if want_top:
+            if isinstance(stmt, StmtForTop):
+                if want_loop and not was_loop:
+                    raise PythonError("wanted $loop in comp")
+                was_loop = False
+                if len(stmt.body.stmts) != 1:
+                    raise PythonError("multi-stmt for in comp")
+                top = (stmt.dst, stmt.expr)
+                stmt = stmt.body.stmts[0]
+                want_top = False
+            else:
+                raise PythonError("wanted top in comp")
+        else:
+            if isinstance(stmt, StmtForRaw):
+                if want_loop and not was_loop:
+                    raise PythonError("wanted $loop in comp")
+                was_loop = False
+                if len(stmt.body.stmts) != 1:
+                    raise PythonError("multi-stmt for in comp")
+                items.append(CompFor(stmt.dst, stmt.expr))
+                stmt = stmt.body.stmts[0]
+            elif isinstance(stmt, StmtIf):
+                if was_loop:
+                    raise PythonError("if in $loop in comp")
+                if not (len(stmt.items) == 1
+                    and len(stmt.items[0][1].stmts) == 1
+                    and len(stmt.else_.stmts) == 0
+                ):
+                    raise PythonError("funny if in comp")
+                items.append(CompIf(stmt.items[0][0]))
+                stmt = stmt.items[0][1].stmts[0]
+            else:
+                if top is None:
+                    return stmt, items
+                else:
+                    return stmt, items, top
+
 class RootExec:
     __slots__ = 'block',
 
@@ -27,6 +80,7 @@ def ast_process(deco, version):
     # processing stage 1
     #
     # - convert $buildclass and $classraw to $class, cleans their bodies
+    # - convert $callcomp to actual comprehensions
 
     def process_class_body(code, name):
         if code.code.name != name:
@@ -76,6 +130,22 @@ def ast_process(deco, version):
             return ExprClass(name, CallArgs(args[2:]), process_class_body_new(fun.code, name))
         if isinstance(node, ExprClassRaw):
             return ExprClass(node.name, node.args, process_class_body(node.code, node.name))
+        if isinstance(node, ExprCallComp):
+            stmts = node.fun.code.block.stmts
+            if not stmts:
+                raise PythonError("empty comp")
+            if len(stmts) == 2:
+                stmt, items, (topdst, arg) = uncomp(stmts[0], version.has_genexp_loop, True)
+                if not isinstance(stmts[1], StmtReturn) or not isinstance(stmts[1].val, ExprNone):
+                    raise PythonError("funny genexp return")
+                if not isinstance(stmt, StmtSingle) or not isinstance(stmt.val, ExprYield):
+                    raise PythonError("not a genexp ({})".format(stmt.val))
+                if not version.has_genexp:
+                    raise PythonError("no genexp in this version...")
+                expr = stmt.val.e1
+            if not isinstance(arg, ExprFast) or arg.idx != 0:
+                raise PythonError("comp arg mismatch")
+            return ExprGenExp(Comp(expr, [CompFor(topdst, node.expr)] + items))
         return node
 
     deco = process_1(deco)

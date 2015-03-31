@@ -159,6 +159,8 @@ class Pyc10(metaclass=PycVersion):
     has_unpack_opt = False
     # if not uses JUMP_IF_TRUE
     has_if_not_opt = True
+    # has generator expressions
+    has_genexp = False
     # has function decorators
     has_fun_deco = False
     # return X; return None -> return X
@@ -215,6 +217,8 @@ class Pyc10(metaclass=PycVersion):
     has_pop_except = False
     # has kw-only arguments
     has_kwonlyargs = False
+    # has SETUP_LOOP in genexp
+    has_genexp_loop = True
     # has new-style comprehension implementation
     has_new_comp = False
     # has new-style jumps (with pop)
@@ -336,6 +340,7 @@ class Pyc24a1(Pyc23):
     has_nop = True
     has_unpack_opt = True
     has_if_not_opt = True
+    has_genexp = True
 
 class Pyc24a3(Pyc24a1):
     code = _v(62051)
@@ -424,6 +429,7 @@ class Pyc30(Pyc26):
     has_setdict_comp = True
     has_pop_except = True
     has_kwonlyargs = True
+    has_genexp_loop = False
 
 class Pyc31(Pyc30):
     # 3141 used in prealpha

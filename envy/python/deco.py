@@ -153,6 +153,7 @@ Import2Star = namedtuple('Import2Star', ['level', 'name'])
 Import2From = namedtuple('Import2From', ['level', 'fromlist', 'name', 'exprs'])
 
 MultiAssign = namedtuple('MultiAssign', ['src', 'dsts'])
+PrintTo = namedtuple('PrintTo', ['expr', 'vals'])
 
 UnpackSlot = namedtuple('UnpackSlot', ['expr', 'idx'])
 UnpackArgSlot = namedtuple('UnpackArgSlot', ['args', 'idx'])
@@ -247,9 +248,11 @@ Closures = object()
 
 # regurgitables
 
-Store = namedtuple('Store', ['dst', 'extra'])
-Inplace = namedtuple('Inplace', ['stmt'])
-EndLoop = namedtuple('EndLoop', [])
+class Regurgitable: __slots__ = ()
+
+class Store(Regurgitable, namedtuple('Store', ['dst'])): pass
+class Inplace(Regurgitable, namedtuple('Inplace', ['stmt'])): pass
+class EndLoop(Regurgitable, namedtuple('EndLoop', [])): pass
 
 # fake opcodes
 
@@ -258,8 +261,12 @@ class JumpContinue(OpcodeFlow): pass
 class JumpSkipJunk(OpcodeFlow): pass
 
 
-FwdFlow = namedtuple('FwdFlow', ['flow'])
-RevFlow = namedtuple('RevFlow', ['flow'])
+class FwdFlow(Regurgitable, namedtuple('FwdFlow', ['flow'])): pass
+class RevFlow(Regurgitable, namedtuple('RevFlow', ['flow'])): pass
+
+# for checks
+
+Regurgitable = (Regurgitable, Stmt, Opcode)
 
 # visitors
 
@@ -340,52 +347,14 @@ class _Visitor:
                     raise NoMatch
             args.append(arg)
         args.reverse()
-        newstack, res = self.func(opcode, deco, *args)
+        newstack = self.func(opcode, deco, *args)
         if total:
             deco.stack[-total:] = []
-        deco.stack += newstack
-        return res
-
-def _re_visitor(op, *stack, **kwargs):
-    def inner(func):
-        _VISITORS.setdefault(op, []).append(_Visitor(func, stack, **kwargs))
-        return func
-    return inner
+        return newstack
 
 def _visitor(op, *stack, **kwargs):
     def inner(func):
-        @_re_visitor(op, *stack, **kwargs)
-        def visit_normal(self, deco, *args):
-            return func(self, deco, *args), []
-        return func
-    return inner
-
-def _re_stmt_visitor(op, *stack, **kwargs):
-    def inner(func):
-        @_re_visitor(op, Block, *stack, **kwargs)
-        def visit_stmt(self, deco, block, *args):
-            stmt, extra, res = func(self, deco, *args)
-            block.stmts.append(stmt)
-            return [block] + extra, res
-        return func
-    return inner
-
-def _stmt_visitor(op, *stack, **kwargs):
-    def inner(func):
-        @_visitor(op, Block, *stack, **kwargs)
-        def visit_stmt(self, deco, block, *args):
-            stmt, extra = func(self, deco, *args)
-            block.stmts.append(stmt)
-            return [block] + extra
-        return func
-    return inner
-
-def _store_visitor(op, *stack):
-    def inner(func):
-        @_re_visitor(op, *stack)
-        def visit_store(self, deco, *args):
-            dst, extra = func(self, deco, *args)
-            return [], [Store(dst, extra)]
+        _VISITORS.setdefault(op, []).append(_Visitor(func, stack, **kwargs))
         return func
     return inner
 
@@ -398,15 +367,15 @@ def _lsd_visitor(op_load, op_store, op_delete, *stack):
             dst = func(self, deco, *args)
             return [dst]
 
-        @_store_visitor(op_store, *stack)
+        @_visitor(op_store, *stack)
         def visit_lsd_store(self, deco, *args):
             dst = func(self, deco, *args)
-            return dst, []
+            return [Store(dst)]
 
-        @_stmt_visitor(op_delete, *stack)
+        @_visitor(op_delete, *stack)
         def visit_lsd_delete(self, deco, *args):
             dst = func(self, deco, *args)
-            return StmtDel(dst), []
+            return [StmtDel(dst)]
 
         return func
     return inner
@@ -615,181 +584,183 @@ def visit_build_slice(self, deco, exprs):
 
 # list & tuple unpacking
 
-@_store_visitor(OpcodeUnpackTuple)
-@_store_visitor(OpcodeUnpackSequence)
+@_visitor(OpcodeUnpackTuple)
+@_visitor(OpcodeUnpackSequence)
 def visit_unpack_sequence(self, deco):
     res = ExprTuple([None for _ in range(self.param)])
-    extra = [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
-    return res, extra
+    return [Store(res)] + [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
 
-@_store_visitor(OpcodeUnpackList)
+@_visitor(OpcodeUnpackList)
 def visit_unpack_list(self, deco):
     res = ExprList([None for _ in range(self.param)])
-    extra = [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
-    return res, extra
+    return [Store(res)] + [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(Store, UnpackSlot)
 def visit_store_unpack(self, deco, slot):
     slot.expr.exprs[slot.idx] = self.dst
-    return self.extra
+    return []
 
 # optimized unpacking
 
-@_stmt_visitor(JumpSkipJunk, Expr, Expr, RotTwo, flag=('has_unpack_opt', 'has_nop'))
+@_visitor(JumpSkipJunk, Expr, Expr, RotTwo, flag=('has_unpack_opt', 'has_nop'))
 def visit_unpack_opt_two_skip(self, deco, a, b, _):
     src = ExprTuple([a, b])
     dst = ExprTuple([None, None])
-    return StmtAssign([dst], src), [UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow([self.flow])]
+    return [StmtAssign([dst], src), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow([self.flow])]
 
-@_stmt_visitor(JumpSkipJunk, Expr, Expr, Expr, RotThree, RotTwo, flag=('has_unpack_opt', 'has_nop'))
+@_visitor(JumpSkipJunk, Expr, Expr, Expr, RotThree, RotTwo, flag=('has_unpack_opt', 'has_nop'))
 def visit_unpack_opt_three_skip(self, deco, a, b, c, _1, _2):
     src = ExprTuple([a, b, c])
     dst = ExprTuple([None, None, None])
-    return StmtAssign([dst], src), [UnpackSlot(dst, 2), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow([self.flow])]
+    return [StmtAssign([dst], src), UnpackSlot(dst, 2), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow([self.flow])]
 
-@_stmt_visitor(Store, Expr, Expr, RotTwo, flag=('has_unpack_opt', '!has_nop'))
+@_visitor(Store, Expr, Expr, RotTwo, flag=('has_unpack_opt', '!has_nop'))
 def visit_unpack_opt_two_skip(self, deco, a, b, _):
     src = ExprTuple([a, b])
     dst = ExprTuple([self.dst, None])
-    return StmtAssign([dst], src), [UnpackSlot(dst, 1)] + self.extra
+    return [StmtAssign([dst], src), UnpackSlot(dst, 1)]
 
-@_stmt_visitor(Store, Expr, Expr, Expr, RotThree, RotTwo, flag=('has_unpack_opt', '!has_nop'))
+@_visitor(Store, Expr, Expr, Expr, RotThree, RotTwo, flag=('has_unpack_opt', '!has_nop'))
 def visit_unpack_opt_three_skip(self, deco, a, b, c, _1, _2):
     src = ExprTuple([a, b, c])
     dst = ExprTuple([self.dst, None, None])
-    return StmtAssign([dst], src), [UnpackSlot(dst, 2), UnpackSlot(dst, 1)] + self.extra
+    return [StmtAssign([dst], src), UnpackSlot(dst, 2), UnpackSlot(dst, 1)]
 
 # old argument unpacking
 
-@_stmt_visitor(OpcodeUnpackArg)
+@_visitor(OpcodeUnpackArg)
 def visit_unpack_arg(self, deco):
     res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
-    extra = [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
-    return StmtArgs(res), extra
+    return [StmtArgs(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
 
-@_stmt_visitor(OpcodeUnpackVararg)
+@_visitor(OpcodeUnpackVararg)
 def visit_unpack_arg(self, deco):
     res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
-    extra = [UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
-    return StmtArgs(res), extra
+    return [StmtArgs(res), UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(Store, UnpackArgSlot)
 def visit_store_unpack_arg(self, deco, slot):
     slot.args.args[slot.idx] = self.dst
-    return self.extra
+    return []
 
 @_visitor(Store, UnpackVarargSlot)
 def visit_store_unpack_vararg(self, deco, slot):
     slot.args.vararg = self.dst
-    return self.extra
+    return []
 
 # extended unpacking
 
-@_store_visitor(OpcodeUnpackEx)
+@_visitor(OpcodeUnpackEx)
 def visit_unpack_sequence(self, deco):
     res = ExprUnpackEx(
         [None for _ in range(self.before)],
         None,
         [None for _ in range(self.after)],
     )
-    extra = [
+    return [
+        Store(res)
+    ] + [
         UnpackAfterSlot(res, idx) for idx in reversed(range(self.after))
     ] + [
         UnpackStarSlot(res)
     ] + [
         UnpackBeforeSlot(res, idx) for idx in reversed(range(self.before))
     ]
-    return res, extra
 
 @_visitor(Store, UnpackBeforeSlot)
 def visit_store_unpack_before(self, deco, slot):
     slot.expr.before[slot.idx] = self.dst
-    return self.extra
+    return []
 
 @_visitor(Store, UnpackStarSlot)
 def visit_store_unpack_star(self, deco, slot):
     slot.expr.star = self.dst
-    return self.extra
+    return []
 
 @_visitor(Store, UnpackAfterSlot)
 def visit_store_unpack_after(self, deco, slot):
     slot.expr.after[slot.idx] = self.dst
-    return self.extra
+    return []
+
+# statements
+
+@_visitor(Stmt, Block)
+def _visit_stmt(self, deco, block):
+    block.stmts.append(self)
+    return [block]
 
 # single expression statement
 
-@_stmt_visitor(OpcodePrintExpr, Expr)
+@_visitor(OpcodePrintExpr, Expr)
 def _visit_print_expr(self, deco, expr):
-    return StmtPrintExpr(expr), []
+    return [StmtPrintExpr(expr)]
 
-@_stmt_visitor(OpcodePopTop, Expr, flag='!always_print_expr')
-def _visit_single_expr(self, deco, expr):
-    return StmtSingle(expr), []
+@_visitor(OpcodePopTop, Block, Expr, flag='!always_print_expr')
+def _visit_single_expr(self, deco, block, expr):
+    return [block, StmtSingle(expr)]
 
 # assignment
 
-@_stmt_visitor(Store, Expr)
+@_visitor(Store, Expr)
 def visit_store_assign(self, deco, src):
-    return StmtAssign([self.dst], src), self.extra
+    return [StmtAssign([self.dst], src)]
 
 @_visitor(Store, Expr, DupTop)
 def visit_store_multi_start(self, deco, src, _):
-    return [MultiAssign(src, [self.dst])] + self.extra
+    return [MultiAssign(src, [self.dst])]
 
 @_visitor(Store, MultiAssign, DupTop)
 def visit_store_multi_next(self, deco, multi, _):
     multi.dsts.append(self.dst)
-    return [multi] + self.extra
+    return [multi]
 
-@_stmt_visitor(Store, MultiAssign)
+@_visitor(Store, MultiAssign)
 def visit_store_multi_end(self, deco, multi):
     multi.dsts.append(self.dst)
-    stmt = StmtAssign(multi.dsts, multi.src)
-    return stmt, self.extra
+    return [StmtAssign(multi.dsts, multi.src)]
 
 # print statement
 
-@_stmt_visitor(OpcodePrintItem, Expr)
+@_visitor(OpcodePrintItem, Expr)
 def visit_print_item(self, deco, expr):
-    return StmtPrint([expr], False), []
+    return [StmtPrint([expr], False)]
 
-@_stmt_visitor(OpcodePrintNewline)
+@_visitor(OpcodePrintNewline)
 def visit_print_newline(self, deco):
-    return StmtPrint([], True), []
+    return [StmtPrint([], True)]
 
 # print to
 
 @_visitor(OpcodePrintItemTo, Expr, DupTop, Expr, RotTwo)
 def visit_print_item_to(self, deco, to, _dup, expr, _rot):
-    return [StmtPrintTo(to, [expr], False)]
+    return [PrintTo(to, [expr])]
 
-@_visitor(OpcodePrintItemTo, StmtPrintTo, DupTop, Expr, RotTwo)
-def visit_print_item_to(self, deco, stmt, _dup, expr, _rot):
-    stmt.vals.append(expr)
-    return [stmt]
+@_visitor(OpcodePrintItemTo, PrintTo, DupTop, Expr, RotTwo)
+def visit_print_item_to(self, deco, print, _dup, expr, _rot):
+    print.vals.append(expr)
+    return [print]
 
-@_stmt_visitor(OpcodePopTop, StmtPrintTo)
-def visit_print_to_end(self, deco, stmt):
-    return stmt, []
+@_visitor(OpcodePopTop, PrintTo)
+def visit_print_to_end(self, deco, print):
+    return [StmtPrintTo(print.expr, print.vals, False)]
 
-@_stmt_visitor(OpcodePrintNewlineTo, StmtPrintTo)
-def visit_print_newline_to(self, deco, stmt):
-    stmt.nl = True
-    return stmt, []
+@_visitor(OpcodePrintNewlineTo, PrintTo)
+def visit_print_newline_to(self, deco, print):
+    return [StmtPrintTo(print.expr, print.vals, True)]
 
-@_stmt_visitor(OpcodePrintNewlineTo, Expr)
+@_visitor(OpcodePrintNewlineTo, Expr)
 def visit_print_newline_to(self, deco, expr):
-    return StmtPrintTo(expr, [], True), []
+    return [StmtPrintTo(expr, [], True)]
 
 # return statement
 
-@_stmt_visitor(OpcodeReturnValue, Expr)
+@_visitor(OpcodeReturnValue, Expr)
 def _visit_return(self, deco, expr):
-    return StmtReturn(expr), []
+    return [StmtReturn(expr)]
 
 # assert. ouch. has to be before raise.
 
-@_stmt_visitor(OpcodeRaiseVarargs, IfStart, Block, IfNotStart, Block, Exprs('param', 1), flag=('has_assert', '!has_short_assert'))
+@_visitor(OpcodeRaiseVarargs, IfStart, Block, IfNotStart, Block, Exprs('param', 1), flag=('has_assert', '!has_short_assert'))
 def _visit_assert_1(self, deco, ifstart, block, orstart, block2, exprs):
     if block.stmts or block2.stmts:
         raise PythonError("extra assert statements")
@@ -798,13 +769,13 @@ def _visit_assert_1(self, deco, ifstart, block, orstart, block2, exprs):
     if not isinstance(ifstart.expr, ExprGlobal) or ifstart.expr.name != '__debug__':
         raise PythonError("hmm, I wanted an assert...")
     if self.param == 1:
-        return StmtAssert(orstart.expr), [WantPop(), WantFlow([orstart.flow, ifstart.flow])]
+        return [StmtAssert(orstart.expr), WantPop(), WantFlow([orstart.flow, ifstart.flow])]
     elif self.param == 2:
-        return StmtAssert(orstart.expr, exprs[1]), [WantPop(), WantFlow([orstart.flow, ifstart.flow])]
+        return [StmtAssert(orstart.expr, exprs[1]), WantPop(), WantFlow([orstart.flow, ifstart.flow])]
     else:
         raise PythonError("funny assert params")
 
-@_stmt_visitor(FwdFlow, IfNotStart, Block, flag=('has_short_assert', '!has_raise_from'))
+@_visitor(FwdFlow, IfNotStart, Block, flag=('has_short_assert', '!has_raise_from'))
 def _visit_assert_2(self, deco, start, body):
     if self.flow != start.flow:
         raise NoMatch
@@ -815,9 +786,9 @@ def _visit_assert_2(self, deco, start, body):
         or body.stmts[0].tb is not None
     ):
         raise PythonError("that's not an assert")
-    return StmtAssert(start.expr, body.stmts[0].val), [WantPop()]
+    return [StmtAssert(start.expr, body.stmts[0].val), WantPop()]
 
-@_stmt_visitor(FwdFlow, IfNotStart, Block, flag=('has_short_assert', 'has_raise_from'))
+@_visitor(FwdFlow, IfNotStart, Block, flag=('has_short_assert', 'has_raise_from'))
 def _visit_assert_2(self, deco, start, body):
     if self.flow != start.flow:
         raise NoMatch
@@ -828,59 +799,59 @@ def _visit_assert_2(self, deco, start, body):
         raise PythonError("that's not an assert")
     val = body.stmts[0].cls
     if isinstance(val, ExprGlobal) and val.name == 'AssertionError':
-        return StmtAssert(start.expr), [WantPop()]
+        return [StmtAssert(start.expr), WantPop()]
     elif (isinstance(val, ExprCall)
         and isinstance(val.expr, ExprGlobal)
         and val.expr.name == 'AssertionError'
         and len(val.args.args) == 1
         and not val.args.args[0][0]
     ):
-        return StmtAssert(start.expr, val.args.args[0][1]), [WantPop()]
+        return [StmtAssert(start.expr, val.args.args[0][1]), WantPop()]
     else:
         raise PythonError("that's still not an assert")
 
 # raise statement
 
 # Python 1.0 - 1.2
-@_stmt_visitor(OpcodeRaiseException, Expr, ExprNone)
+@_visitor(OpcodeRaiseException, Expr, ExprNone)
 def _visit_raise_1(self, deco, cls, _):
-    return StmtRaise(cls), []
+    return [StmtRaise(cls)]
 
-@_stmt_visitor(OpcodeRaiseException, Expr, Expr)
+@_visitor(OpcodeRaiseException, Expr, Expr)
 def _visit_raise_2(self, deco, cls, val):
-    return StmtRaise(cls, val), []
+    return [StmtRaise(cls, val)]
 
 # Python 1.3-2.7
-@_stmt_visitor(OpcodeRaiseVarargs, Exprs('param', 1), flag='!has_raise_from')
+@_visitor(OpcodeRaiseVarargs, Exprs('param', 1), flag='!has_raise_from')
 def _visit_raise_varargs(self, deco, exprs):
     if len(exprs) > 3:
         raise PythonError("too many args to raise")
     if len(exprs) == 0 and not deco.version.has_reraise:
         raise PythonError("too few args to raise")
-    return StmtRaise(*exprs), []
+    return [StmtRaise(*exprs)]
 
 # Python 3
-@_stmt_visitor(OpcodeRaiseVarargs, Exprs('param', 1), flag='has_raise_from')
+@_visitor(OpcodeRaiseVarargs, Exprs('param', 1), flag='has_raise_from')
 def _visit_raise_from(self, deco, exprs):
     if len(exprs) < 2:
-        return StmtRaise(*exprs), []
+        return [StmtRaise(*exprs)]
     elif len(exprs) == 2:
-        return StmtRaise(exprs[0], None, exprs[1]), []
+        return [StmtRaise(exprs[0], None, exprs[1])]
     else:
         raise PythonError("too many args to raise")
 
 # exec statement
 
-@_stmt_visitor(OpcodeExecStmt, Expr, Expr, DupTop)
+@_visitor(OpcodeExecStmt, Expr, Expr, DupTop)
 def _visit_exec_3(self, deco, code, env, _):
     if isinstance(env, ExprNone):
-        return StmtExec(code), []
+        return [StmtExec(code)]
     else:
-        return StmtExec(code, env), []
+        return [StmtExec(code, env)]
 
-@_stmt_visitor(OpcodeExecStmt, Expr, Expr, Expr)
+@_visitor(OpcodeExecStmt, Expr, Expr, Expr)
 def _visit_exec_3(self, deco, code, globals, locals):
-    return StmtExec(code, globals, locals), []
+    return [StmtExec(code, globals, locals)]
 
 # imports
 
@@ -888,19 +859,19 @@ def _visit_exec_3(self, deco, code, globals, locals):
 def _visit_import_name(self, deco):
     return [Import(self.param, [])]
 
-@_stmt_visitor(Store, Import)
+@_visitor(Store, Import)
 def _visit_store_name_import(self, deco, import_, *args):
     if import_.items:
         raise PythonError("non-empty items for plain import")
-    return StmtImport(-1, import_.name, [], self.dst), self.extra
+    return [StmtImport(-1, import_.name, [], self.dst)]
 
-@_stmt_visitor(OpcodeImportFrom, Import)
+@_visitor(OpcodeImportFrom, Import)
 def _visit_import_from_star(self, deco, import_, flag="!has_import_star"):
     if self.param != '*':
         raise NoMatch
     if import_.items:
         raise PythonError("non-empty items for star import")
-    return StmtImportStar(-1, import_.name), [WantPop()]
+    return [StmtImportStar(-1, import_.name), WantPop()]
 
 @_visitor(OpcodeImportFrom, Import)
 def _visit_import_from(self, deco, import_):
@@ -909,9 +880,9 @@ def _visit_import_from(self, deco, import_):
     import_.items.append(self.param)
     return [import_]
 
-@_stmt_visitor(OpcodePopTop, Import)
+@_visitor(OpcodePopTop, Import)
 def _visit_import_from_end(self, deco, import_):
-    return StmtFromImport(-1, import_.name, [(x, None) for x in import_.items]), []
+    return [StmtFromImport(-1, import_.name, [(x, None) for x in import_.items])]
 
 # imports - v2
 
@@ -928,9 +899,9 @@ def _visit_import_name_attr(self, deco, import_):
     import_.attrs.append(self.param)
     return [import_]
 
-@_stmt_visitor(Store, Import2Simple)
+@_visitor(Store, Import2Simple)
 def _visit_store_name_import(self, deco, import_):
-    return StmtImport(import_.level, import_.name, import_.attrs, self.dst), self.extra
+    return [StmtImport(import_.level, import_.name, import_.attrs, self.dst)]
 
 @_visitor(OpcodeImportName, ExprTuple, flag=('has_import_as', '!has_relative_import'))
 def _visit_import_name(self, deco, expr):
@@ -948,9 +919,9 @@ def _visit_import_name(self, deco, level, expr):
     else:
         return [Import2From(level.val, fromlist, self.param, [])]
 
-@_stmt_visitor(OpcodeImportStar, Import2Star)
+@_visitor(OpcodeImportStar, Import2Star)
 def _visit_import_star(self, deco, import_):
-    return StmtImportStar(import_.level, import_.name), []
+    return [StmtImportStar(import_.level, import_.name)]
 
 @_visitor(OpcodeImportFrom, Import2From)
 def _visit_import_from(self, deco, import_):
@@ -960,9 +931,9 @@ def _visit_import_from(self, deco, import_):
         raise PythonError("fromlist mismatch")
     return [import_, UnpackSlot(import_, idx)]
 
-@_stmt_visitor(OpcodePopTop, Import2From)
+@_visitor(OpcodePopTop, Import2From)
 def _visit_import_from_end(self, deco, import_):
-    return StmtFromImport(import_.level, import_.name, list(zip(import_.fromlist, import_.exprs))), []
+    return [StmtFromImport(import_.level, import_.name, list(zip(import_.fromlist, import_.exprs)))]
 
 # misc flow
 
@@ -975,31 +946,31 @@ def _visit_flow(self, deco, want):
     else:
         return [WantFlow([flow for flow in want.flow if flow != self.flow])]
 
-@_re_visitor(JumpContinue, WantFlow)
+@_visitor(JumpContinue, WantFlow)
 def _visit_extra(self, deco, extra):
-    return [], [JumpContinue(self.pos, self.nextpos, self.flow + extra.flow)]
+    return [JumpContinue(self.pos, self.nextpos, self.flow + extra.flow)]
 
-@_re_visitor(JumpUnconditional, WantFlow)
+@_visitor(JumpUnconditional, WantFlow)
 def _visit_extra(self, deco, extra):
-    return [], [JumpUnconditional(self.pos, self.nextpos, self.flow + extra.flow)]
+    return [JumpUnconditional(self.pos, self.nextpos, self.flow + extra.flow)]
 
-@_re_stmt_visitor(JumpContinue, FinalElse, Block)
+@_visitor(JumpContinue, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
     if not all(flow.dst == self.flow[0].dst for flow in final.flow):
         raise NoMatch
-    return final.maker(inner), [], [JumpContinue(self.pos, self.nextpos, self.flow + final.flow)]
+    return [final.maker(inner), JumpContinue(self.pos, self.nextpos, self.flow + final.flow)]
 
-@_re_stmt_visitor(JumpUnconditional, FinalElse, Block)
+@_visitor(JumpUnconditional, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
-    return final.maker(inner), [], [JumpUnconditional(self.pos, self.nextpos, self.flow + final.flow)]
+    return [final.maker(inner), JumpUnconditional(self.pos, self.nextpos, self.flow + final.flow)]
 
-@_re_stmt_visitor(FwdFlow, FinalElse, Block)
+@_visitor(FwdFlow, FinalElse, Block)
 def _visit_if_end(self, deco, final, inner):
-    return final.maker(inner), [WantFlow(final.flow)], [self]
+    return [final.maker(inner), WantFlow(final.flow), self]
 
-@_re_stmt_visitor(FwdFlow, FinalElse, Block, WantFlow)
+@_visitor(FwdFlow, FinalElse, Block, WantFlow)
 def _visit_if_end(self, deco, final, inner, want):
-    return final.maker(inner), [WantFlow(final.flow + want.flow)], [self]
+    return [final.maker(inner), WantFlow(final.flow + want.flow), self]
 
 # if / and / or
 
@@ -1158,7 +1129,7 @@ def _visit_loop(self, deco):
 
 # continue
 
-@_stmt_visitor(JumpContinue)
+@_visitor(JumpContinue)
 def _visit_continue(self, deco):
     loop = None
     for item in reversed(deco.stack):
@@ -1178,9 +1149,9 @@ def _visit_continue(self, deco):
         if flow not in loop.flow:
             raise NoMatch
         loop.flow.remove(flow)
-    return StmtContinue(), []
+    return [StmtContinue()]
 
-@_stmt_visitor(OpcodeContinueLoop)
+@_visitor(OpcodeContinueLoop)
 def _visit_continue(self, deco):
     seen = False
     for item in reversed(deco.stack):
@@ -1203,22 +1174,22 @@ def _visit_continue(self, deco):
     if self.flow not in loop.flow:
         raise NoMatch
     loop.flow.remove(self.flow)
-    return StmtContinue(), []
+    return [StmtContinue()]
 
 # while loop
 
-@_stmt_visitor(EndLoop, Loop, Block, FinalElse, Block, WantPop, WantFlow)
+@_visitor(EndLoop, Loop, Block, FinalElse, Block, WantPop, WantFlow)
 def _visit_while(self, deco, loop, blocka, final, blockb, _, want):
     if blocka.stmts or blockb.stmts or not isinstance(final.maker, FinalIf):
         raise NoMatch
     if_ = final.maker
-    return StmtWhileRaw(if_.expr, if_.body), [WantPop(), want]
+    return [StmtWhileRaw(if_.expr, if_.body), WantPop(), want]
 
-@_stmt_visitor(JumpUnconditional, Loop, Block)
+@_visitor(JumpUnconditional, Loop, Block)
 def _visit_while(self, deco, loop, inner):
     if sorted(loop.flow) != sorted(self.flow):
         raise PythonError("funny while loop")
-    return StmtWhileRaw(ExprAnyTrue(), inner), [WantPop(), WantEndLoop()]
+    return [StmtWhileRaw(ExprAnyTrue(), inner), WantPop(), WantEndLoop()]
 
 # for loop
 
@@ -1236,7 +1207,7 @@ def visit_store_multi_start(self, deco, block, start):
         block,
         ForLoop(start.expr, self.dst, start.loop, start.flow),
         Block([])
-    ] + self.extra
+    ]
 
 @_visitor(Store, CompLevel, ForStart)
 def visit_store_multi_start(self, deco, comp, start):
@@ -1244,13 +1215,13 @@ def visit_store_multi_start(self, deco, comp, start):
         comp,
         CompForLoop(start.loop, start.flow),
         CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
-    ] + self.extra
+    ]
 
-@_stmt_visitor(JumpUnconditional, ForLoop, Block)
+@_visitor(JumpUnconditional, ForLoop, Block)
 def _visit_for(self, deco, loop, inner):
     if sorted(loop.loop.flow) != sorted(self.flow):
         raise PythonError("mismatched for loop")
-    return StmtForRaw(loop.expr, loop.dst, inner), [WantFlow([loop.flow]), WantEndLoop()]
+    return [StmtForRaw(loop.expr, loop.dst, inner), WantFlow([loop.flow]), WantEndLoop()]
 
 @_visitor(JumpUnconditional, CompLevel, CompForLoop)
 def _visit_for(self, deco, _, loop):
@@ -1276,15 +1247,15 @@ def _visit_for_iter(self, deco, iter_, loop, block):
 
 # break
 
-@_stmt_visitor(OpcodeBreakLoop)
+@_visitor(OpcodeBreakLoop)
 def _visit_break(self, deco):
-    return StmtBreak(), []
+    return [StmtBreak()]
 
 # access
 
-@_stmt_visitor(OpcodeAccessMode, ExprInt)
+@_visitor(OpcodeAccessMode, ExprInt)
 def _visit_access(self, deco, mode):
-    return StmtAccess(self.param, mode.val), []
+    return [StmtAccess(self.param, mode.val)]
 
 # try finally
 
@@ -1302,9 +1273,9 @@ def _visit_finally(self, deco, try_, _):
         raise PythonError("funny finally")
     return [TryFinally(try_.body), Block([])]
 
-@_stmt_visitor(OpcodeEndFinally, TryFinally, Block)
+@_visitor(OpcodeEndFinally, TryFinally, Block)
 def _visit_finally_end(self, deco, try_, inner):
-    return StmtFinally(try_.body, inner), []
+    return [StmtFinally(try_.body, inner)]
 
 # try except
 
@@ -1363,11 +1334,11 @@ def _visit_except_match_store(self, deco, match):
         TryExceptMatch(match.expr, self.dst, match.next),
         Block([]),
         WantPop()
-    ] + self.extra
+    ]
 
-@_visitor(OpcodePopExcept, Block)
-def _visit_pop_except(self, deco, block):
-    return [block, PopExcept()]
+@_visitor(OpcodePopExcept)
+def _visit_pop_except(self, deco):
+    return [PopExcept()]
 
 @_visitor(JumpUnconditional, TryExceptMid, TryExceptMatch, Block, PopExcept)
 def _visit_except_match_end(self, deco, try_, match, block, _):
@@ -1559,9 +1530,9 @@ def _visit_build_class(self, deco, name, bases, call):
 def _visit_load_locals(self, deco):
     return [Locals()]
 
-@_stmt_visitor(OpcodeReturnValue, Locals)
+@_visitor(OpcodeReturnValue, Locals)
 def _visit_return_locals(self, deco, _):
-    return StmtEndClass(), []
+    return [StmtEndClass()]
 
 @_visitor(OpcodeReserveFast)
 def _visit_reserve_fast(self, deco):
@@ -1575,24 +1546,24 @@ def _visit_reserve_fast(self, deco):
 def _visit_load_build_class(self, deco):
     return [ExprBuildClass()]
 
-@_stmt_visitor(OpcodeStoreLocals, ExprFast)
+@_visitor(OpcodeStoreLocals, ExprFast)
 def _visit_load_build_class(self, deco, fast):
     if fast.idx != 0 or fast.name != '__locals__':
         raise PythonError("funny locals store")
-    return StmtStartClass(), []
+    return [StmtStartClass()]
 
-@_stmt_visitor(OpcodeReturnValue, Closure)
+@_visitor(OpcodeReturnValue, Closure)
 def _visit_return_locals(self, deco, closure):
     if closure.var.name != '__class__':
         raise PythonError("returning a funny closure")
-    return StmtReturnClass(), []
+    return [StmtReturnClass()]
 
 # inplace assignments
 
 def _register_inplace(otype, stype):
-    @_re_visitor(otype)
+    @_visitor(otype)
     def _visit_inplace(self, deco):
-        return [], [Inplace(stype)]
+        return [Inplace(stype)]
 
 INPLACE_OPS = [
     (OpcodeInplaceAdd, StmtInplaceAdd),
@@ -1669,37 +1640,37 @@ def _visit_slice_ne_dup(self, deco, a, b, _dup):
 def _visit_slice_ee_dup(self, deco, a, b, c, _dup):
     return [DupSliceEE(a, b, c)]
 
-@_stmt_visitor(Store, InplaceSimple)
+@_visitor(Store, InplaceSimple)
 def _visit_inplace_store_name(self, deco, inp):
     if inp.dst != self.dst:
         raise PythonError("simple inplace dest mismatch")
-    return inp.stmt(inp.dst, inp.src), []
+    return [inp.stmt(inp.dst, inp.src)]
 
-@_stmt_visitor(OpcodeStoreAttr, InplaceAttr, RotTwo)
+@_visitor(OpcodeStoreAttr, InplaceAttr, RotTwo)
 def _visit_inplace_store_attr(self, deco, inp, _):
     if inp.name != self.param:
         raise PythonError("inplace name mismatch")
-    return inp.stmt(ExprAttr(inp.expr, inp.name), inp.src), []
+    return [inp.stmt(ExprAttr(inp.expr, inp.name), inp.src)]
 
-@_stmt_visitor(OpcodeStoreSubscr, InplaceSubscr, RotThree)
+@_visitor(OpcodeStoreSubscr, InplaceSubscr, RotThree)
 def _visit_inplace_store_subscr(self, deco, inp, _rot):
-    return inp.stmt(ExprSubscr(inp.expr, inp.index), inp.src), []
+    return [inp.stmt(ExprSubscr(inp.expr, inp.index), inp.src)]
 
-@_stmt_visitor(OpcodeStoreSliceNN, InplaceSliceNN, RotTwo)
+@_visitor(OpcodeStoreSliceNN, InplaceSliceNN, RotTwo)
 def _visit_inplace_store_slice_nn(self, deco, inp, _rot):
-    return inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, None)), inp.src), []
+    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, None)), inp.src)]
 
-@_stmt_visitor(OpcodeStoreSliceEN, InplaceSliceEN, RotThree)
+@_visitor(OpcodeStoreSliceEN, InplaceSliceEN, RotThree)
 def _visit_inplace_store_slice_en(self, deco, inp, _rot):
-    return inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, None)), inp.src), []
+    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, None)), inp.src)]
 
-@_stmt_visitor(OpcodeStoreSliceNE, InplaceSliceNE, RotThree)
+@_visitor(OpcodeStoreSliceNE, InplaceSliceNE, RotThree)
 def _visit_inplace_store_slice_ne(self, deco, inp, _rot):
-    return inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, inp.end)), inp.src), []
+    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, inp.end)), inp.src)]
 
-@_stmt_visitor(OpcodeStoreSliceEE, InplaceSliceEE, RotFour)
+@_visitor(OpcodeStoreSliceEE, InplaceSliceEE, RotFour)
 def _visit_inplace_store_slice_ee(self, deco, inp, _rot):
-    return inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, inp.end)), inp.src), []
+    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, inp.end)), inp.src)]
 
 # list comprehensions
 
@@ -1711,7 +1682,6 @@ def visit_listcomp_start(self, deco, dup):
         or len(dup.expr.exprs) != 0
         or dup.name != 'append'):
         raise PythonError("weird listcomp start")
-    assert not self.extra
     expr = ExprListComp()
     meat = OldListCompStart(expr, self.dst)
     return [expr, meat, CompLevel(meat, [])]
@@ -1731,7 +1701,7 @@ def visit_store_multi_start(self, deco, ass, start):
         comp,
         CompForLoop(start.loop, start.flow),
         CompLevel(comp.meat, comp.items + [CompFor(self.dst, start.expr)])
-    ] + self.extra
+    ]
 
 @_visitor(OpcodePopTop, CompLevel, ExprCall, flag='!has_list_append')
 def visit_listcomp_item(self, deco, comp, call):
@@ -1754,29 +1724,17 @@ def visit_listcomp_item(self, deco, comp, tmp, val):
     comp.meat.expr.comp = Comp(val, comp.items)
     return []
 
-@_visitor(OpcodeDeleteName, OldListCompStart)
+@_visitor(StmtDel, OldListCompStart)
 def visit_listcomp_end(self, deco, comp):
-    if comp.tmp != ExprName(self.param):
-        raise PythonError("deleting a funny name")
-    return []
-
-@_visitor(OpcodeDeleteGlobal, OldListCompStart)
-def visit_listcomp_end(self, deco, comp):
-    if comp.tmp != ExprGlobal(self.param):
-        raise PythonError("deleting a funny name")
-    return []
-
-@_visitor(OpcodeDeleteFast, OldListCompStart)
-def visit_listcomp_end(self, deco, comp):
-    if comp.tmp != deco.fast(self.param):
+    if comp.tmp != self.val:
         raise PythonError("deleting a funny name")
     return []
 
 # yield
 
-@_stmt_visitor(OpcodeYieldValue, Expr, flag='!has_yield_expr')
+@_visitor(OpcodeYieldValue, Expr, flag='!has_yield_expr')
 def _visit_yield_stmt(self, deco, expr):
-    return StmtSingle(ExprYield(expr)), []
+    return [StmtSingle(ExprYield(expr))]
 
 @_visitor(OpcodeYieldValue, Expr, flag='has_yield_expr')
 def _visit_yield_stmt(self, deco, expr):
@@ -1800,45 +1758,17 @@ class DecoCtx:
         ops, inflow = self.preproc(code.ops)
         for op in ops:
             if hasattr(op, 'pos'):
-                flows = list(reversed(inflow[op.pos]))
-                while flows:
-                    for idx, flow in enumerate(flows):
-                        if flow.dst > flow.src:
-                            flow = FwdFlow(flow)
-                        else:
-                            flow = RevFlow(flow)
-                        try:
-                            re = self.process(flow)
-                        except NoMatch:
-                            continue
-                        flows.pop(idx)
-                        while re:
-                            try:
-                                nre = self.process(re[0])
-                                re = nre + re[1:]
-                            except NoMatch:
-                                raise PythonError("no visitors matched for {}, [{}]".format(
-                                    type(fop).__name__,
-                                    ', '.join(type(x).__name__ for x in self.stack)
-                                ))
-                        break
+                for flow in reversed(inflow[op.pos]):
+                    if flow.dst > flow.src:
+                        flow = FwdFlow(flow)
                     else:
-                        raise PythonError("no visitors matched for {}, [{}]".format(
-                            ', '.join(str(flow) for flow in flows),
-                            ', '.join(type(x).__name__ for x in self.stack)
-                        ))
-            re = [op]
-            while re:
-                try:
-                    nre = self.process(re[0])
-                    re = nre + re[1:]
-                except NoMatch:
-                    raise PythonError("no visitors matched: {}, [{}]".format(
-                        type(op).__name__,
-                        ', '.join(type(x).__name__ for x in self.stack)
-                    ))
+                        flow = RevFlow(flow)
+                    self.process(flow)
+            self.process(op)
         if len(self.stack) != 1:
-            raise PythonError("stack non-empty at the end")
+            raise PythonError("stack non-empty at the end: {}".format(
+                ', '.join(type(x).__name__ for x in self.stack)
+            ))
         if not isinstance(self.stack[0], Block):
             raise PythonError("weirdness on stack at the end")
         self.res = DecoCode(self.stack[0], code, self.varnames)
@@ -1923,12 +1853,23 @@ class DecoCtx:
         return ops, inflow
 
     def process(self, op):
-        for visitor in _VISITORS.get(type(op), []):
-            try:
-                return visitor.visit(op, self)
-            except NoMatch:
-                pass
-        raise NoMatch
+        for t in type(op).mro():
+            for visitor in _VISITORS.get(t, []):
+                try:
+                    res = visitor.visit(op, self)
+                except NoMatch:
+                    pass
+                else:
+                    for item in res:
+                        if isinstance(item, Regurgitable):
+                            self.process(item)
+                        else:
+                            self.stack.append(item)
+                    return
+        raise PythonError("no visitors matched: {}, [{}]".format(
+            type(op).__name__,
+            ', '.join(type(x).__name__ for x in self.stack)
+        ))
 
     def fast(self, idx):
         if self.varnames is None:

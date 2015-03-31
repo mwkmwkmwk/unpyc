@@ -1110,7 +1110,7 @@ def _visit_continue(self, deco):
         elif isinstance(item, ForLoop):
             loop = item.loop
             break
-        elif isinstance(item, SetupExcept):
+        elif isinstance(item, (SetupExcept, SetupFinally)):
             seen = True
         elif isinstance(item, (Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass

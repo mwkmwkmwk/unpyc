@@ -9,3 +9,14 @@ while a:
 		w
 		continue
 		c
+while a:
+	try:
+		x
+		continue
+		y
+	finally:
+		z
+	try:
+		continue
+	finally:
+		w

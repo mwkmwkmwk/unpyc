@@ -115,6 +115,8 @@ TESTS_10 = {
     'opt/except_while': '10',
     'opt/deep': '10',
     'opt/continue_': '10',
+    'opt/logic': '10',
+    'opt/if_and': '10',
 }
 
 TESTS_11 = TESTS_10.copy()
@@ -151,6 +153,7 @@ TESTS_13.update({
     'expr/call2': '13',
     'names/fun': '13',
     'names/fun2': '13',
+    'misc/dup_code': '13',
 })
 
 TESTS_14 = TESTS_13.copy()

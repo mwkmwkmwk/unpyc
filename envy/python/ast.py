@@ -165,7 +165,8 @@ def ast_process(deco, version):
             # new code - simple arguments are determined from code attributes,
             # complex arguments (if any) are handled as assignment statements
             # at the beginning
-            args = node.code.code.args.setdefs(node.defargs, node.defkwargs)
+            # TODO: move the unshare to a saner location
+            args = process_2(node.code.code.args).setdefs(node.defargs, node.defkwargs)
             if version.has_complex_args:
                 # split leaking on purpose
                 for split, stmt in enumerate(stmts):

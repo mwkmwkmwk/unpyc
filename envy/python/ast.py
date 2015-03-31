@@ -51,10 +51,11 @@ def ast_process(deco, version):
         else:
             if code.varnames != []:
                 raise PythonError("class has fast vars")
-        if stmts and isinstance(stmts[-1], StmtReturnClass):
-            return Block(stmts[:-1])
-        else:
-            return Block(stmts)
+        if not stmts or not isinstance(stmts[-1], (StmtReturn, StmtReturnClass)):
+            raise PythonError("no return at end of class")
+        if isinstance(stmts[-1], StmtReturn) and not isinstance(stmts[-1].val, ExprNone):
+            raise PythonError("class returns a value")
+        return Block(stmts[:-1])
 
     def process_1(node):
         node = node.subprocess(process_1)

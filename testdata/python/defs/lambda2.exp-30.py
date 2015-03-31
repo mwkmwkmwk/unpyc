@@ -1,0 +1,5 @@
+a = (lambda : $global[f]())
+a = (lambda x$0, y$1: (x$0 + $global[z]))
+a = (lambda x$0, *, y$1, z$2: $global[de])
+a = ((lambda x$0, w$1: 4) * 5)
+x = (lambda a$0, b$1, c$2, *d$3, **e$4: $global[y])

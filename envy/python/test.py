@@ -321,6 +321,7 @@ TESTS_30.update({
     'binary/truediv': '30',
     'names/fun3': '30',
     'names/fun4': '30',
+    'misc/unpack2': '30',
 })
 del TESTS_30['stmt/print_']
 del TESTS_30['stmt/print2']

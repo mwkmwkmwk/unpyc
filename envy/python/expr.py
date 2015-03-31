@@ -281,6 +281,33 @@ class ExprDict(Expr):
         )
 
 
+class ExprUnpackEx(Expr):
+    __slots__ = 'before', 'star', 'after'
+
+    def __init__(self, before, star, after):
+        self.before = before
+        self.star = star
+        self.after = after
+
+    def subprocess(self, process):
+        return ExprUnpackEx(
+            [process(expr) for expr in self.before],
+            process(self.star),
+            [process(expr) for expr in self.after],
+        )
+
+    def show(self, ctx):
+        if not self.before and not self.after:
+            return '(*{},)'.format(self.star.show(None))
+        return '({})'.format(
+            ', '.join(
+                [expr.show(None) for expr in self.before] +
+                ['*' + self.star.show(None)] +
+                [expr.show(None) for expr in self.after]
+            )
+        )
+
+
 # unary
 
 class ExprUn(Expr):

@@ -189,6 +189,9 @@ MultiAssign = namedtuple('MultiAssign', ['src', 'dsts'])
 UnpackSlot = namedtuple('UnpackSlot', ['expr', 'idx'])
 UnpackArgSlot = namedtuple('UnpackArgSlot', ['args', 'idx'])
 UnpackVarargSlot = namedtuple('UnpackVarargSlot', ['args'])
+UnpackBeforeSlot = namedtuple('UnpackBeforeSlot', ['expr', 'idx'])
+UnpackAfterSlot = namedtuple('UnpackAfterSlot', ['expr', 'idx'])
+UnpackStarSlot = namedtuple('UnpackStarSlot', ['expr'])
 
 AndStart = namedtuple('AndStart', ['expr', 'flow'])
 IfStart = namedtuple('IfStart', ['expr', 'flow'])
@@ -644,11 +647,6 @@ def visit_build_slice(self, deco, exprs):
 # list & tuple unpacking
 
 @_store_visitor(OpcodeUnpackTuple)
-def visit_unpack_tuple(self, deco):
-    res = ExprTuple([None for _ in range(self.param)])
-    extra = [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
-    return res, extra
-
 @_store_visitor(OpcodeUnpackSequence)
 def visit_unpack_sequence(self, deco):
     res = ExprTuple([None for _ in range(self.param)])
@@ -714,6 +712,39 @@ def visit_store_unpack_arg(self, deco, slot):
 @_visitor(Store, UnpackVarargSlot)
 def visit_store_unpack_vararg(self, deco, slot):
     slot.args.vararg = self.dst
+    return self.extra
+
+# extended unpacking
+
+@_store_visitor(OpcodeUnpackEx)
+def visit_unpack_sequence(self, deco):
+    res = ExprUnpackEx(
+        [None for _ in range(self.before)],
+        None,
+        [None for _ in range(self.after)],
+    )
+    extra = [
+        UnpackAfterSlot(res, idx) for idx in reversed(range(self.after))
+    ] + [
+        UnpackStarSlot(res)
+    ] + [
+        UnpackBeforeSlot(res, idx) for idx in reversed(range(self.before))
+    ]
+    return res, extra
+
+@_visitor(Store, UnpackBeforeSlot)
+def visit_store_unpack_before(self, deco, slot):
+    slot.expr.before[slot.idx] = self.dst
+    return self.extra
+
+@_visitor(Store, UnpackStarSlot)
+def visit_store_unpack_star(self, deco, slot):
+    slot.expr.star = self.dst
+    return self.extra
+
+@_visitor(Store, UnpackAfterSlot)
+def visit_store_unpack_after(self, deco, slot):
+    slot.expr.after[slot.idx] = self.dst
     return self.extra
 
 # single expression statement

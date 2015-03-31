@@ -229,6 +229,7 @@ TryExceptMatchMid = namedtuple('TryExceptMatchMid', ['expr'])
 TryExceptMatchOk = namedtuple('TryExceptMatchOk', ['expr', 'next'])
 TryExceptMatch = namedtuple('TryExceptMatch', ['expr', 'dst', 'next'])
 TryExceptAny = namedtuple('TryExceptAny', [])
+PopExcept = namedtuple('PopExcept', [])
 
 UnaryCall = namedtuple('UnaryCall', ['code'])
 Locals = namedtuple('Locals', [])
@@ -1396,7 +1397,25 @@ def _visit_except_match_store(self, deco, match):
         WantPop()
     ] + self.extra
 
-@_visitor(JumpUnconditional, TryExceptMid, TryExceptMatch, Block)
+@_visitor(OpcodePopExcept, Block)
+def _visit_pop_except(self, deco, block):
+    return [block, PopExcept()]
+
+@_visitor(JumpUnconditional, TryExceptMid, TryExceptMatch, Block, PopExcept)
+def _visit_except_match_end(self, deco, try_, match, block, _):
+    return [
+        TryExceptMid(
+            try_.else_,
+            try_.body,
+            try_.items + [(match.expr, match.dst, block)],
+            None,
+            try_.flows + self.flow,
+        ),
+        WantPop(),
+        WantFlow([match.next])
+    ]
+
+@_visitor(JumpUnconditional, TryExceptMid, TryExceptMatch, Block, flag='!has_pop_except')
 def _visit_except_match_end(self, deco, try_, match, block):
     return [
         TryExceptMid(
@@ -1422,7 +1441,19 @@ def _visit_except_any(self, deco, try_):
         WantPop()
     ]
 
-@_visitor(JumpUnconditional, TryExceptMid, TryExceptAny, Block)
+@_visitor(JumpUnconditional, TryExceptMid, TryExceptAny, Block, PopExcept)
+def _visit_except_any_end(self, deco, try_, _, block, _2):
+    return [
+        TryExceptMid(
+            try_.else_,
+            try_.body,
+            try_.items,
+            block,
+            try_.flows + self.flow,
+        )
+    ]
+
+@_visitor(JumpUnconditional, TryExceptMid, TryExceptAny, Block, flag='!has_pop_except')
 def _visit_except_any_end(self, deco, try_, _, block):
     return [
         TryExceptMid(

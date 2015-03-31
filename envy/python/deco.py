@@ -40,27 +40,6 @@ from .bytecode import *
 #
 # - py 2.3:
 #
-#   - optimizer
-#
-#     - LOAD_CONST truthy ; JUMP_IF_FALSE xxx ; POP_TOP ->
-#       JUMP_FORWARD 4 ; JUMP_IF_FALSE xxx ; POP_TOP
-#
-#       Can be undone by a simple pre-process pass. However,
-#       still has to be taken into account for its impact
-#       on the following.
-#
-#     - any jump to JUMP_FORWARD/ABSOLUTE -> retarget
-#
-#       Impact:
-#
-#       forward @ forward
-#       forward @ absolute
-#       absolute @ forward
-#       absolute @ absolute
-#       absolute @ fake
-#       conditional @ forward
-#       conditional @ absolute
-#
 #   - encoding...
 #   - SET_LINENO no more
 #   - nofree flag
@@ -73,9 +52,7 @@ from .bytecode import *
 #
 #     - UNARY_NOT JUMP_IF_FALSE [POP] -> JUMP_IF_TRUE [POP]
 #     - true const JUMP_IF_FALSE POP -> NOPs
-#     - pack/unpack for 1, 2, 3 is folded to rots
 #     - JUMP_IF_FALSE/TRUE chain shortening
-#     - nukes redundant return None
 #
 # - py 2.5:
 #
@@ -94,17 +71,12 @@ from .bytecode import *
 #
 #   - setcomp & dictcomp [different in 3.0]
 #   - set displays. also the frozenset optimization. [different in 3.0]
-#   - some opcodes gratuitously moved
 #
 # - py 3.0:
 #
 #   - yeah, well, unicode is everywhere
-#   - extended unpack
 #   - annotations
-#   - new build class
 #   - real funny except
-#   - make closure change?
-#   - has some opcodes
 #   - nonlocal
 #   - ellipsis allowed everywhere
 #   - list comprehensions are functions
@@ -126,9 +98,6 @@ from .bytecode import *
 #
 # - py 3.2:
 #
-#   - another EXTENDED_ARG move
-#   - dup_topx/rot4 -> dup_top_two
-#   - del deref
 #   - from .
 #
 # - py 3.3:
@@ -138,7 +107,6 @@ from .bytecode import *
 # - py 3.4:
 #
 #   - classderef
-#   - store locals is gone
 #
 # - py 3.5:
 #

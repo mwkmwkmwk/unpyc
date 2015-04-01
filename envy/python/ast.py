@@ -24,10 +24,8 @@ def uncomp(stmt, want_loop, want_top):
                 if want_loop and not was_loop:
                     raise PythonError("wanted $loop in comp")
                 was_loop = False
-                if len(stmt.body.stmts) != 1:
-                    raise PythonError("multi-stmt for in comp")
                 top = (stmt.dst, stmt.expr)
-                stmt = stmt.body.stmts[0]
+                body = stmt.body.stmts
                 want_top = False
             else:
                 raise PythonError("wanted top in comp")
@@ -36,25 +34,47 @@ def uncomp(stmt, want_loop, want_top):
                 if want_loop and not was_loop:
                     raise PythonError("wanted $loop in comp")
                 was_loop = False
-                if len(stmt.body.stmts) != 1:
-                    raise PythonError("multi-stmt for in comp")
                 items.append(CompFor(stmt.dst, stmt.expr))
-                stmt = stmt.body.stmts[0]
+                body = stmt.body.stmts
             elif isinstance(stmt, StmtIf):
                 if was_loop:
                     raise PythonError("if in $loop in comp")
-                if not (len(stmt.items) == 1
-                    and len(stmt.items[0][1].stmts) == 1
-                    and len(stmt.else_.stmts) == 0
-                ):
+                if len(stmt.items) != 1:
                     raise PythonError("funny if in comp")
-                items.append(CompIf(stmt.items[0][0]))
-                stmt = stmt.items[0][1].stmts[0]
+                comp = CompIf(stmt.items[0][0])
+                body = stmt.items[0][1].stmts
+                for stmt in stmt.else_.stmts:
+                    if not (isinstance(stmt, StmtIf)
+                        and len(stmt.items) == 1
+                        and isinstance(stmt.items[0][0], ExprAnyTrue)
+                        and len(stmt.items[0][1].stmts) == 0
+                        and len(stmt.else_.stmts) == 0
+                    ):
+                        raise PythonError("funny else statement in comp")
+                    items.append(CompIf(ExprAnyTrue()))
+                items.append(comp)
             else:
                 if top is None:
                     return stmt, items
                 else:
                     return stmt, items, top
+        if not body:
+            raise PythonError("empty body in comp")
+        for idx, stmt in reversed(list(enumerate(body))):
+            if idx == 0:
+                # break and leak stmt for next iteration
+                break
+            if isinstance(stmt, StmtIf):
+                if not (len(stmt.items) == 1
+                    and isinstance(stmt.items[0][0], ExprAnyTrue)
+                    and len(stmt.items[0][1].stmts) == 0
+                    and len(stmt.else_.stmts) == 0
+                ):
+                    raise PythonError("funny trailing statement in comp")
+                items.append(CompIf(ExprAnyTrue()))
+            else:
+                print(stmt)
+                raise PythonError("funny trailing statement in comp")
 
 class RootExec:
     __slots__ = 'block',

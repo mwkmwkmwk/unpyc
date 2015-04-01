@@ -362,6 +362,7 @@ del TESTS_30['names/fun2']
 del TESTS_30['defs/fun']
 del TESTS_30['defs/fun4']
 del TESTS_30['defs/lambda_']
+del TESTS_30['misc/dup_code']
 
 TESTS_31 = TESTS_30.copy()
 TESTS_31.update({

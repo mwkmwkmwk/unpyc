@@ -607,13 +607,13 @@ def visit_store_unpack(self, deco, slot):
 def visit_unpack_opt_two_skip(self, deco, a, b, _):
     src = ExprTuple([a, b])
     dst = ExprTuple([None, None])
-    return [StmtAssign([dst], src), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow([self.flow])]
+    return [StmtAssign([dst], src), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow(self.flow)]
 
 @_visitor(JumpSkipJunk, Expr, Expr, Expr, RotThree, RotTwo, flag=('has_unpack_opt', 'has_nop'))
 def visit_unpack_opt_three_skip(self, deco, a, b, c, _1, _2):
     src = ExprTuple([a, b, c])
     dst = ExprTuple([None, None, None])
-    return [StmtAssign([dst], src), UnpackSlot(dst, 2), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow([self.flow])]
+    return [StmtAssign([dst], src), UnpackSlot(dst, 2), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow(self.flow)]
 
 @_visitor(Store, Expr, Expr, RotTwo, flag=('has_unpack_opt', '!has_nop'))
 def visit_unpack_opt_two_skip(self, deco, a, b, _):
@@ -982,6 +982,10 @@ def _visit_extra(self, deco, extra):
         raise NoMatch
     return [JumpIfFalse(self.pos, self.nextpos, self.flow + extra.false)]
 
+@_visitor(JumpSkipJunk, WantFlow)
+def _visit_extra(self, deco, extra):
+    return [JumpSkipJunk(self.pos, self.nextpos, self.flow + extra.flow)]
+
 @_visitor(JumpUnconditional, WantFlow)
 def _visit_extra(self, deco, extra):
     return [JumpUnconditional(self.pos, self.nextpos, self.flow + extra.flow)]
@@ -1008,7 +1012,7 @@ def _visit_if_end(self, deco, final, inner, want):
 
 @_visitor(JumpSkipJunk, Block)
 def _visit_if(self, deco, block):
-    return [block, FinalElse([self.flow], FinalIf(ExprAnyTrue(), Block([]))), Block([]), WantPop()]
+    return [block, FinalElse(self.flow, FinalIf(ExprAnyTrue(), Block([]))), Block([]), WantPop()]
 
 @_visitor(JumpIfFalse, Expr)
 def _visit_if(self, deco, expr):
@@ -1149,7 +1153,7 @@ def _visit_continue(self, deco):
         if isinstance(item, Loop):
             loop = item
             break
-        elif isinstance(item, ForLoop):
+        elif isinstance(item, (ForLoop, TopForLoop)):
             loop = item.loop
             break
         elif isinstance(item, (Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
@@ -1160,7 +1164,8 @@ def _visit_continue(self, deco):
         raise NoMatch
     for flow in self.flow:
         if flow not in loop.flow:
-            raise NoMatch
+            print(self.flow)
+            raise PythonError("weird flow in continue")
         loop.flow.remove(flow)
     return [StmtContinue()]
 
@@ -1840,20 +1845,24 @@ class DecoCtx:
         for idx, op in enumerate(ops):
             next_unreachable = not condflow[op.nextpos]
             next_end_finally = idx+1 < len(ops) and isinstance(ops[idx+1], OpcodeEndFinally)
+            next_pop_top = idx+1 < len(ops) and isinstance(ops[idx+1], OpcodePopTop)
             if isinstance(op, OpcodeJumpAbsolute):
                 insert_end = False
                 is_final = op.flow == max(inflow[op.flow.dst])
                 is_backwards = op.flow.dst <= op.pos
                 if not is_backwards:
                     if next_unreachable and not next_end_finally:
-                        op = JumpSkipJunk(op.pos, op.nextpos, op.flow)
+                        op = JumpSkipJunk(op.pos, op.nextpos, [op.flow])
                     else:
                         op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                 elif is_final:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                     insert_end = True
                 elif next_unreachable and not next_end_finally:
-                    op = JumpContinue(op.pos, op.nextpos, [op.flow])
+                    if next_pop_top:
+                        op = JumpSkipJunk(op.pos, op.nextpos, [op.flow])
+                    else:
+                        op = JumpContinue(op.pos, op.nextpos, [op.flow])
                 else:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                 newops.append(op)
@@ -1861,7 +1870,7 @@ class DecoCtx:
                     newops.append(EndLoop())
             elif isinstance(op, OpcodeJumpForward):
                 if next_unreachable and not next_end_finally:
-                    op = JumpSkipJunk(op.pos, op.nextpos, op.flow)
+                    op = JumpSkipJunk(op.pos, op.nextpos, [op.flow])
                 else:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
                 newops.append(op)

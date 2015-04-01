@@ -174,6 +174,7 @@ WantEndLoop = namedtuple('WantEndLoop', [])
 WantPop = namedtuple('WantPop', [])
 WantRotPop = namedtuple('WantRotPop', [])
 WantFlow = namedtuple('WantFlow', ['flow'])
+WantCondFlow = namedtuple('WantCondFlow', ['true', 'false'])
 
 SetupLoop = namedtuple('SetupLoop', ['flow'])
 SetupFinally = namedtuple('SetupFinally', ['flow'])
@@ -222,6 +223,7 @@ Closure = namedtuple('Closure', ['var'])
 ClosuresTuple = namedtuple('ClosuresTuple', ['vars'])
 
 FinalElse = namedtuple('FinalElse', ['flow', 'maker'])
+AssertJunk = namedtuple('AssertJunk', ['expr', 'msg'])
 
 # final makers
 
@@ -253,6 +255,8 @@ class EndLoop(Regurgitable, namedtuple('EndLoop', [])): pass
 
 # fake opcodes
 
+class JumpIfTrue(OpcodeFlow): pass
+class JumpIfFalse(OpcodeFlow): pass
 class JumpUnconditional(OpcodeFlow): pass
 class JumpContinue(OpcodeFlow): pass
 class JumpSkipJunk(OpcodeFlow): pass
@@ -766,16 +770,14 @@ def _visit_assert_1(self, deco, ifstart, block, orstart, block2, exprs):
     if not isinstance(ifstart.expr, ExprGlobal) or ifstart.expr.name != '__debug__':
         raise PythonError("hmm, I wanted an assert...")
     if self.param == 1:
-        return [StmtAssert(orstart.expr), WantPop(), WantFlow([orstart.flow, ifstart.flow])]
+        return [StmtAssert(orstart.expr), WantPop(), WantCondFlow(orstart.flow, ifstart.flow)]
     elif self.param == 2:
-        return [StmtAssert(orstart.expr, exprs[1]), WantPop(), WantFlow([orstart.flow, ifstart.flow])]
+        return [StmtAssert(orstart.expr, exprs[1]), WantPop(), WantCondFlow(orstart.flow, ifstart.flow)]
     else:
         raise PythonError("funny assert params")
 
 @_visitor(FwdFlow, OrStart, Block, flag=('has_short_assert', '!has_raise_from'))
 def _visit_assert_2(self, deco, start, body):
-    if self.flow != start.flow:
-        raise NoMatch
     if (len(body.stmts) != 1
         or not isinstance(body.stmts[0], StmtRaise)
         or not isinstance(body.stmts[0].cls, ExprGlobal)
@@ -783,12 +785,10 @@ def _visit_assert_2(self, deco, start, body):
         or body.stmts[0].tb is not None
     ):
         raise PythonError("that's not an assert")
-    return [StmtAssert(start.expr, body.stmts[0].val), WantPop()]
+    return [AssertJunk(start.expr, body.stmts[0].val), WantCondFlow(start.flow, []), self]
 
 @_visitor(FwdFlow, OrStart, Block, flag=('has_short_assert', 'has_raise_from'))
 def _visit_assert_2(self, deco, start, body):
-    if self.flow != start.flow:
-        raise NoMatch
     if (len(body.stmts) != 1
         or not isinstance(body.stmts[0], StmtRaise)
         or body.stmts[0].tb is not None
@@ -796,16 +796,26 @@ def _visit_assert_2(self, deco, start, body):
         raise PythonError("that's not an assert")
     val = body.stmts[0].cls
     if isinstance(val, ExprGlobal) and val.name == 'AssertionError':
-        return [StmtAssert(start.expr), WantPop()]
+        return [AssertJunk(start.expr, None), WantCondFlow(start.flow, [])]
     elif (isinstance(val, ExprCall)
         and isinstance(val.expr, ExprGlobal)
         and val.expr.name == 'AssertionError'
         and len(val.args.args) == 1
         and not val.args.args[0][0]
     ):
-        return [StmtAssert(start.expr, val.args.args[0][1]), WantPop()]
+        return [AssertJunk(start.expr, val.args.args[0][1]), WantCondFlow(start.flow, []), self]
     else:
         raise PythonError("that's still not an assert")
+
+@_visitor(OpcodePopTop, AssertJunk)
+def _visit_assert_junk(self, deco, junk):
+    return [StmtAssert(*junk)]
+
+@_visitor(FwdFlow, OrStart, Block, AssertJunk, flag='has_jump_cond_fold')
+def _visit_assert_or(self, deco, start, block, junk):
+    if block.stmts:
+        raise NoMatch
+    return [AssertJunk(ExprBoolOr(start.expr, junk.expr), junk.msg), WantCondFlow(start.flow, []), self]
 
 # raise statement
 
@@ -943,9 +953,34 @@ def _visit_flow(self, deco, want):
     else:
         return [WantFlow([flow for flow in want.flow if flow != self.flow])]
 
+@_visitor(FwdFlow, WantCondFlow)
+def _visit_flow(self, deco, want):
+    if self.flow in want.true:
+        want.true.remove(self.flow)
+    elif self.flow in want.false:
+        want.false.remove(self.flow)
+    else:
+        raise NoMatch
+    if not want.true and not want.false:
+        return []
+    else:
+        return [want]
+
 @_visitor(JumpContinue, WantFlow)
 def _visit_extra(self, deco, extra):
     return [JumpContinue(self.pos, self.nextpos, self.flow + extra.flow)]
+
+@_visitor(JumpIfTrue, WantCondFlow)
+def _visit_extra(self, deco, extra):
+    if extra.false:
+        raise NoMatch
+    return [JumpIfTrue(self.pos, self.nextpos, self.flow + extra.true)]
+
+@_visitor(JumpIfFalse, WantCondFlow)
+def _visit_extra(self, deco, extra):
+    if extra.true:
+        raise NoMatch
+    return [JumpIfFalse(self.pos, self.nextpos, self.flow + extra.false)]
 
 @_visitor(JumpUnconditional, WantFlow)
 def _visit_extra(self, deco, extra):
@@ -975,37 +1010,66 @@ def _visit_if_end(self, deco, final, inner, want):
 def _visit_if(self, deco, block):
     return [block, FinalElse([self.flow], FinalIf(ExprAnyTrue(), Block([]))), Block([]), WantPop()]
 
-@_visitor(OpcodeJumpIfFalse, Expr)
+@_visitor(JumpIfFalse, Expr)
 def _visit_if(self, deco, expr):
     return [AndStart(expr, self.flow), Block([]), WantPop()]
 
-@_visitor(OpcodeJumpIfTrue, Expr)
+@_visitor(JumpIfTrue, Expr)
 def _visit_if(self, deco, expr):
     return [OrStart(expr, self.flow), Block([]), WantPop()]
 
 @_visitor(JumpUnconditional, Block, AndStart, Block)
 def _visit_if_else(self, deco, block, if_, body):
-    return [block, FinalElse(self.flow, FinalIf(if_.expr, body)), Block([]), WantPop(), WantFlow([if_.flow])]
+    return [block, FinalElse(self.flow, FinalIf(if_.expr, body)), Block([]), WantPop(), WantCondFlow([], if_.flow)]
 
 @_visitor(JumpUnconditional, Block, OrStart, Block, flag='has_if_not_opt')
 def _visit_if_else(self, deco, block, if_, body):
-    return [block, FinalElse(self.flow, FinalIf(ExprNot(if_.expr), body)), Block([]), WantPop(), WantFlow([if_.flow])]
+    return [block, FinalElse(self.flow, FinalIf(ExprNot(if_.expr), body)), Block([]), WantPop(), WantCondFlow(if_.flow, [])]
 
 @_visitor(FwdFlow, AndStart, Block, Expr)
 def _visit_and(self, deco, start, block, expr):
-    if self.flow != start.flow:
-        raise PythonError("funny and flow")
     if block.stmts:
         raise PythonError("extra and statements")
-    return [ExprBoolAnd(start.expr, expr)]
+    return [ExprBoolAnd(start.expr, expr), WantCondFlow([], start.flow), self]
 
 @_visitor(FwdFlow, OrStart, Block, Expr)
 def _visit_or(self, deco, start, block, expr):
-    if self.flow != start.flow:
-        raise PythonError("funny or flow")
     if block.stmts:
         raise PythonError("extra or statements")
-    return [ExprBoolOr(start.expr, expr)]
+    return [ExprBoolOr(start.expr, expr), WantCondFlow(start.flow, []), self]
+
+@_visitor(FwdFlow, AndStart, Block, Expr, WantCondFlow)
+def _visit_and(self, deco, start, block, expr, want):
+    if block.stmts:
+        raise PythonError("extra and statements")
+    want.false.extend(start.flow)
+    return [ExprBoolAnd(start.expr, expr), want, self]
+
+@_visitor(FwdFlow, OrStart, Block, Expr, WantCondFlow)
+def _visit_and(self, deco, start, block, expr, want):
+    if block.stmts:
+        raise PythonError("extra or statements")
+    want.true.extend(start.flow)
+    return [ExprBoolOr(start.expr, expr), want, self]
+
+@_visitor(FwdFlow, AndStart, Block, FinalElse, Block, WantPop, flag='has_jump_cond_fold')
+def _visit_folded_if(self, deco, start, blocka, final, blockb, _):
+    if blocka.stmts:
+        raise PythonError("extra and-if statements")
+    if_ = final.maker
+    if not isinstance(if_, FinalIf):
+        raise NoMatch
+    return [FinalElse(final.flow, FinalIf(ExprBoolAnd(start.expr, if_.expr), if_.body)), blockb, WantPop(), WantCondFlow([], start.flow), self]
+
+@_visitor(EndLoop, AndStart, Block, FinalElse, Block, WantPop, WantCondFlow, flag='has_jump_cond_fold')
+def _visit_folded_while(self, deco, start, blocka, final, blockb, _, want):
+    if blocka.stmts:
+        raise PythonError("extra and-while statements")
+    if_ = final.maker
+    if not isinstance(if_, FinalIf):
+        raise NoMatch
+    want.false.extend(start.flow)
+    return [FinalElse(final.flow, FinalIf(ExprBoolAnd(start.expr, if_.expr), if_.body)), blockb, WantPop(), want, self]
 
 # comparisons
 
@@ -1025,9 +1089,9 @@ def _visit_cmp_start(self, deco, a, b, _dup, _rot):
     return [CompareStart([a, self.param, b], [])]
 
 # start #2 and middle #3
-@_visitor(OpcodeJumpIfFalse, CompareStart)
+@_visitor(JumpIfFalse, CompareStart)
 def _visit_cmp_jump(self, deco, cmp):
-    return [Compare(cmp.items, cmp.flows + [self.flow]), WantPop()]
+    return [Compare(cmp.items, cmp.flows + self.flow), WantPop()]
 
 # middle #2
 @_visitor(OpcodeCompareOp, Compare, Expr, DupTop, RotThree)
@@ -1050,7 +1114,7 @@ def _visit_cmp_last_jump(self, deco, cmp):
         ExprCmp(cmp.items),
         WantFlow(self.flow),
         WantRotPop(),
-        WantFlow(cmp.flows)
+        WantCondFlow([], cmp.flows)
     ]
 
 # $loop framing
@@ -1127,7 +1191,7 @@ def _visit_continue(self, deco):
 
 # while loop
 
-@_visitor(EndLoop, Loop, Block, FinalElse, Block, WantPop, WantFlow)
+@_visitor(EndLoop, Loop, Block, FinalElse, Block, WantPop, WantCondFlow)
 def _visit_while(self, deco, loop, blocka, final, blockb, _, want):
     if blocka.stmts or blockb.stmts or not isinstance(final.maker, FinalIf):
         raise NoMatch
@@ -1265,7 +1329,7 @@ def _visit_except_match_check(self, deco, try_, _, expr):
         raise PythonError("funny except match")
     return [try_, TryExceptMatchMid(expr)]
 
-@_visitor(OpcodeJumpIfFalse, TryExceptMatchMid)
+@_visitor(JumpIfFalse, TryExceptMatchMid)
 def _visit_except_match_jump(self, deco, mid):
     return [
         TryExceptMatchOk(mid.expr, self.flow),
@@ -1304,7 +1368,7 @@ def _visit_except_match_end(self, deco, try_, match, block, _):
             try_.flows + self.flow,
         ),
         WantPop(),
-        WantFlow([match.next])
+        WantCondFlow([], match.next)
     ]
 
 @_visitor(JumpUnconditional, TryExceptMid, TryExceptMatch, Block, flag='!has_pop_except')
@@ -1318,7 +1382,7 @@ def _visit_except_match_end(self, deco, try_, match, block):
             try_.flows + self.flow,
         ),
         WantPop(),
-        WantFlow([match.next])
+        WantCondFlow([], match.next)
     ]
 
 @_visitor(OpcodePopTop, TryExceptMid)
@@ -1800,6 +1864,12 @@ class DecoCtx:
                     op = JumpSkipJunk(op.pos, op.nextpos, op.flow)
                 else:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
+                newops.append(op)
+            elif isinstance(op, OpcodeJumpIfTrue):
+                op = JumpIfTrue(op.pos, op.nextpos, [op.flow])
+                newops.append(op)
+            elif isinstance(op, OpcodeJumpIfFalse):
+                op = JumpIfFalse(op.pos, op.nextpos, [op.flow])
                 newops.append(op)
             else:
                 newops.append(op)

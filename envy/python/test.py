@@ -117,6 +117,7 @@ TESTS_10 = {
     'opt/continue_': '10',
     'opt/logic': '10',
     'opt/if_and': '10',
+    'opt/if_or': '10',
 }
 
 TESTS_11 = TESTS_10.copy()
@@ -275,10 +276,15 @@ TESTS_24a3.update({
     'names/fun2': '24',
     'names/global_': '24',
     'stmt/exec_': '24',
+    'stmt/if_logic': '24',
     'stmt/if_const': '24',
+    'stmt/if_logic_const': '24',
+    'stmt/while_const': '24',
     'expr/logic': '24',
     'expr/logic_const': '24',
     'misc/unpack': '24',
+    'opt/if_and': '24',
+    'opt/logic': '24',
 })
 
 TESTS_24 = TESTS_24a3.copy()

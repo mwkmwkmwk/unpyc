@@ -298,7 +298,7 @@ TESTS_25a1.update({
     'marshal/float': '25a1',
     'stmt/with_': '25',
     'stmt/import4': '25',
-    'stmt/while_const': '25',
+    'stmt/while_const': '25a1', # yup, a bug.
     'expr/misc': '25',
     'defs/fun': '25',
     'defs/cls': '25',
@@ -333,6 +333,7 @@ TESTS_25c1.update({
 TESTS_25 = TESTS_25c1.copy()
 TESTS_25.update({
     'marshal/float': '25',
+    'stmt/while_const': '25',
 })
 
 TESTS_26 = TESTS_25.copy()

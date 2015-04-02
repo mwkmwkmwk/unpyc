@@ -298,6 +298,7 @@ TESTS_25a1.update({
     'marshal/float': '25a1',
     'stmt/with_': '25',
     'stmt/import4': '25',
+    'stmt/while_const': '25',
     'expr/misc': '25',
     'defs/fun': '25',
     'defs/cls': '25',

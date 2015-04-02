@@ -1203,11 +1203,17 @@ def _visit_while(self, deco, loop, blocka, final, blockb, _, want):
     if_ = final.maker
     return [StmtWhileRaw(if_.expr, if_.body), WantPop(), want]
 
-@_visitor(JumpUnconditional, Loop, Block)
+@_visitor(JumpUnconditional, Loop, Block, flag='!has_while_true_end_opt')
 def _visit_while(self, deco, loop, inner):
     if sorted(loop.flow) != sorted(self.flow):
         raise PythonError("funny while loop")
     return [StmtWhileRaw(ExprAnyTrue(), inner), WantPop(), WantEndLoop()]
+
+@_visitor(JumpUnconditional, Loop, Block, flag='has_while_true_end_opt')
+def _visit_while(self, deco, loop, inner):
+    if sorted(loop.flow) != sorted(self.flow):
+        raise PythonError("funny while loop")
+    return [StmtWhileRaw(ExprAnyTrue(), inner), OpcodePopBlock(None, None), WantEndLoop()]
 
 # for loop
 

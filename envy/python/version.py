@@ -180,6 +180,8 @@ class Pyc10(metaclass=PycVersion):
     has_sane_closure = False
     # has yield expression
     has_yield_expr = False
+    # while true loop has no POPs at the end
+    has_while_true_end_opt = False
     # has class decorators
     has_cls_deco = False
     # has STORE_MAP opcode
@@ -370,6 +372,7 @@ class Pyc25a1(Pyc24):
     has_sane_closure = True
     has_reversed_kv = True
     has_yield_expr = True
+    has_while_true_end_opt = True
 
 class Pyc25b3(Pyc25a1):
     # 62101 used in unreleased beta

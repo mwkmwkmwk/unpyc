@@ -176,6 +176,8 @@ class Pyc10(metaclass=PycVersion):
     has_bin_float = False
     # has with statement
     has_with = False
+    # has tmp for exit in with statement
+    has_exit_tmp = True
     # closures go through BUILD_TUPLE
     has_sane_closure = False
     # has yield expression
@@ -394,6 +396,7 @@ class Pyc26(Pyc25):
     name = "Python 2.6"
     has_cls_deco = True
     has_store_map = True
+    has_exit_tmp = False
 
 class Pyc27(Pyc26):
     # 62171 used in preaplha
@@ -444,6 +447,7 @@ class Pyc30(Pyc26):
     has_pop_except = True
     has_kwonlyargs = True
     has_genexp_loop = False
+    has_exit_tmp = True
 
 class Pyc31(Pyc30):
     # 3141 used in prealpha

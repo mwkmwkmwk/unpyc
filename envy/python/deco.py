@@ -56,13 +56,11 @@ from .ast import uncomp
 #
 # - py 2.5:
 #
-#   - try / except / finally
 #   - if/else expression
 #
 # - py 2.6:
 #
 #   - except a as b
-#   - different with sequence
 #
 # - py 3.0 & 2.7:
 #
@@ -1785,7 +1783,13 @@ def _visit_yield_from(self, deco, iter_, _):
 
 # with
 
-@_visitor(OpcodeLoadAttr, TmpVarAttrStart, flag=('has_with', '!has_setup_with'))
+@_visitor(OpcodeLoadAttr, DupAttr, RotTwo, flag=('has_with', '!has_setup_with', '!has_exit_tmp'))
+def _visit_with_exit(self, deco, dup, _):
+    if dup.name != '__exit__' or self.param != '__enter__':
+        raise PythonError("weird with start")
+    return [WithEnter(None, dup.expr)]
+
+@_visitor(OpcodeLoadAttr, TmpVarAttrStart, flag=('has_with', '!has_setup_with', 'has_exit_tmp'))
 def _visit_with_exit(self, deco, start):
     if start.name != '__exit__' or self.param != '__enter__':
         raise PythonError("weird with start")
@@ -1838,6 +1842,10 @@ def _visit_finally(self, deco, end, expr):
     if not (expr == self.val == end.tmp):
         raise PythonError("funny with exit")
     return [WithExit(end.stmt)]
+
+@_visitor(OpcodeWithCleanup, WithEnd, flag='!has_exit_tmp')
+def _visit_with_exit(self, deco, exit):
+    return [WithExitDone(exit.stmt)]
 
 @_visitor(OpcodeWithCleanup, WithExit)
 def _visit_with_exit(self, deco, exit):

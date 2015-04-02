@@ -347,6 +347,7 @@ TESTS_26.update({
 
 TESTS_27 = TESTS_26.copy()
 TESTS_27.update({
+    'expr/set': '27',
 })
 
 TESTS_30 = TESTS_26.copy()
@@ -362,15 +363,19 @@ TESTS_30.update({
     'defs/lambda2': '30',
     'stmt/except2': '30',
     'stmt/with_': '30',
+    'stmt/try2': '30',
     'binary/div': '30',
     'binary/truediv': '30',
     'names/fun3': '30',
     'names/fun4': '30',
     'misc/unpack2': '30',
+    'expr/set': '27',
+    'expr/dict': '30',
 })
 del TESTS_30['stmt/print_']
 del TESTS_30['stmt/print2']
 del TESTS_30['stmt/exec_']
+del TESTS_30['stmt/try_']
 del TESTS_30['stmt/continue_']
 del TESTS_30['stmt/continue2']
 del TESTS_30['stmt/raise_']
@@ -395,7 +400,6 @@ TESTS_31.update({
 
 TESTS_32 = TESTS_31.copy()
 TESTS_32.update({
-    'marshal/unicode': '32',
     'marshal/float': '32',
 })
 

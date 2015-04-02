@@ -247,6 +247,16 @@ class ExprList(ExprSequence):
         )
 
 
+class ExprSet(ExprSequence):
+    __slots__ = ()
+
+    def show(self, ctx):
+        # XXX
+        return '{{{}}}'.format(
+            ', '.join(v.show(ctx) for v in self.exprs),
+        )
+
+
 class ExprListComp(Expr):
     __slots__ = ('comp')
 
@@ -764,17 +774,11 @@ class ExprLambda(Expr):
         return '(lambda {}: {})'.format(self.args.show(), self.expr.show(None))
 
 
-# TODO: just get rid of it.
-
-class ExprFrozenset(Expr):
+class Frozenset:
     __slots__ = 'exprs',
 
     def __init__(self, exprs):
         self.exprs = exprs
-
-    def show(self, ctx):
-        # XXX
-        return '$frozenset([{}])'.format(', '.join(v.show(ctx) for v in self.exprs))
 
 
 def from_marshal(obj, version):
@@ -799,5 +803,5 @@ def from_marshal(obj, version):
     if isinstance(obj, MarshalTuple):
         return ExprTuple([from_marshal(sub, version) for sub in obj.val])
     if isinstance(obj, MarshalFrozenset):
-        return ExprFrozenset([from_marshal(sub, version) for sub in obj.val])
+        return Frozenset([from_marshal(sub, version) for sub in obj.val])
     raise PythonError("can't map {} to expression".format(type(obj)))

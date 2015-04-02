@@ -623,7 +623,7 @@ def load_list(ctx, flag):
 
 # frozenset
 
-@_code('>', 'has_frozenset')
+@_code('>', 'has_frozenset_opt')
 def load_frozenset(ctx, flag):
     len_ = ctx.le4()
     res = MarshalFrozenset([])

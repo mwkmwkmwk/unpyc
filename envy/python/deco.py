@@ -65,7 +65,6 @@ from .ast import uncomp
 # - py 3.0 & 2.7:
 #
 #   - setcomp & dictcomp [different in 3.0]
-#   - set displays. also the frozenset optimization. [different in 3.0]
 #
 # - py 3.0:
 #
@@ -490,6 +489,22 @@ def visit_build_tuple(self, deco, exprs):
 @_visitor(OpcodeBuildList, Exprs('param', 1))
 def visit_build_list(self, deco, exprs):
     return [ExprList(exprs)]
+
+@_visitor(OpcodeBuildSet, Exprs('param', 1))
+def visit_build_set(self, deco, exprs):
+    if not exprs:
+        raise PythonError("can't make empty set display")
+    return [ExprSet(exprs)]
+
+# x in const set special
+
+@_visitor(OpcodeCompareOp, Frozenset)
+def visit_frozenset(self, deco, fset):
+    if self.param not in [CmpOp.IN, CmpOp.NOT_IN]:
+        raise PythonError("funny place for frozenset")
+    if not fset.exprs:
+        raise PythonError("can't make empty set display out of frozenset")
+    return [ExprSet(fset.exprs), self]
 
 @_visitor(OpcodeBuildMap)
 def visit_build_map(self, deco):

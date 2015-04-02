@@ -1,7 +1,7 @@
 from collections import namedtuple
 
 from .helpers import PythonError
-from .expr import Expr, ExprNone, CmpOp, ExprTuple, ExprString
+from .expr import Expr, ExprNone, CmpOp, ExprTuple, ExprString, Frozenset
 
 Flow = namedtuple('Flow', ['src', 'dst'])
 
@@ -145,7 +145,7 @@ class OpcodeLoadConstBase(Opcode):
 
     def read_params(self, param, bytecode):
         from .code import Code
-        self.const, self.idx = bytecode.get_const((Expr, Code), param)
+        self.const, self.idx = bytecode.get_const((Expr, Code, Frozenset), param)
 
     def print_params(self):
         from .code import Code
@@ -375,19 +375,19 @@ make_op_name(101, 'LOAD_NAME')
 
 make_op_num(102, 'BUILD_TUPLE')
 make_op_num(103, 'BUILD_LIST')
-make_op_num(104, 'BUILD_MAP', '!has_setdict_comp', True)
-make_op_name(105, 'LOAD_ATTR', '!has_setdict_comp', True)
-make_op_cmp(106, 'COMPARE_OP', '!has_setdict_comp', True)
-make_op_name(107, 'IMPORT_NAME', '!has_setdict_comp', True)
-make_op_name(108, 'IMPORT_FROM', '!has_setdict_comp', True)
+make_op_num(104, 'BUILD_MAP', '!has_set_display', True)
+make_op_name(105, 'LOAD_ATTR', '!has_set_display', True)
+make_op_cmp(106, 'COMPARE_OP', '!has_set_display', True)
+make_op_name(107, 'IMPORT_NAME', '!has_set_display', True)
+make_op_name(108, 'IMPORT_FROM', '!has_set_display', True)
 make_op_name(109, 'ACCESS_MODE', 'has_access')
 
-make_op_num(104, 'BUILD_SET', 'has_setdict_comp')
-make_op_num(105, 'BUILD_MAP', 'has_setdict_comp', True)
-make_op_name(106, 'LOAD_ATTR', 'has_setdict_comp', True)
-make_op_cmp(107, 'COMPARE_OP', 'has_setdict_comp', True)
-make_op_name(108, 'IMPORT_NAME', 'has_setdict_comp', True)
-make_op_name(109, 'IMPORT_FROM', 'has_setdict_comp', True)
+make_op_num(104, 'BUILD_SET', 'has_set_display')
+make_op_num(105, 'BUILD_MAP', 'has_set_display', True)
+make_op_name(106, 'LOAD_ATTR', 'has_set_display', True)
+make_op_cmp(107, 'COMPARE_OP', 'has_set_display', True)
+make_op_name(108, 'IMPORT_NAME', 'has_set_display', True)
+make_op_name(109, 'IMPORT_FROM', 'has_set_display', True)
 
 make_op_rel(110, 'JUMP_FORWARD')
 

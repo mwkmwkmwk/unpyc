@@ -169,9 +169,8 @@ class Pyc10(metaclass=PycVersion):
     has_jump_cond_fold = False
     # has relative import
     has_relative_import = False
-    # has sets and frozensets
-    # TODO rename
-    has_frozenset = False
+    # has set displays
+    has_set_display = False
     # has binary float format in marshal
     has_bin_float = False
     # has with statement
@@ -231,6 +230,8 @@ class Pyc10(metaclass=PycVersion):
     has_dup_two = False
     # has DELETE_DEREF
     has_delete_deref = False
+    # x in {const, const, const} -> frozenset
+    has_frozenset_opt = False
     # has qualname attribute
     has_qualname = False
     # has source size in pyc
@@ -368,7 +369,6 @@ class Pyc25a1(Pyc24):
     code = _v(62092)
     name = "Python 2.5a1"
     has_relative_import = True
-    has_frozenset = True
     has_bin_float = True
     has_with = True
     has_sane_closure = True
@@ -405,6 +405,7 @@ class Pyc27(Pyc26):
     # 62201 used in preaplha
     code = _v(62211)
     name = "Python 2.7"
+    has_set_display = True
     has_setdict_comp = True
     has_new_comp = True
     has_setup_with = True
@@ -431,6 +432,7 @@ class Pyc30(Pyc26):
     has_U = False
     has_str_intern = False
     py3k = True
+    has_set_display = True
     has_bool_literal = True
     has_complex_args = False
     has_old_slice = False
@@ -466,6 +468,7 @@ class Pyc32(Pyc31):
     has_dup_two = True
     has_setup_with = True
     has_delete_deref = True
+    has_frozenset_opt = True
 
 class Pyc33(Pyc32):
     # 3190 used in prealpha

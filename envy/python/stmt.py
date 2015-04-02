@@ -775,3 +775,25 @@ class StmtDef(Stmt):
             self.args.show()
         )
         yield from indent(self.body.show())
+
+class StmtWith(Stmt):
+    __slots__ = 'expr', 'dst', 'body'
+
+    def __init__(self, expr, dst, body):
+        self.expr = expr
+        self.dst = dst
+        self.body = body
+
+    def subprocess(self, process):
+        return StmtWith(
+            process(self.expr),
+            process(self.dst) if self.dst else None,
+            process(self.body),
+        )
+
+    def show(self):
+        if self.dst:
+            yield "with {} as {}:".format(self.expr.show(None), self.dst.show(None))
+        else:
+            yield "with {}:".format(self.expr.show(None))
+        yield from indent(self.body.show())

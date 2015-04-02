@@ -11,3 +11,7 @@ with a as b:
 with a as (a, b):
     c
     d
+
+while a:
+    with b as c:
+        continue

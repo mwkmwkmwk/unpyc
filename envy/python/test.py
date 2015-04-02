@@ -360,6 +360,7 @@ TESTS_30.update({
     'defs/fun5': '30',
     'defs/lambda2': '30',
     'stmt/except2': '30',
+    'stmt/with_': '30',
     'binary/div': '30',
     'binary/truediv': '30',
     'names/fun3': '30',

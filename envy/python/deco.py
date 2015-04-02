@@ -56,11 +56,8 @@ from .ast import uncomp
 #
 # - py 2.5:
 #
-#   - relative imports
-#   - with
 #   - try / except / finally
 #   - if/else expression
-#   - the compiler has been rewritten. have fun, [TODO]
 #
 # - py 2.6:
 #
@@ -80,7 +77,6 @@ from .ast import uncomp
 #   - nonlocal
 #   - ellipsis allowed everywhere
 #   - list comprehensions are functions
-#   - still new with sequence
 #
 # - py 2.7 & 3.1:
 #
@@ -216,14 +212,26 @@ InplaceSliceEN = namedtuple('InplaceSliceEN', ['expr', 'start', 'src', 'stmt'])
 InplaceSliceNE = namedtuple('InplaceSliceNE', ['expr', 'end', 'src', 'stmt'])
 InplaceSliceEE = namedtuple('InplaceSliceEE', ['expr', 'start', 'end', 'src', 'stmt'])
 
-OldListCompStart = namedtuple('OldListCompStart', ['tmp'])
-OldListCompCleanup = namedtuple('OldListCompCleanup', ['tmp'])
+TmpVarAttrStart = namedtuple('TmpVarAttrStart', ['tmp', 'expr', 'name'])
+TmpVarCleanup = namedtuple('TmpVarCleanup', ['tmp'])
 
 Closure = namedtuple('Closure', ['var'])
 ClosuresTuple = namedtuple('ClosuresTuple', ['vars'])
 
 FinalElse = namedtuple('FinalElse', ['flow', 'maker'])
 AssertJunk = namedtuple('AssertJunk', ['expr', 'msg'])
+
+WithEnter = namedtuple('WithEnter', ['tmp', 'expr'])
+WithResult = namedtuple('WithResult', ['tmp', 'expr'])
+WithStart = namedtuple('WithStart', ['tmp', 'expr'])
+WithStartTmp = namedtuple('WithStartTmp', ['tmp', 'expr', 'res'])
+WithTmp = namedtuple('WithTmp', ['tmp', 'expr', 'res', 'flow'])
+WithInnerResult = namedtuple('WithInnerResult', ['tmp', 'expr', 'flow'])
+With = namedtuple('With', ['tmp', 'expr', 'dst', 'flow'])
+WithEndPending = namedtuple('WithEndPending', ['tmp', 'flow', 'stmt'])
+WithEnd = namedtuple('WithEnd', ['tmp', 'stmt'])
+WithExit = namedtuple('WithExit', ['stmt'])
+WithExitDone = namedtuple('WithExitDone', ['stmt'])
 
 # final makers
 
@@ -1179,7 +1187,7 @@ def _visit_continue(self, deco):
         elif isinstance(item, ForLoop):
             loop = item.loop
             break
-        elif isinstance(item, (SetupExcept, SetupFinally)):
+        elif isinstance(item, (SetupExcept, SetupFinally, With)):
             seen = True
         elif isinstance(item, (Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
@@ -1287,9 +1295,10 @@ def _visit_access(self, deco, mode):
 
 # try finally
 
-@_visitor(OpcodeSetupFinally)
-def _visit_setup_finally(self, deco):
-    return [SetupFinally(self.flow), Block([])]
+# need block to make sure we're not inside with
+@_visitor(OpcodeSetupFinally, Block)
+def _visit_setup_finally(self, deco, block):
+    return [block, SetupFinally(self.flow), Block([])]
 
 @_visitor(OpcodePopBlock, SetupFinally, Block)
 def _visit_finally_pop(self, deco, setup, block):
@@ -1702,18 +1711,18 @@ def _visit_inplace_store_slice_ee(self, deco, inp, _rot):
 
 # list comprehensions
 
-@_visitor(Store, DupAttr, flag='!has_list_append')
+@_visitor(Store, DupAttr)
 def visit_listcomp_start(self, deco, dup):
     if not isinstance(self.dst, (ExprName, ExprFast, ExprGlobal)):
         raise NoMatch
-    if (not isinstance(dup.expr, ExprList)
-        or len(dup.expr.exprs) != 0
-        or dup.name != 'append'):
-        raise PythonError("weird listcomp start")
-    return [OldListCompStart(self.dst)]
+    return [TmpVarAttrStart(self.dst, dup.expr, dup.name)]
 
-@_visitor(StmtForRaw, OldListCompStart, flag='!has_list_append')
+@_visitor(StmtForRaw, TmpVarAttrStart, flag='!has_list_append')
 def _visit_listcomp(self, deco, start):
+    if (not isinstance(start.expr, ExprList)
+        or len(start.expr.exprs) != 0
+        or start.name != 'append'):
+        raise PythonError("weird listcomp start")
     stmt, items = uncomp(self, False, False)
     if not (isinstance(stmt, StmtSingle)
         and isinstance(stmt.val, ExprCall)
@@ -1722,7 +1731,7 @@ def _visit_listcomp(self, deco, start):
         and not stmt.val.args.args[0][0]
     ):
         raise PythonError("weird old list comp")
-    return [ExprListComp(Comp(stmt.val.args.args[0][1], items)), OldListCompCleanup(start.tmp)]
+    return [ExprListComp(Comp(stmt.val.args.args[0][1], items)), TmpVarCleanup(start.tmp)]
 
 @_visitor(StmtForRaw, MultiAssign, flag='has_list_append')
 def _visit_listcomp(self, deco, ass):
@@ -1736,9 +1745,9 @@ def _visit_listcomp(self, deco, ass):
         and stmt.tmp == tmp
     ):
         raise PythonError("weird old list comp")
-    return [ExprListComp(Comp(stmt.val, items)), OldListCompCleanup(tmp)]
+    return [ExprListComp(Comp(stmt.val, items)), TmpVarCleanup(tmp)]
 
-@_visitor(StmtDel, OldListCompCleanup)
+@_visitor(StmtDel, TmpVarCleanup)
 def visit_listcomp_end(self, deco, comp):
     if comp.tmp != self.val:
         raise PythonError("deleting a funny name")
@@ -1772,6 +1781,71 @@ def _visit_yield_stmt(self, deco, expr):
 @_visitor(OpcodeYieldFrom, Iter, ExprNone)
 def _visit_yield_from(self, deco, iter_, _):
     return [ExprYieldFrom(iter_.expr)]
+
+
+# with
+
+@_visitor(OpcodeLoadAttr, TmpVarAttrStart, flag=('has_with', '!has_setup_with'))
+def _visit_with_exit(self, deco, start):
+    if start.name != '__exit__' or self.param != '__enter__':
+        raise PythonError("weird with start")
+    return [WithEnter(start.tmp, start.expr)]
+
+@_visitor(OpcodeCallFunction, WithEnter)
+def _visit_with_enter(self, deco, enter):
+    if self.args != 0 or self.kwargs != 0:
+        raise NoMatch
+    return [WithResult(enter.tmp, enter.expr)]
+
+@_visitor(OpcodePopTop, WithResult)
+def _visit_with_pop(self, deco, result):
+    return [WithStart(result.tmp, result.expr)]
+
+@_visitor(Store, WithResult)
+def _visit_with_pop(self, deco, result):
+    return [WithStartTmp(result.tmp, result.expr, self.dst)]
+
+@_visitor(OpcodeSetupFinally, WithStartTmp)
+def _visit_setup_finally(self, deco, start):
+    return [WithTmp(start.tmp, start.expr, start.res, self.flow)]
+
+@_visitor(StmtDel, WithTmp, Expr)
+def _visit_finally(self, deco, with_, expr):
+    if not (expr == self.val == with_.res):
+        raise PythonError("funny with tmp")
+    return [WithInnerResult(with_.tmp, with_.expr, with_.flow)]
+
+@_visitor(Store, WithInnerResult)
+def _visit_store_with(self, deco, start):
+    return [With(start.tmp, start.expr, self.dst, start.flow), Block([])]
+
+@_visitor(OpcodeSetupFinally, WithStart)
+def _visit_setup_finally(self, deco, start):
+    return [With(start.tmp, start.expr, None, self.flow), Block([])]
+
+@_visitor(OpcodePopBlock, With, Block)
+def _visit_with_pop(self, deco, with_, block):
+    return [WithEndPending(with_.tmp, with_.flow, StmtWith(with_.expr, with_.dst, block))]
+
+@_visitor(FwdFlow, WithEndPending, ExprNone)
+def _visit_finally(self, deco, end, _):
+    if end.flow != self.flow:
+        raise PythonError("funny with end")
+    return [WithEnd(end.tmp, end.stmt)]
+
+@_visitor(StmtDel, WithEnd, Expr)
+def _visit_finally(self, deco, end, expr):
+    if not (expr == self.val == end.tmp):
+        raise PythonError("funny with exit")
+    return [WithExit(end.stmt)]
+
+@_visitor(OpcodeWithCleanup, WithExit)
+def _visit_with_exit(self, deco, exit):
+    return [WithExitDone(exit.stmt)]
+
+@_visitor(OpcodeEndFinally, WithExitDone)
+def _visit_with_exit(self, deco, exit):
+    return [exit.stmt]
 
 
 class DecoCtx:

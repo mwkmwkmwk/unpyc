@@ -291,17 +291,18 @@ TESTS_24 = TESTS_24a3.copy()
 TESTS_24.update({
 })
 
-TESTS_25 = TESTS_24.copy()
-TESTS_25.update({
+TESTS_25a1 = TESTS_24.copy()
+TESTS_25a1.update({
     'marshal/complex': '25',
-    'marshal/float': '25',
     'marshal/unicode': '25',
+    'marshal/float': '25a1',
     'stmt/with_': '25',
+    'stmt/import4': '25',
     'expr/misc': '25',
     'defs/fun': '25',
-    'defs/doc': '25',
-    'defs/doc2': '25',
     'defs/cls': '25',
+    'defs/doc': '25a1',
+    'defs/doc2': '25a1',
     'defs/gen': '25',
     'defs/gen2': '25',
     'names/global_': '25',
@@ -312,6 +313,25 @@ TESTS_25.update({
     'names/nested3': '25',
     'stmt/if_const': '25',
     'genexp/nested': '25',
+    'comp/complex': '25',
+    'comp/cond_const': '25',
+    'genexp/complex': '25',
+    'genexp/cond_const': '25',
+})
+
+TESTS_25b3 = TESTS_25a1.copy()
+TESTS_25b3.update({
+})
+
+TESTS_25c1 = TESTS_25b3.copy()
+TESTS_25c1.update({
+    'defs/doc': '25',
+    'defs/doc2': '25',
+})
+
+TESTS_25 = TESTS_25c1.copy()
+TESTS_25.update({
+    'marshal/float': '25',
 })
 
 TESTS_26 = TESTS_25.copy()
@@ -319,6 +339,7 @@ TESTS_26.update({
     'marshal/bytes': '26',
     'defs/deco2': '26',
     'names/fun': '24',
+    'stmt/import5': '26',
 })
 
 TESTS_27 = TESTS_26.copy()
@@ -406,6 +427,9 @@ VERSIONS = [
     ("2.4a1", "2.4a1", 'compile', None, Pyc24a1, TESTS_24a1),
     ("2.4a3", "2.4a3", 'compile', None, Pyc24a3, TESTS_24a3),
     ("2.4", "2.4.6", 'compile', None, Pyc24, TESTS_24),
+    ("2.5a1", "2.5b2", 'compile', None, Pyc25a1, TESTS_25a1),
+    ("2.5b3", "2.5b3", 'compile', None, Pyc25b3, TESTS_25b3),
+    ("2.5c1", "2.5c1", 'compile', None, Pyc25c1, TESTS_25c1),
     ("2.5", "2.5.6", 'compile', None, Pyc25, TESTS_25),
     ("2.6", "2.6.9", 'compile', None, Pyc26, TESTS_26),
     ("2.7", "2.7.9", 'compile', None, Pyc27, TESTS_27),
@@ -475,6 +499,8 @@ for v in VERSIONS:
         try:
             with pycfile.open('rb') as fp:
                 pyc = PycFile(fp)
+            if pyc.version is not pycver:
+                print("pyc tag mismatch")
             code = Code(pyc.code, pyc.version)
             deco = deco_code(code)
             ast = ast_process(deco, pyc.version)

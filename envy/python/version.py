@@ -356,16 +356,13 @@ class Pyc24(Pyc24a3):
     code = _v(62061)
     name = "Python 2.4"
 
-class Pyc25(Pyc24):
+class Pyc25a1(Pyc24):
     # 62071 used in prealpha
     # 62081 used in prealpha
     # 62091 used in prealpha
-    # 62092 used in alphas and b1-b2
-    # 62101 used in unreleased beta
-    # 62111 used in b3
-    # 62121 used in c1
-    code = _v(62131)
-    name = "Python 2.5"
+    # actually 2.5a1 - 2.5b2
+    code = _v(62092)
+    name = "Python 2.5a1"
     has_relative_import = True
     has_frozenset = True
     has_bin_float = True
@@ -373,6 +370,20 @@ class Pyc25(Pyc24):
     has_sane_closure = True
     has_reversed_kv = True
     has_yield_expr = True
+
+class Pyc25b3(Pyc25a1):
+    # 62101 used in unreleased beta
+    code = _v(62111)
+    name = "Python 2.5b3"
+
+class Pyc25c1(Pyc25b3):
+    code = _v(62121)
+    name = "Python 2.5c1"
+
+class Pyc25(Pyc25c1):
+    # actually 2.5c2 and up
+    code = _v(62131)
+    name = "Python 2.5"
 
 class Pyc26(Pyc25):
     # 62151 used in prealpha

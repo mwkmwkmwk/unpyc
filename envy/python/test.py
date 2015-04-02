@@ -299,6 +299,7 @@ TESTS_25a1.update({
     'stmt/with_': '25',
     'stmt/import4': '25',
     'stmt/while_const': '25a1', # yup, a bug.
+    'stmt/try_': '25',
     'expr/misc': '25',
     'defs/fun': '25',
     'defs/cls': '25',

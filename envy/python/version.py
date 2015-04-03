@@ -218,6 +218,8 @@ class Pyc10(metaclass=PycVersion):
     has_setdict_comp = False
     # has armor-plated except clauses
     has_pop_except = False
+    # list comprehensions are functions
+    has_fun_listcomp = False
     # has kw-only arguments
     has_kwonlyargs = False
     # has SETUP_LOOP in genexp
@@ -446,6 +448,7 @@ class Pyc30(Pyc26):
     has_unpack_ex = True
     has_new_class = True
     has_setdict_comp = True
+    has_fun_listcomp = True
     has_pop_except = True
     has_kwonlyargs = True
     has_genexp_loop = False

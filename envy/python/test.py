@@ -352,6 +352,15 @@ TESTS_27.update({
 
 TESTS_30 = TESTS_26.copy()
 TESTS_30.update({
+    'comp/basic': '30',
+    'comp/nested': '30',
+    'comp/cond': '30',
+    'comp/complex': '30',
+    'comp/fun': '30',
+    'comp/cond_and': '30',
+    'comp/cond_const': '30',
+    'comp/cond_not': '30',
+    'comp/ctx': '30',
     'stmt/continue3': '30',
     'stmt/raise4': '30',
     'marshal/int2': '30',

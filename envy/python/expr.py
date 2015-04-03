@@ -774,6 +774,32 @@ class ExprLambda(Expr):
         return '(lambda {}: {})'.format(self.args.show(), self.expr.show(None))
 
 
+class ExprNewListCompRaw(Expr):
+    __slots__ = 'expr', 'topdst', 'items', 'arg'
+
+    def __init__(self, expr, topdst, items, arg):
+        self.expr = expr
+        self.topdst = topdst
+        self.items = items
+        self.arg = arg
+
+    def subprocess(self, process):
+        return ExprNewListCompRaw(
+            process(self.expr),
+            process(self.topdst),
+            [process(item) for item in self.items],
+            process(self.arg),
+        )
+
+    def show(self, ctx):
+        return '$newlistcompraw({} top {} in {} {})'.format(
+            self.expr.show(None),
+            self.topdst.show(None),
+            self.arg.show(None),
+            ' '.join(item.show() for item in self.items),
+        )
+
+
 class Frozenset:
     __slots__ = 'exprs',
 

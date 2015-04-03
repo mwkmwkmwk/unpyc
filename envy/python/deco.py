@@ -1770,6 +1770,8 @@ def visit_listcomp_end(self, deco, comp):
 def visit_listcomp_item(self, deco, tmp, val):
     return [StmtListAppend(tmp, val)]
 
+# new comprehensions
+
 @_visitor(OpcodeCallFunction, ExprFunctionRaw, Iter)
 def visit_call_function(self, deco, fun, arg):
     if (fun.defargs
@@ -1780,6 +1782,28 @@ def visit_call_function(self, deco, fun, arg):
         raise NoMatch
     return [ExprCallComp(fun, arg.expr)]
 
+@_visitor(StmtForTop, MultiAssign, flag='has_setdict_comp')
+def _visit_fun_comp(self, deco, ass):
+    if len(ass.dsts) != 1:
+        raise PythonError("too many dsts to be a comp")
+    tmp = ass.dsts[0]
+    if not isinstance(tmp, ExprFast):
+        raise PythonError("funny tmp for new comp")
+    stmt, items, (topdst, arg) = uncomp(self, False, True)
+    if isinstance(ass.src, ExprList) and deco.version.has_fun_listcomp:
+        if not (isinstance(stmt, StmtListAppend)
+            and stmt.tmp == tmp
+            and len(ass.src.exprs) == 0
+        ):
+            raise PythonError("funny list comp")
+        return [ExprNewListCompRaw(
+            stmt.val,
+            topdst,
+            items,
+            arg,
+        )]
+    else:
+        raise PythonError("weird comp")
 
 # yield
 

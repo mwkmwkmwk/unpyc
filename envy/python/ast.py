@@ -154,7 +154,18 @@ def ast_process(deco, version):
             stmts = node.fun.code.block.stmts
             if not stmts:
                 raise PythonError("empty comp")
-            if len(stmts) == 2:
+            if len(stmts) == 1:
+                if not isinstance(stmts[0], StmtReturn) or not isinstance(stmts[0].val, (ExprNewListCompRaw)):
+                    raise PythonError("weird comp function")
+                expr = stmts[0].val
+                items = [CompFor(expr.topdst, node.expr)] + expr.items
+                if not isinstance(expr.arg, ExprFast) or expr.arg.idx != 0:
+                    raise PythonError("comp arg mismatch")
+                if isinstance(expr, ExprNewListCompRaw):
+                    return ExprListComp(Comp(expr.expr, items))
+                else:
+                    raise PythonError("weird comp function")
+            elif len(stmts) == 2:
                 stmt, items, (topdst, arg) = uncomp(stmts[0], version.has_genexp_loop, True)
                 if not isinstance(stmts[1], StmtReturn) or not isinstance(stmts[1].val, ExprNone):
                     raise PythonError("funny genexp return")
@@ -163,9 +174,11 @@ def ast_process(deco, version):
                 if not version.has_genexp:
                     raise PythonError("no genexp in this version...")
                 expr = stmt.val.e1
-            if not isinstance(arg, ExprFast) or arg.idx != 0:
-                raise PythonError("comp arg mismatch")
-            return ExprGenExp(Comp(expr, [CompFor(topdst, node.expr)] + items))
+                if not isinstance(arg, ExprFast) or arg.idx != 0:
+                    raise PythonError("comp arg mismatch")
+                return ExprGenExp(Comp(expr, [CompFor(topdst, node.expr)] + items))
+            else:
+                raise PythonError("weird comp function")
         return node
 
     deco = process_1(deco)

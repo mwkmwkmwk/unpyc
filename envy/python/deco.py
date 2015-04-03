@@ -54,10 +54,6 @@ from .ast import uncomp
 #     - true const JUMP_IF_FALSE POP -> NOPs
 #     - JUMP_IF_FALSE/TRUE chain shortening
 #
-# - py 2.5:
-#
-#   - if/else expression
-#
 # - py 2.6:
 #
 #   - except a as b
@@ -157,6 +153,8 @@ UnpackStarSlot = namedtuple('UnpackStarSlot', ['expr'])
 
 AndStart = namedtuple('AndStart', ['expr', 'flow'])
 OrStart = namedtuple('OrStart', ['expr', 'flow'])
+IfExprTrue = namedtuple('IfExprTrue', ['expr', 'flow'])
+IfExprElse = namedtuple('IfExprElse', ['cond', 'true', 'flow'])
 
 CompareStart = namedtuple('CompareStart', ['items', 'flows'])
 Compare = namedtuple('Compare', ['items', 'flows'])
@@ -1086,6 +1084,55 @@ def _visit_folded_while(self, deco, start, blocka, final, blockb, _, want):
         raise NoMatch
     want.false.extend(start.flow)
     return [FinalElse(final.flow, FinalIf(ExprBoolAnd(start.expr, if_.expr), if_.body)), blockb, WantPop(), want, self]
+
+@_visitor(JumpUnconditional, Expr, flag='has_if_expr')
+def _visit_ifexpr(self, deco, expr):
+    return [IfExprTrue(expr, self.flow)]
+
+@_visitor(FwdFlow, AndStart, Block, IfExprTrue)
+def _visit_ifexpr(self, deco, start, block, true):
+    if self.flow not in start.flow:
+        raise NoMatch
+    if block.stmts:
+        raise PythonError("extra if expr statements")
+    return [IfExprElse(start.expr, true.expr, true.flow), WantPop(), WantFlow([], [], start.flow), self]
+
+@_visitor(FwdFlow, OrStart, Block, IfExprTrue)
+def _visit_ifexpr(self, deco, start, block, true):
+    if self.flow not in start.flow:
+        raise NoMatch
+    if block.stmts:
+        raise PythonError("extra if expr statements")
+    return [IfExprElse(ExprNot(start.expr), true.expr, true.flow), WantPop(), WantFlow([], start.flow, []), self]
+
+@_visitor(FwdFlow, IfExprElse, Expr, MaybeWantFlow)
+def _visit_ifexpr(self, deco, if_, false, want):
+    res = ExprIf(if_.cond, if_.true, false)
+    want.any.extend(if_.flow)
+    return [ExprIf(if_.cond, if_.true, false), want, self]
+
+@_visitor(FwdFlow, AndStart, Block, IfExprElse, WantPop, MaybeWantFlow, flag='has_jump_cond_fold')
+def _visit_folded_if(self, deco, start, block, if_, _, want):
+    if block.stmts:
+        raise PythonError("extra and-if expr statements")
+    want.false.extend(start.flow)
+    return [IfExprElse(ExprBoolAnd(start.expr, if_.cond), if_.true, if_.flow), WantPop(), want, self]
+
+@_visitor(FwdFlow, AndStart, Block, IfExprTrue)
+def _visit_ifexpr(self, deco, start, block, true):
+    if self.flow in start.flow:
+        raise NoMatch
+    if block.stmts:
+        raise PythonError("extra if expr and statements")
+    return [IfExprTrue(ExprBoolAnd(start.expr, true.expr), start.flow + true.flow), self]
+
+@_visitor(FwdFlow, OrStart, Block, IfExprTrue)
+def _visit_ifexpr(self, deco, start, block, true):
+    if self.flow in start.flow:
+        raise NoMatch
+    if block.stmts:
+        raise PythonError("extra if expr or statements")
+    return [IfExprTrue(ExprBoolOr(start.expr, true.expr), start.flow + true.flow), self]
 
 # comparisons
 

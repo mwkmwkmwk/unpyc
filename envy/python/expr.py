@@ -535,6 +535,29 @@ class ExprMatMul(ExprBin):
     sign = '@'
 
 
+class ExprIf(Expr):
+    __slots__ = 'cond', 'true', 'false'
+
+    def __init__(self, cond, true, false):
+        self.cond = cond
+        self.true = true
+        self.false = false
+
+    def subprocess(self, process):
+        return ExprIf(
+            process(self.cond),
+            process(self.true),
+            process(self.false),
+        )
+
+    def show(self, ctx):
+        return '({} if {} else {})'.format(
+            self.true.show(None),
+            self.cond.show(None),
+            self.false.show(None),
+        )
+
+
 # compares
 
 class ExprCmp(Expr):

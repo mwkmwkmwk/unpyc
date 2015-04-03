@@ -492,8 +492,6 @@ def visit_build_list(self, deco, exprs):
 
 @_visitor(OpcodeBuildSet, Exprs('param', 1))
 def visit_build_set(self, deco, exprs):
-    if not exprs:
-        raise PythonError("can't make empty set display")
     return [ExprSet(exprs)]
 
 # x in const set special
@@ -1766,9 +1764,17 @@ def visit_listcomp_end(self, deco, comp):
         raise PythonError("deleting a funny name")
     return []
 
-@_visitor(OpcodeListAppend, Expr, Expr, flag='has_list_append')
+@_visitor(OpcodeListAppend, Expr, Expr)
 def visit_listcomp_item(self, deco, tmp, val):
     return [StmtListAppend(tmp, val)]
+
+@_visitor(OpcodeSetAdd, Expr, Expr)
+def visit_listcomp_item(self, deco, tmp, val):
+    return [StmtSetAdd(tmp, val)]
+
+@_visitor(OpcodeStoreSubscr, Expr, Expr, RotTwo, Expr)
+def visit_listcomp_item(self, deco, tmp, val, _, key):
+    return [StmtMapAdd(tmp, key, val)]
 
 # new comprehensions
 
@@ -1797,6 +1803,31 @@ def _visit_fun_comp(self, deco, ass):
         ):
             raise PythonError("funny list comp")
         return [ExprNewListCompRaw(
+            stmt.val,
+            topdst,
+            items,
+            arg,
+        )]
+    elif isinstance(ass.src, ExprSet):
+        if not (isinstance(stmt, StmtSetAdd)
+            and stmt.tmp == tmp
+            and len(ass.src.exprs) == 0
+        ):
+            raise PythonError("funny set comp")
+        return [ExprNewSetCompRaw(
+            stmt.val,
+            topdst,
+            items,
+            arg,
+        )]
+    elif isinstance(ass.src, ExprDict):
+        if not (isinstance(stmt, StmtMapAdd)
+            and stmt.tmp == tmp
+            and len(ass.src.items) == 0
+        ):
+            raise PythonError("funny dict comp")
+        return [ExprNewDictCompRaw(
+            stmt.key,
             stmt.val,
             topdst,
             items,

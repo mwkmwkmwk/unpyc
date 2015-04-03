@@ -315,6 +315,46 @@ class StmtListAppend(Stmt):
         yield "$listappend {}, {}".format(self.tmp.show(None), self.val.show(None))
 
 
+class StmtSetAdd(Stmt):
+    __slots__ = 'tmp', 'val'
+
+    def __init__(self, tmp, val):
+        self.tmp = tmp
+        self.val = val
+
+    def subprocess(self, process):
+        return StmtSetAdd(
+            process(self.tmp),
+            process(self.val)
+        )
+
+    def show(self):
+        yield "$setadd {}, {}".format(self.tmp.show(None), self.val.show(None))
+
+
+class StmtMapAdd(Stmt):
+    __slots__ = 'tmp', 'key', 'val'
+
+    def __init__(self, tmp, key, val):
+        self.tmp = tmp
+        self.key = key
+        self.val = val
+
+    def subprocess(self, process):
+        return StmtMapAdd(
+            process(self.tmp),
+            process(self.key),
+            process(self.val)
+        )
+
+    def show(self):
+        yield "$mapadd {}, {}: {}".format(
+            self.tmp.show(None),
+            self.key.show(None),
+            self.val.show(None)
+        )
+
+
 class StmtAssert(Stmt):
     __slots__ = 'expr', 'msg'
 

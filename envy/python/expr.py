@@ -101,7 +101,10 @@ class Comp:
         )
 
     def show(self):
-        return '{} {}'.format(self.expr.show(None), ' '.join(item.show() for item in self.items))
+        return '{} {}'.format(
+            self.expr.show(None),
+            ' '.join(item.show() for item in self.items)
+        )
 
 
 # TODO: print unicode/byte strings as appropriate for the python version
@@ -268,6 +271,42 @@ class ExprListComp(Expr):
 
     def subprocess(self, process):
         return ExprListComp(process(self.comp))
+
+
+class ExprSetComp(Expr):
+    __slots__ = ('comp')
+
+    def __init__(self, comp=None):
+        self.comp = comp
+
+    def show(self, ctx):
+        return '{{{}}}'.format(self.comp.show())
+
+    def subprocess(self, process):
+        return ExprSetComp(process(self.comp))
+
+
+class ExprDictComp(Expr):
+    __slots__ = 'key', 'val', 'items'
+
+    def __init__(self, key, val, items):
+        self.key = key
+        self.val = val
+        self.items = items
+
+    def show(self, ctx):
+        return '{{{}: {} {}}}'.format(
+            self.key.show(None),
+            self.val.show(None),
+            ' '.join(item.show() for item in self.items)
+        )
+
+    def subprocess(self, process):
+        return ExprDictComp(
+            process(self.key),
+            process(self.val),
+            [process(item) for item in self.items]
+        )
 
 
 class ExprGenExp(Expr):
@@ -794,6 +833,61 @@ class ExprNewListCompRaw(Expr):
     def show(self, ctx):
         return '$newlistcompraw({} top {} in {} {})'.format(
             self.expr.show(None),
+            self.topdst.show(None),
+            self.arg.show(None),
+            ' '.join(item.show() for item in self.items),
+        )
+
+
+class ExprNewSetCompRaw(Expr):
+    __slots__ = 'expr', 'topdst', 'items', 'arg'
+
+    def __init__(self, expr, topdst, items, arg):
+        self.expr = expr
+        self.topdst = topdst
+        self.items = items
+        self.arg = arg
+
+    def subprocess(self, process):
+        return ExprNewSetCompRaw(
+            process(self.expr),
+            process(self.topdst),
+            [process(item) for item in self.items],
+            process(self.arg),
+        )
+
+    def show(self, ctx):
+        return '$newsetcompraw({} top {} in {} {})'.format(
+            self.expr.show(None),
+            self.topdst.show(None),
+            self.arg.show(None),
+            ' '.join(item.show() for item in self.items),
+        )
+
+
+class ExprNewDictCompRaw(Expr):
+    __slots__ = 'key', 'val', 'topdst', 'items', 'arg'
+
+    def __init__(self, key, val, topdst, items, arg):
+        self.key = key
+        self.val = val
+        self.topdst = topdst
+        self.items = items
+        self.arg = arg
+
+    def subprocess(self, process):
+        return ExprNewDictCompRaw(
+            process(self.key),
+            process(self.val),
+            process(self.topdst),
+            [process(item) for item in self.items],
+            process(self.arg),
+        )
+
+    def show(self, ctx):
+        return '$newdictcompraw({}: {} top {} in {} {})'.format(
+            self.key.show(None),
+            self.val.show(None),
             self.topdst.show(None),
             self.arg.show(None),
             ' '.join(item.show() for item in self.items),

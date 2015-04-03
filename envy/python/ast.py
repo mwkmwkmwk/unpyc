@@ -155,7 +155,7 @@ def ast_process(deco, version):
             if not stmts:
                 raise PythonError("empty comp")
             if len(stmts) == 1:
-                if not isinstance(stmts[0], StmtReturn) or not isinstance(stmts[0].val, (ExprNewListCompRaw)):
+                if not isinstance(stmts[0], StmtReturn) or not isinstance(stmts[0].val, (ExprNewListCompRaw, ExprNewSetCompRaw, ExprNewDictCompRaw)):
                     raise PythonError("weird comp function")
                 expr = stmts[0].val
                 items = [CompFor(expr.topdst, node.expr)] + expr.items
@@ -163,6 +163,10 @@ def ast_process(deco, version):
                     raise PythonError("comp arg mismatch")
                 if isinstance(expr, ExprNewListCompRaw):
                     return ExprListComp(Comp(expr.expr, items))
+                elif isinstance(expr, ExprNewSetCompRaw):
+                    return ExprSetComp(Comp(expr.expr, items))
+                elif isinstance(expr, ExprNewDictCompRaw):
+                    return ExprDictComp(expr.key, expr.val, items)
                 else:
                     raise PythonError("weird comp function")
             elif len(stmts) == 2:

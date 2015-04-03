@@ -348,6 +348,8 @@ TESTS_26.update({
 TESTS_27 = TESTS_26.copy()
 TESTS_27.update({
     'expr/set': '27',
+    'comp/set': '27',
+    'comp/dict': '27',
 })
 
 TESTS_30 = TESTS_26.copy()
@@ -361,6 +363,8 @@ TESTS_30.update({
     'comp/cond_const': '30',
     'comp/cond_not': '30',
     'comp/ctx': '30',
+    'comp/set': '27',
+    'comp/dict': '27',
     'stmt/continue3': '30',
     'stmt/raise4': '30',
     'marshal/int2': '30',

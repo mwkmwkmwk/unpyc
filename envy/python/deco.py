@@ -167,10 +167,10 @@ SetupExcept = namedtuple('SetupExcept', ['flow'])
 
 Loop = namedtuple('Loop', ['flow'])
 While = namedtuple('While', ['expr', 'end', 'block'])
-ForStart = namedtuple('ForStart', ['expr', 'loop', 'flow'])
-TopForStart = namedtuple('TopForStart', ['expr', 'loop', 'flow'])
-ForLoop = namedtuple('ForLoop', ['expr', 'dst', 'loop', 'flow'])
-TopForLoop = namedtuple('TopForLoop', ['expr', 'dst', 'loop', 'flow'])
+ForStart = namedtuple('ForStart', ['expr', 'flow'])
+TopForStart = namedtuple('TopForStart', ['expr', 'flow'])
+ForLoop = namedtuple('ForLoop', ['expr', 'dst', 'flow'])
+TopForLoop = namedtuple('TopForLoop', ['expr', 'dst', 'flow'])
 
 TryFinallyPending = namedtuple('TryFinallyPending', ['body', 'flow'])
 TryFinally = namedtuple('TryFinally', ['body'])
@@ -1221,10 +1221,7 @@ def _visit_continue(self, deco):
         if isinstance(item, Loop):
             loop = item
             break
-        elif isinstance(item, (ForLoop, TopForLoop)):
-            loop = item.loop
-            break
-        elif isinstance(item, (Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
+        elif isinstance(item, (ForLoop, TopForLoop, Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
         else:
             raise NoMatch
@@ -1244,12 +1241,9 @@ def _visit_continue(self, deco):
         if isinstance(item, Loop):
             loop = item
             break
-        elif isinstance(item, ForLoop):
-            loop = item.loop
-            break
         elif isinstance(item, (SetupExcept, SetupFinally, With)):
             seen = True
-        elif isinstance(item, (Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
+        elif isinstance(item, (ForLoop, Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
         else:
             raise NoMatch
@@ -1291,20 +1285,20 @@ def _visit_for_start(self, deco, expr, zero, loop, block):
         raise PythonError("junk in for")
     if zero.val != 0:
         raise PythonError("funny for loop start")
-    return [ForStart(expr, loop, self.flow)]
+    return [loop, ForStart(expr, self.flow)]
 
 @_visitor(Store, ForStart)
 def visit_store_multi_start(self, deco, start):
     return [
-        ForLoop(start.expr, self.dst, start.loop, start.flow),
+        ForLoop(start.expr, self.dst, start.flow),
         Block([])
     ]
 
-@_visitor(JumpUnconditional, ForLoop, Block)
-def _visit_for(self, deco, loop, inner):
-    if sorted(loop.loop.flow) != sorted(self.flow):
+@_visitor(JumpUnconditional, Loop, ForLoop, Block)
+def _visit_for(self, deco, loop, for_, inner):
+    if sorted(loop.flow) != sorted(self.flow):
         raise PythonError("mismatched for loop")
-    return [StmtForRaw(loop.expr, loop.dst, inner), WantFlow([loop.flow], [], []), WantEndLoop()]
+    return [StmtForRaw(for_.expr, for_.dst, inner), WantFlow([for_.flow], [], []), WantEndLoop()]
 
 @_visitor(EndLoop, WantEndLoop)
 def _visit_end_loop(self, deco, want):
@@ -1320,26 +1314,26 @@ def visit_get_iter(self, deco, expr):
 def _visit_for_iter(self, deco, iter_, loop, block):
     if block.stmts:
         raise PythonError("junk in for")
-    return [ForStart(iter_.expr, loop, self.flow)]
+    return [loop, ForStart(iter_.expr, self.flow)]
 
 @_visitor(OpcodeForIter, Expr, Loop, Block)
 def _visit_for_iter(self, deco, expr, loop, block):
     if block.stmts:
         raise PythonError("junk in for")
-    return [TopForStart(expr, loop, self.flow)]
+    return [loop, TopForStart(expr, self.flow)]
 
 @_visitor(Store, TopForStart)
 def visit_store_multi_start(self, deco, start):
     return [
-        TopForLoop(start.expr, self.dst, start.loop, start.flow),
+        TopForLoop(start.expr, self.dst, start.flow),
         Block([])
     ]
 
-@_visitor(JumpUnconditional, TopForLoop, Block)
-def _visit_for(self, deco, loop, inner):
-    if sorted(loop.loop.flow) != sorted(self.flow):
+@_visitor(JumpUnconditional, Loop, TopForLoop, Block)
+def _visit_for(self, deco, loop, top, inner):
+    if sorted(loop.flow) != sorted(self.flow):
         raise PythonError("mismatched for loop")
-    return [StmtForTop(loop.expr, loop.dst, inner), WantFlow([loop.flow], [], []), WantEndLoop()]
+    return [StmtForTop(top.expr, top.dst, inner), WantFlow([top.flow], [], []), WantEndLoop()]
 
 # break
 

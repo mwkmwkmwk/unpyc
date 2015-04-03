@@ -248,6 +248,7 @@ class FinalExcept(namedtuple('FinalExcept', ['body', 'items', 'any'])):
 Exprs = namedtuple('Exprs', ['attr', 'factor'])
 UglyClosures = object()
 Closures = object()
+MaybeWantFlow = object()
 
 # regurgitables
 
@@ -307,6 +308,9 @@ class _Visitor:
                     raise NoMatch
                 closure_num = len(code.freevars)
                 total += closure_num
+            elif want is MaybeWantFlow:
+                if deco.stack and isinstance(deco.stack[-1], WantFlow):
+                    total += 1
             else:
                 total += 1
         if len(deco.stack) < total:
@@ -346,6 +350,13 @@ class _Visitor:
                         raise NoMatch
                     arg.append(closure.var)
                 arg.reverse()
+            elif want is MaybeWantFlow:
+                if deco.stack and isinstance(deco.stack[-1], WantFlow):
+                    arg = stack.pop()
+                    if not isinstance(arg, WantFlow):
+                        raise NoMatch
+                else:
+                    arg = WantFlow([], [], [])
             else:
                 arg = stack.pop()
                 if not isinstance(arg, want):
@@ -1017,11 +1028,7 @@ def _visit_if_end(self, deco, final, inner):
 def _visit_if_end(self, deco, final, inner):
     return [final.maker(inner), JumpUnconditional(self.pos, self.nextpos, self.flow + final.flow)]
 
-@_visitor(FwdFlow, FinalElse, Block)
-def _visit_if_end(self, deco, final, inner):
-    return [final.maker(inner), WantFlow(final.flow, [], []), self]
-
-@_visitor(FwdFlow, FinalElse, Block, WantFlow)
+@_visitor(FwdFlow, FinalElse, Block, MaybeWantFlow)
 def _visit_if_end(self, deco, final, inner, want):
     return [final.maker(inner), WantFlow(final.flow + want.any, want.true, want.false), self]
 
@@ -1047,26 +1054,14 @@ def _visit_if_else(self, deco, block, if_, body):
 def _visit_if_else(self, deco, block, if_, body):
     return [block, FinalElse(self.flow, FinalIf(ExprNot(if_.expr), body)), Block([]), WantPop(), WantFlow([], if_.flow, [])]
 
-@_visitor(FwdFlow, AndStart, Block, Expr)
-def _visit_and(self, deco, start, block, expr):
-    if block.stmts:
-        raise PythonError("extra and statements")
-    return [ExprBoolAnd(start.expr, expr), WantFlow([], [], start.flow), self]
-
-@_visitor(FwdFlow, OrStart, Block, Expr)
-def _visit_or(self, deco, start, block, expr):
-    if block.stmts:
-        raise PythonError("extra or statements")
-    return [ExprBoolOr(start.expr, expr), WantFlow([], start.flow, []), self]
-
-@_visitor(FwdFlow, AndStart, Block, Expr, WantFlow)
+@_visitor(FwdFlow, AndStart, Block, Expr, MaybeWantFlow)
 def _visit_and(self, deco, start, block, expr, want):
     if block.stmts:
         raise PythonError("extra and statements")
     want.false.extend(start.flow)
     return [ExprBoolAnd(start.expr, expr), want, self]
 
-@_visitor(FwdFlow, OrStart, Block, Expr, WantFlow)
+@_visitor(FwdFlow, OrStart, Block, Expr, MaybeWantFlow)
 def _visit_and(self, deco, start, block, expr, want):
     if block.stmts:
         raise PythonError("extra or statements")

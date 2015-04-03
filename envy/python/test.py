@@ -354,6 +354,7 @@ TESTS_26.update({
     'defs/deco2': '26',
     'names/fun': '24',
     'stmt/import5': '26',
+    'opt/if_return': '26',
 })
 
 TESTS_27 = TESTS_26.copy()

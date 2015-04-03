@@ -189,6 +189,8 @@ class Pyc10(metaclass=PycVersion):
     has_cls_deco = False
     # has STORE_MAP opcode
     has_store_map = False
+    # kills jump opcodes after return
+    has_dead_return = False
     # has SETUP_WITH
     has_setup_with = False
     # generic py3k flag - unicode strings, ...
@@ -402,6 +404,7 @@ class Pyc26(Pyc25):
     has_cls_deco = True
     has_store_map = True
     has_exit_tmp = False
+    has_dead_return = True
 
 class Pyc27(Pyc26):
     # 62171 used in preaplha

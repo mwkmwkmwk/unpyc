@@ -1133,6 +1133,12 @@ def _visit_ifexpr(self, deco, start, block, true):
 def _visit_ifexpr_true(self, deco, expr):
     return [IfExprElse(ExprAnyTrue(), expr, self.flow), WantPop()]
 
+@_visitor(FwdFlow, AndStart, Block, flag='has_dead_return')
+def _visit_dead_if(self, deco, start, block):
+    if not block.stmts or not isinstance(block.stmts[-1], StmtReturn):
+        raise NoMatch
+    return [StmtIf([(start.expr, block)], None), WantPop(), WantFlow([], [], start.flow), self]
+
 # comparisons
 
 @_visitor(OpcodeCompareOp, Expr, Expr)

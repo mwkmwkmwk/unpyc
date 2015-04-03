@@ -139,6 +139,7 @@ TESTS_11.update({
     'opt/except_except_else': '11',
     'opt/if_return': '11',
     'opt/try_return': '11',
+    'opt/try_return2': '11',
     'opt/while_return': '11',
     'opt/for_return': '11',
     'stmt/fake_assert': '11',
@@ -355,6 +356,7 @@ TESTS_26.update({
     'names/fun': '24',
     'stmt/import5': '26',
     'opt/if_return': '26',
+    'opt/try_return2': '26',
 })
 
 TESTS_27 = TESTS_26.copy()

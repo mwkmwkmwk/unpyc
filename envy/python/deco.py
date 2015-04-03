@@ -1461,6 +1461,23 @@ def _visit_except_match_end(self, deco, try_, match, block):
         WantFlow([], [], match.next)
     ]
 
+@_visitor(FwdFlow, TryExceptMid, TryExceptMatch, Block, flag=('!has_pop_except', 'has_dead_return'))
+def _visit_except_match_end(self, deco, try_, match, block):
+    if not block.stmts or not isinstance(block.stmts[-1], StmtReturn):
+        raise NoMatch
+    return [
+        TryExceptMid(
+            try_.else_,
+            try_.body,
+            try_.items + [(match.expr, match.dst, block)],
+            None,
+            try_.flows,
+        ),
+        WantPop(),
+        WantFlow([], [], match.next),
+        self
+    ]
+
 @_visitor(OpcodePopTop, TryExceptMid)
 def _visit_except_any(self, deco, try_):
     if try_.any:
@@ -1497,13 +1514,34 @@ def _visit_except_any_end(self, deco, try_, _, block):
         )
     ]
 
+@_visitor(OpcodeEndFinally, TryExceptMid, TryExceptAny, Block, flag=('!has_pop_except', 'has_dead_return'))
+def _visit_except_any_end(self, deco, try_, _, block):
+    if not block.stmts or not isinstance(block.stmts[-1], StmtReturn):
+        raise NoMatch
+    return [
+        TryExceptMid(
+            try_.else_,
+            try_.body,
+            try_.items,
+            block,
+            try_.flows,
+        ),
+        self
+    ]
+
 @_visitor(OpcodeEndFinally, TryExceptMid)
 def _visit_except_end(self, deco, try_):
-    return [
-        FinalElse(try_.flows, FinalExcept(try_.body, try_.items, try_.any)),
-        Block([]),
-        WantFlow(try_.else_, [], [])
-    ]
+    if try_.flows:
+        return [
+            FinalElse(try_.flows, FinalExcept(try_.body, try_.items, try_.any)),
+            Block([]),
+            WantFlow(try_.else_, [], [])
+        ]
+    else:
+        return [
+            StmtExcept(try_.body, try_.items, try_.any, Block([])),
+            WantFlow(try_.else_, [], [])
+        ]
 
 # functions & classes
 

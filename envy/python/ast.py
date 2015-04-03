@@ -6,53 +6,22 @@ from .expr import *
 def uncomp(stmt, want_loop, want_top):
     items = []
     top = None
-    while True:
-        was_loop = False
-        if isinstance(stmt, StmtLoop):
-            if not want_loop:
-                raise PythonError("got $loop in comp, didn't want it")
-            if was_loop:
-                raise PythonError("double $loop in comp")
+    if want_top:
+        if want_loop:
+            if not isinstance(stmt, StmtLoop):
+                raise PythonError("want top $loop")
             if len(stmt.body.stmts) != 1:
                 raise PythonError("funny $loop")
             if stmt.else_.stmts:
                 raise PythonError("$loop with else in comp")
             stmt = stmt.body.stmts[0]
-            was_loop = True
-        if want_top:
-            if isinstance(stmt, StmtForTop):
-                if want_loop and not was_loop:
-                    raise PythonError("wanted $loop in comp")
-                was_loop = False
-                top = (stmt.dst, stmt.expr)
-                body = stmt.body.stmts
-                want_top = False
-            else:
-                raise PythonError("wanted top in comp")
-        else:
-            if isinstance(stmt, StmtForRaw):
-                if want_loop and not was_loop:
-                    raise PythonError("wanted $loop in comp")
-                was_loop = False
-                items.append(CompFor(stmt.dst, stmt.expr))
-                body = stmt.body.stmts
-            elif isinstance(stmt, StmtIfRaw):
-                if was_loop:
-                    raise PythonError("if in $loop in comp")
-                comp = CompIf(stmt.cond)
-                body = stmt.body.stmts
-                for stmt in stmt.else_.stmts:
-                    if not (isinstance(stmt, StmtJunk)
-                        and len(stmt.body.stmts) == 0
-                    ):
-                        raise PythonError("funny else statement in comp")
-                    items.append(CompIf(ExprAnyTrue()))
-                items.append(comp)
-            else:
-                if top is None:
-                    return stmt, items
-                else:
-                    return stmt, items, top
+        if not isinstance(stmt, StmtForTop):
+            raise PythonError("wanted top in comp")
+        top = (stmt.dst, stmt.expr)
+        body = stmt.body.stmts
+    else:
+        body = [stmt]
+    while True:
         if not body:
             raise PythonError("empty body in comp")
         for idx, stmt in reversed(list(enumerate(body))):
@@ -66,6 +35,24 @@ def uncomp(stmt, want_loop, want_top):
             else:
                 print(stmt)
                 raise PythonError("funny trailing statement in comp")
+        if isinstance(stmt, StmtFor if want_loop else StmtForRaw):
+            items.append(CompFor(stmt.dst, stmt.expr))
+            body = stmt.body.stmts
+        elif isinstance(stmt, StmtIfRaw):
+            comp = CompIf(stmt.cond)
+            body = stmt.body.stmts
+            for stmt in stmt.else_.stmts:
+                if not (isinstance(stmt, StmtJunk)
+                    and len(stmt.body.stmts) == 0
+                ):
+                    raise PythonError("funny else statement in comp")
+                items.append(CompIf(ExprAnyTrue()))
+            items.append(comp)
+        else:
+            if top is None:
+                return stmt, items
+            else:
+                return stmt, items, top
 
 class RootExec:
     __slots__ = 'block',
@@ -92,6 +79,7 @@ def ast_process(deco, version):
     #
     # - convert $buildclass and $classraw to $class, cleans their bodies
     # - convert $callcomp to actual comprehensions
+    # - converts $loop and $for/$while into proper for/while
 
     def process_class_body(code, name):
         if code.code.name != name:
@@ -121,6 +109,24 @@ def ast_process(deco, version):
         if isinstance(stmts[-1], StmtReturn) and not isinstance(stmts[-1].val, ExprNone):
             raise PythonError("class returns a value")
         return Block(stmts[:-1])
+
+    def process_loop(node):
+        stmts = node.body.stmts
+        if len(stmts) != 1:
+            raise PythonError("funny $loop")
+        raw = stmts[0]
+        if node.else_.stmts:
+            else_ = node.else_
+        else:
+            else_ = None
+        if isinstance(raw, StmtWhileRaw):
+            return StmtWhile(raw.expr, raw.body, else_)
+        elif isinstance(raw, StmtForRaw):
+            return StmtFor(raw.expr, raw.dst, raw.body, else_)
+        elif isinstance(raw, StmtForTop):
+            return node
+        else:
+            raise PythonError("$loop with funny contents")
 
     def process_1(node):
         node = node.subprocess(process_1)
@@ -174,6 +180,8 @@ def ast_process(deco, version):
                 return ExprGenExp(Comp(expr, [CompFor(topdst, node.expr)] + items))
             else:
                 raise PythonError("weird comp function")
+        if isinstance(node, StmtLoop):
+            return process_loop(node)
         return node
 
     deco = process_1(deco)
@@ -185,7 +193,6 @@ def ast_process(deco, version):
     # - cleans if statements: empty else suites are discarded, else suites consisting
     #   of a single if statement are changed into elif
     # - get rid of empty else suites on try except statements
-    # - converts $loop and $for/$while into proper for/while
     # - for Python 1.0, convert all $print to expression statements
 
     def process_fun_body(node):
@@ -305,22 +312,6 @@ def ast_process(deco, version):
             return StmtExcept(node.try_, node.items, node.any, None)
         return node
 
-    def process_loop(node):
-        stmts = node.body.stmts
-        if len(stmts) != 1:
-            raise PythonError("funny $loop")
-        raw = stmts[0]
-        if node.else_.stmts:
-            else_ = node.else_
-        else:
-            else_ = None
-        if isinstance(raw, StmtWhileRaw):
-            return StmtWhile(raw.expr, raw.body, else_)
-        elif isinstance(raw, StmtForRaw):
-            return StmtFor(raw.expr, raw.dst, raw.body, else_)
-        else:
-            raise PythonError("$loop with funny contents")
-
     def process_2(node):
         node = node.subprocess(process_2)
         if isinstance(node, ExprFunctionRaw):
@@ -335,8 +326,6 @@ def ast_process(deco, version):
             return process_if(StmtIf([(ExprAnyTrue(), Block([]))], node.body))
         if isinstance(node, StmtExcept):
             return process_except(node)
-        if isinstance(node, StmtLoop):
-            return process_loop(node)
         if version.always_print_expr and isinstance(node, StmtPrintExpr):
             return StmtSingle(node.val)
         return node

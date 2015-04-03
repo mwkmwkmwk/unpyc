@@ -226,7 +226,7 @@ WithExitDone = namedtuple('WithExitDone', ['stmt'])
 
 class FinalIf(namedtuple('FinalIf', ['expr', 'body'])):
     def __call__(self, else_):
-        return StmtIf([(self.expr, self.body)], else_)
+        return StmtIfRaw(self.expr, self.body, else_)
 
 class FinalLoop(namedtuple('FinalLoop', ['body'])):
     def __call__(self, else_):
@@ -1137,7 +1137,7 @@ def _visit_ifexpr_true(self, deco, expr):
 def _visit_dead_if(self, deco, start, block):
     if not block.stmts or not isinstance(block.stmts[-1], StmtReturn):
         raise NoMatch
-    return [StmtIf([(start.expr, block)], None), WantPop(), WantFlow([], [], start.flow), self]
+    return [StmtIfDead(start.expr, block), WantPop(), WantFlow([], [], start.flow), self]
 
 # comparisons
 

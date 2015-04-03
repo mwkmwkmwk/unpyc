@@ -469,6 +469,46 @@ class StmtExec(Stmt):
             )
 
 
+class StmtIfRaw(Stmt):
+    __slots__ = 'cond', 'body', 'else_'
+
+    def __init__(self, cond, body, else_):
+        self.cond = cond
+        self.body = body
+        self.else_ = else_
+
+    def subprocess(self, process):
+        return StmtIfRaw(
+            process(self.cond),
+            process(self.body),
+            process(self.else_),
+        )
+
+    def show(self):
+        yield "$if {}:".format(self.cond.show(None))
+        yield from indent(self.body.show())
+        yield "else:"
+        yield from indent(self.else_.show())
+
+
+class StmtIfDead(Stmt):
+    __slots__ = 'cond', 'body'
+
+    def __init__(self, cond, body):
+        self.cond = cond
+        self.body = body
+
+    def subprocess(self, process):
+        return StmtIfDead(
+            process(self.cond),
+            process(self.body),
+        )
+
+    def show(self):
+        yield "$if {}:".format(self.cond.show(None))
+        yield from indent(self.body.show())
+
+
 class StmtIf(Stmt):
     __slots__ = 'items', 'else_'
 

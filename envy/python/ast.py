@@ -36,18 +36,15 @@ def uncomp(stmt, want_loop, want_top):
                 was_loop = False
                 items.append(CompFor(stmt.dst, stmt.expr))
                 body = stmt.body.stmts
-            elif isinstance(stmt, StmtIf):
+            elif isinstance(stmt, StmtIfRaw):
                 if was_loop:
                     raise PythonError("if in $loop in comp")
-                if len(stmt.items) != 1:
-                    raise PythonError("funny if in comp")
-                comp = CompIf(stmt.items[0][0])
-                body = stmt.items[0][1].stmts
+                comp = CompIf(stmt.cond)
+                body = stmt.body.stmts
                 for stmt in stmt.else_.stmts:
-                    if not (isinstance(stmt, StmtIf)
-                        and len(stmt.items) == 1
-                        and isinstance(stmt.items[0][0], ExprAnyTrue)
-                        and len(stmt.items[0][1].stmts) == 0
+                    if not (isinstance(stmt, StmtIfRaw)
+                        and isinstance(stmt.cond, ExprAnyTrue)
+                        and len(stmt.body.stmts) == 0
                         and len(stmt.else_.stmts) == 0
                     ):
                         raise PythonError("funny else statement in comp")
@@ -64,10 +61,9 @@ def uncomp(stmt, want_loop, want_top):
             if idx == 0:
                 # break and leak stmt for next iteration
                 break
-            if isinstance(stmt, StmtIf):
-                if not (len(stmt.items) == 1
-                    and isinstance(stmt.items[0][0], ExprAnyTrue)
-                    and len(stmt.items[0][1].stmts) == 0
+            if isinstance(stmt, StmtIfRaw):
+                if not (isinstance(stmt.cond, ExprAnyTrue)
+                    and len(stmt.body.stmts) == 0
                     and len(stmt.else_.stmts) == 0
                 ):
                     raise PythonError("funny trailing statement in comp")
@@ -190,6 +186,7 @@ def ast_process(deco, version):
     # processing stage 2
     #
     # - convert $functionraw to $function, cleans their bodies
+    # - convert $if/$ifdead to if
     # - cleans if statements: empty else suites are discarded, else suites consisting
     #   of a single if statement are changed into elif
     # - get rid of empty else suites on try except statements
@@ -335,8 +332,10 @@ def ast_process(deco, version):
             return process_fun_body(node)
         if isinstance(node, StmtAssign):
             return process_def(node)
-        if isinstance(node, StmtIf):
-            return process_if(node)
+        if isinstance(node, StmtIfRaw):
+            return process_if(StmtIf([(node.cond, node.body)], node.else_))
+        if isinstance(node, StmtIfDead):
+            return process_if(StmtIf([(node.cond, node.body)], Block([])))
         if isinstance(node, StmtExcept):
             return process_except(node)
         if isinstance(node, StmtLoop):

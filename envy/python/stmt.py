@@ -509,6 +509,22 @@ class StmtIfDead(Stmt):
         yield from indent(self.body.show())
 
 
+class StmtJunk(Stmt):
+    __slots__ = 'body'
+
+    def __init__(self, body):
+        self.body = body
+
+    def subprocess(self, process):
+        return StmtJunk(
+            process(self.body),
+        )
+
+    def show(self):
+        yield "$junk:"
+        yield from indent(self.body.show())
+
+
 class StmtIf(Stmt):
     __slots__ = 'items', 'else_'
 

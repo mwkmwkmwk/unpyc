@@ -42,10 +42,8 @@ def uncomp(stmt, want_loop, want_top):
                 comp = CompIf(stmt.cond)
                 body = stmt.body.stmts
                 for stmt in stmt.else_.stmts:
-                    if not (isinstance(stmt, StmtIfRaw)
-                        and isinstance(stmt.cond, ExprAnyTrue)
+                    if not (isinstance(stmt, StmtJunk)
                         and len(stmt.body.stmts) == 0
-                        and len(stmt.else_.stmts) == 0
                     ):
                         raise PythonError("funny else statement in comp")
                     items.append(CompIf(ExprAnyTrue()))
@@ -61,11 +59,8 @@ def uncomp(stmt, want_loop, want_top):
             if idx == 0:
                 # break and leak stmt for next iteration
                 break
-            if isinstance(stmt, StmtIfRaw):
-                if not (isinstance(stmt.cond, ExprAnyTrue)
-                    and len(stmt.body.stmts) == 0
-                    and len(stmt.else_.stmts) == 0
-                ):
+            if isinstance(stmt, StmtJunk):
+                if stmt.body.stmts:
                     raise PythonError("funny trailing statement in comp")
                 items.append(CompIf(ExprAnyTrue()))
             else:
@@ -336,6 +331,8 @@ def ast_process(deco, version):
             return process_if(StmtIf([(node.cond, node.body)], node.else_))
         if isinstance(node, StmtIfDead):
             return process_if(StmtIf([(node.cond, node.body)], Block([])))
+        if isinstance(node, StmtJunk):
+            return process_if(StmtIf([(ExprAnyTrue(), Block([]))], node.body))
         if isinstance(node, StmtExcept):
             return process_except(node)
         if isinstance(node, StmtLoop):

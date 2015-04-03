@@ -224,6 +224,10 @@ WithExitDone = namedtuple('WithExitDone', ['stmt'])
 
 # final makers
 
+class FinalJunk(namedtuple('FinalJunk', [])):
+    def __call__(self, else_):
+        return StmtJunk(else_)
+
 class FinalIf(namedtuple('FinalIf', ['expr', 'body'])):
     def __call__(self, else_):
         return StmtIfRaw(self.expr, self.body, else_)
@@ -1029,7 +1033,7 @@ def _visit_if_end(self, deco, final, inner, want):
 
 @_visitor(JumpSkipJunk, Block)
 def _visit_if(self, deco, block):
-    return [block, FinalElse(self.flow, FinalIf(ExprAnyTrue(), Block([]))), Block([]), WantPop()]
+    return [block, FinalElse(self.flow, FinalJunk()), Block([]), WantPop()]
 
 @_visitor(JumpIfFalse, Expr)
 def _visit_if(self, deco, expr):

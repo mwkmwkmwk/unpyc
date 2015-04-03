@@ -118,6 +118,10 @@ TESTS_10 = {
     'opt/logic': '10',
     'opt/if_and': '10',
     'opt/if_or': '10',
+    'opt/if_return': '10',
+    'opt/try_return': '10',
+    'opt/while_return': '10',
+    'opt/for_return': '10',
 }
 
 TESTS_11 = TESTS_10.copy()
@@ -133,6 +137,10 @@ TESTS_11.update({
     'opt/while_except_else': '11',
     'opt/except_else_if': '11',
     'opt/except_except_else': '11',
+    'opt/if_return': '11',
+    'opt/try_return': '11',
+    'opt/while_return': '11',
+    'opt/for_return': '11',
     'stmt/fake_assert': '11',
     'stmt/fake_assert2': '11',
 })
@@ -251,6 +259,7 @@ TESTS_23.update({
     'stmt/if_logic_const': '23',
     'stmt/continue_': '23',
     'stmt/while_const': '23',
+    'opt/while_return': '23',
 })
 
 TESTS_24a1 = TESTS_23.copy()
@@ -369,6 +378,12 @@ TESTS_30.update({
     'comp/dict': '27',
     'stmt/continue3': '30',
     'stmt/raise4': '30',
+    'stmt/import_': '30',
+    'stmt/import2': '30',
+    'stmt/import3': '30',
+    'stmt/inplace': '30',
+    'stmt/inplace2': '30',
+    'stmt/inplace3': '30',
     'marshal/int2': '30',
     'marshal/str': '30',
     'defs/doc': '30',
@@ -383,6 +398,8 @@ TESTS_30.update({
     'binary/truediv': '30',
     'names/fun3': '30',
     'names/fun4': '30',
+    'names/nested2': '30',
+    'names/nested3': '30',
     'misc/unpack2': '30',
     'expr/set': '27',
     'expr/dict': '30',
@@ -416,6 +433,7 @@ TESTS_31.update({
 TESTS_32 = TESTS_31.copy()
 TESTS_32.update({
     'marshal/float': '32',
+    'stmt/import6': '32',
 })
 
 TESTS_33 = TESTS_32.copy()

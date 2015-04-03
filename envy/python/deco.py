@@ -58,10 +58,6 @@ from .ast import uncomp
 #
 #   - except a as b
 #
-# - py 3.0 & 2.7:
-#
-#   - setcomp & dictcomp [different in 3.0]
-#
 # - py 3.0:
 #
 #   - yeah, well, unicode is everywhere
@@ -69,7 +65,6 @@ from .ast import uncomp
 #   - real funny except
 #   - nonlocal
 #   - ellipsis allowed everywhere
-#   - list comprehensions are functions
 #
 # - py 2.7 & 3.1:
 #

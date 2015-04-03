@@ -1134,6 +1134,10 @@ def _visit_ifexpr(self, deco, start, block, true):
         raise PythonError("extra if expr or statements")
     return [IfExprTrue(ExprBoolOr(start.expr, true.expr), start.flow + true.flow), self]
 
+@_visitor(JumpSkipJunk, Expr)
+def _visit_ifexpr_true(self, deco, expr):
+    return [IfExprElse(ExprAnyTrue(), expr, self.flow), WantPop()]
+
 # comparisons
 
 @_visitor(OpcodeCompareOp, Expr, Expr)

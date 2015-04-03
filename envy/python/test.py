@@ -121,6 +121,7 @@ TESTS_10 = {
     'opt/if_return': '10',
     'opt/try_return': '10',
     'opt/while_return': '10',
+    'opt/while_continue': '10',
     'opt/for_return': '10',
 }
 
@@ -261,6 +262,7 @@ TESTS_23.update({
     'stmt/continue_': '23',
     'stmt/while_const': '23',
     'opt/while_return': '23',
+    'opt/while_continue': '23',
 })
 
 TESTS_24a1 = TESTS_23.copy()

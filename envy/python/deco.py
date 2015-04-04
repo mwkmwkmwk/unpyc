@@ -246,6 +246,7 @@ Exprs = namedtuple('Exprs', ['attr', 'factor'])
 UglyClosures = object()
 Closures = object()
 MaybeWantFlow = object()
+LoopDammit = object()
 
 # regurgitables
 
@@ -308,6 +309,14 @@ class _Visitor:
             elif want is MaybeWantFlow:
                 if deco.stack and isinstance(deco.stack[-1], WantFlow):
                     total += 1
+            elif want is LoopDammit:
+                for idx in reversed(range(len(deco.stack))):
+                    if isinstance(deco.stack[idx], Loop):
+                        looplen = len(deco.stack) - idx - 1
+                        total += looplen
+                        break
+                else:
+                    raise NoMatch
             else:
                 total += 1
         if len(deco.stack) < total:
@@ -354,6 +363,12 @@ class _Visitor:
                         raise NoMatch
                 else:
                     arg = WantFlow([], [], [])
+            elif want is LoopDammit:
+                if looplen:
+                    arg = stack[-looplen:]
+                    del stack[-looplen:]
+                else:
+                    arg = []
             else:
                 arg = stack.pop()
                 if not isinstance(arg, want):
@@ -1214,34 +1229,25 @@ def _visit_loop(self, deco):
 
 # continue
 
-@_visitor(JumpContinue)
-def _visit_continue(self, deco):
-    loop = None
-    for item in reversed(deco.stack):
-        if isinstance(item, Loop):
-            loop = item
-            break
-        elif isinstance(item, (ForLoop, TopForLoop, Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
+@_visitor(JumpContinue, Loop, LoopDammit)
+def _visit_continue(self, deco, loop, items):
+    for item in items:
+        if isinstance(item, (ForLoop, TopForLoop, Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
         else:
             raise NoMatch
-    if loop is None:
-        raise NoMatch
     for flow in self.flow:
         if flow not in loop.flow:
             print(self.flow)
             raise PythonError("weird flow in continue")
         loop.flow.remove(flow)
-    return [StmtContinue()]
+    return [loop] + items + [StmtContinue()]
 
-@_visitor(OpcodeContinueLoop)
-def _visit_continue(self, deco):
+@_visitor(OpcodeContinueLoop, Loop, LoopDammit)
+def _visit_continue(self, deco, loop, items):
     seen = False
-    for item in reversed(deco.stack):
-        if isinstance(item, Loop):
-            loop = item
-            break
-        elif isinstance(item, (SetupExcept, SetupFinally, With)):
+    for item in items:
+        if isinstance(item, (SetupExcept, SetupFinally, With)):
             seen = True
         elif isinstance(item, (ForLoop, Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
             pass
@@ -1249,12 +1255,10 @@ def _visit_continue(self, deco):
             raise NoMatch
     if not seen:
         raise PythonError("got CONTINUE_LOOP where a JUMP_ABSOLUTE would suffice")
-    if loop is None:
-        raise NoMatch
     if self.flow not in loop.flow:
         raise NoMatch
     loop.flow.remove(self.flow)
-    return [StmtContinue()]
+    return [loop] + items + [StmtContinue()]
 
 # while loop
 

@@ -148,8 +148,7 @@ UnpackBeforeSlot = namedtuple('UnpackBeforeSlot', ['expr', 'idx'])
 UnpackAfterSlot = namedtuple('UnpackAfterSlot', ['expr', 'idx'])
 UnpackStarSlot = namedtuple('UnpackStarSlot', ['expr'])
 
-AndStart = namedtuple('AndStart', ['expr', 'flow'])
-OrStart = namedtuple('OrStart', ['expr', 'flow'])
+IfStart = namedtuple('IfStart', ['expr', 'flow', 'neg', 'pop'])
 IfExprTrue = namedtuple('IfExprTrue', ['expr', 'flow'])
 IfExprElse = namedtuple('IfExprElse', ['cond', 'true', 'flow'])
 IfDead = namedtuple('IfDead', ['cond', 'true', 'flow'])
@@ -262,6 +261,8 @@ class Inplace(Regurgitable, namedtuple('Inplace', ['stmt'])): pass
 
 class JumpIfTrue(OpcodeFlow): pass
 class JumpIfFalse(OpcodeFlow): pass
+class PopJumpIfTrue(OpcodeFlow): pass
+class PopJumpIfFalse(OpcodeFlow): pass
 class JumpUnconditional(OpcodeFlow): pass
 class JumpContinue(OpcodeFlow): pass
 class JumpSkipJunk(OpcodeFlow): pass
@@ -273,6 +274,12 @@ class RevFlow(Regurgitable, namedtuple('RevFlow', ['flow'])): pass
 # for checks
 
 Regurgitable = (Regurgitable, Stmt, Opcode)
+
+def _maybe_want_pop(flag):
+    if flag:
+        return None
+    else:
+        return WantPop()
 
 # visitors
 
@@ -812,8 +819,10 @@ def _visit_return(self, deco, expr):
 
 # assert. ouch. has to be before raise.
 
-@_visitor(OpcodeRaiseVarargs, AndStart, Block, OrStart, Block, Exprs('param', 1), flag=('has_assert', '!has_short_assert'))
+@_visitor(OpcodeRaiseVarargs, IfStart, Block, IfStart, Block, Exprs('param', 1), flag=('has_assert', '!has_short_assert'))
 def _visit_assert_1(self, deco, ifstart, block, orstart, block2, exprs):
+    if ifstart.neg or not orstart.neg or ifstart.pop or orstart.pop:
+        raise NoMatch
     if block.stmts or block2.stmts:
         raise PythonError("extra assert statements")
     if not isinstance(exprs[0], ExprGlobal) or exprs[0].name != 'AssertionError':
@@ -827,8 +836,10 @@ def _visit_assert_1(self, deco, ifstart, block, orstart, block2, exprs):
     else:
         raise PythonError("funny assert params")
 
-@_visitor(FwdFlow, OrStart, Block, flag=('has_short_assert', '!has_raise_from'))
+@_visitor(FwdFlow, IfStart, Block, flag=('has_short_assert', '!has_raise_from'))
 def _visit_assert_2(self, deco, start, body):
+    if not start.neg or start.pop:
+        raise NoMatch
     if (len(body.stmts) != 1
         or not isinstance(body.stmts[0], StmtRaise)
         or not isinstance(body.stmts[0].cls, ExprGlobal)
@@ -838,8 +849,10 @@ def _visit_assert_2(self, deco, start, body):
         raise NoMatch
     return [AssertJunk(start.expr, body.stmts[0].val), WantFlow([], start.flow, []), self]
 
-@_visitor(FwdFlow, OrStart, Block, flag=('has_short_assert', 'has_raise_from'))
+@_visitor(FwdFlow, IfStart, Block, flag=('has_short_assert', 'has_raise_from'))
 def _visit_assert_2(self, deco, start, body):
+    if not start.neg or start.pop:
+        raise NoMatch
     if (len(body.stmts) != 1
         or not isinstance(body.stmts[0], StmtRaise)
         or body.stmts[0].tb is not None
@@ -862,8 +875,10 @@ def _visit_assert_2(self, deco, start, body):
 def _visit_assert_junk(self, deco, junk):
     return [StmtAssert(*junk)]
 
-@_visitor(FwdFlow, OrStart, Block, AssertJunk, flag='has_jump_cond_fold')
+@_visitor(FwdFlow, IfStart, Block, AssertJunk, flag='has_jump_cond_fold')
 def _visit_assert_or(self, deco, start, block, junk):
+    if not start.neg or start.pop:
+        raise NoMatch
     if block.stmts:
         raise NoMatch
     return [AssertJunk(ExprBoolOr(start.expr, junk.expr), junk.msg), WantFlow([], start.flow, []), self]
@@ -1040,6 +1055,14 @@ def _visit_pop_jit(self, deco):
 def _visit_pop_jit(self, deco):
     return [JumpIfFalse(self.pos, self.nextpos, [self.flow])]
 
+@_visitor(OpcodePopJumpIfTrue)
+def _visit_pop_jit(self, deco):
+    return [PopJumpIfTrue(self.pos, self.nextpos, [self.flow])]
+
+@_visitor(OpcodePopJumpIfFalse)
+def _visit_pop_jit(self, deco):
+    return [PopJumpIfFalse(self.pos, self.nextpos, [self.flow])]
+
 @_visitor(JumpIfTrue, WantFlow)
 def _visit_extra(self, deco, extra):
     if extra.false or extra.any:
@@ -1081,50 +1104,66 @@ def _visit_if(self, deco, block):
 
 @_visitor(JumpIfFalse, Expr)
 def _visit_if(self, deco, expr):
-    return [AndStart(expr, self.flow), Block([]), WantPop()]
+    return [IfStart(expr, self.flow, False, False), Block([]), WantPop()]
 
 @_visitor(JumpIfTrue, Expr)
 def _visit_if(self, deco, expr):
-    return [OrStart(expr, self.flow), Block([]), WantPop()]
+    return [IfStart(expr, self.flow, True, False), Block([]), WantPop()]
 
-@_visitor(JumpUnconditional, Block, AndStart, Block)
-def _visit_if_else(self, deco, block, if_, body):
-    return [block, FinalElse(self.flow, FinalIf(if_.expr, body)), Block([]), WantPop(), WantFlow([], [], if_.flow)]
+@_visitor(PopJumpIfFalse, Expr)
+def _visit_if(self, deco, expr):
+    return [IfStart(expr, self.flow, False, True), Block([])]
 
-@_visitor(JumpUnconditional, Block, OrStart, Block, flag='has_if_not_opt')
-def _visit_if_else(self, deco, block, if_, body):
-    return [block, FinalElse(self.flow, FinalIf(ExprNot(if_.expr), body)), Block([]), WantPop(), WantFlow([], if_.flow, [])]
+@_visitor(PopJumpIfTrue, Expr)
+def _visit_if(self, deco, expr):
+    return [IfStart(expr, self.flow, True, True), Block([])]
 
-@_visitor(FwdFlow, AndStart, Block, Expr, MaybeWantFlow)
+@_visitor(JumpUnconditional, Block, IfStart, Block)
+def _visit_if_else(self, deco, block, start, body):
+    if start.neg:
+        if not deco.version.has_if_not_opt:
+            raise NoMatch
+        expr = ExprNot(start.expr)
+    else:
+        expr = start.expr
+    return [
+        block,
+        FinalElse(self.flow, FinalIf(expr, body)),
+        Block([]),
+        _maybe_want_pop(start.pop),
+        WantFlow(start.flow, [], [])
+    ]
+
+@_visitor(FwdFlow, IfStart, Block, Expr, MaybeWantFlow)
 def _visit_and(self, deco, start, block, expr, want):
+    if start.pop:
+        raise NoMatch
     if block.stmts:
-        raise PythonError("extra and statements")
-    want.false.extend(start.flow)
-    return [ExprBoolAnd(start.expr, expr), want, self]
+        raise PythonError("extra and/or statements")
+    if start.neg:
+        want.true.extend(start.flow)
+        return [ExprBoolOr(start.expr, expr), want, self]
+    else:
+        want.false.extend(start.flow)
+        return [ExprBoolAnd(start.expr, expr), want, self]
 
-@_visitor(FwdFlow, AndStart, Block, WantReturn, MaybeWantFlow)
+@_visitor(FwdFlow, IfStart, Block, WantReturn, MaybeWantFlow)
 def _visit_and(self, deco, start, block, ret, want):
+    if start.pop:
+        raise NoMatch
     if block.stmts:
-        raise PythonError("extra and statements")
-    want.false.extend(start.flow)
-    return [WantReturn(ExprBoolAnd(start.expr, ret.expr)), want, self]
+        raise PythonError("extra and/or statements")
+    if start.neg:
+        want.true.extend(start.flow)
+        return [WantReturn(ExprBoolOr(start.expr, ret.expr)), want, self]
+    else:
+        want.false.extend(start.flow)
+        return [WantReturn(ExprBoolAnd(start.expr, ret.expr)), want, self]
 
-@_visitor(FwdFlow, OrStart, Block, Expr, MaybeWantFlow)
-def _visit_and(self, deco, start, block, expr, want):
-    if block.stmts:
-        raise PythonError("extra or statements")
-    want.true.extend(start.flow)
-    return [ExprBoolOr(start.expr, expr), want, self]
-
-@_visitor(FwdFlow, OrStart, Block, WantReturn, MaybeWantFlow)
-def _visit_and(self, deco, start, block, ret, want):
-    if block.stmts:
-        raise PythonError("extra or statements")
-    want.true.extend(start.flow)
-    return [WantReturn(ExprBoolOr(start.expr, ret.expr)), want, self]
-
-@_visitor(FwdFlow, AndStart, Block, FinalElse, Block, WantPop, flag='has_jump_cond_fold')
+@_visitor(FwdFlow, IfStart, Block, FinalElse, Block, WantPop, flag='has_jump_cond_fold')
 def _visit_folded_if(self, deco, start, blocka, final, blockb, _):
+    if start.pop or start.neg:
+        raise NoMatch
     if blocka.stmts:
         raise PythonError("extra and-if statements")
     if_ = final.maker
@@ -1132,8 +1171,10 @@ def _visit_folded_if(self, deco, start, blocka, final, blockb, _):
         raise NoMatch
     return [FinalElse(final.flow, FinalIf(ExprBoolAnd(start.expr, if_.expr), if_.body)), blockb, WantPop(), WantFlow([], [], start.flow), self]
 
-@_visitor(FwdFlow, AndStart, Block, WantPop, MaybeWantFlow, flag='has_jump_cond_fold')
+@_visitor(FwdFlow, IfStart, Block, WantPop, MaybeWantFlow, flag='has_jump_cond_fold')
 def _visit_folded_if(self, deco, start, block, _, want):
+    if start.pop or start.neg:
+        raise NoMatch
     if len(block.stmts) != 1:
         raise PythonError("extra and-ifdead statements")
     if_ = block.stmts[0]
@@ -1146,21 +1187,24 @@ def _visit_folded_if(self, deco, start, block, _, want):
 def _visit_ifexpr(self, deco, expr):
     return [IfExprTrue(expr, self.flow)]
 
-@_visitor(FwdFlow, AndStart, Block, IfExprTrue)
+@_visitor(FwdFlow, IfStart, Block, IfExprTrue)
 def _visit_ifexpr(self, deco, start, block, true):
+    if start.pop:
+        raise NoMatch
     if self.flow not in start.flow:
         raise NoMatch
     if block.stmts:
         raise PythonError("extra if expr statements")
-    return [IfExprElse(start.expr, true.expr, true.flow), WantPop(), WantFlow([], [], start.flow), self]
-
-@_visitor(FwdFlow, OrStart, Block, IfExprTrue)
-def _visit_ifexpr(self, deco, start, block, true):
-    if self.flow not in start.flow:
-        raise NoMatch
-    if block.stmts:
-        raise PythonError("extra if expr statements")
-    return [IfExprElse(ExprNot(start.expr), true.expr, true.flow), WantPop(), WantFlow([], start.flow, []), self]
+    if start.neg:
+        expr = ExprNot(start.expr)
+    else:
+        expr = start.expr
+    return [
+        IfExprElse(expr, true.expr, true.flow),
+        _maybe_want_pop(start.pop),
+        WantFlow(start.flow, [], []),
+        self
+    ]
 
 @_visitor(FwdFlow, IfExprElse, Expr, MaybeWantFlow)
 def _visit_ifexpr(self, deco, if_, false, want):
@@ -1168,32 +1212,34 @@ def _visit_ifexpr(self, deco, if_, false, want):
     want.any.extend(if_.flow)
     return [ExprIf(if_.cond, if_.true, false), want, self]
 
-@_visitor(FwdFlow, AndStart, Block, IfExprElse, WantPop, MaybeWantFlow, flag='has_jump_cond_fold')
+@_visitor(FwdFlow, IfStart, Block, IfExprElse, WantPop, MaybeWantFlow, flag='has_jump_cond_fold')
 def _visit_folded_if(self, deco, start, block, if_, _, want):
+    if start.pop or start.neg:
+        raise NoMatch
     if block.stmts:
         raise PythonError("extra and-if expr statements")
     want.false.extend(start.flow)
     return [IfExprElse(ExprBoolAnd(start.expr, if_.cond), if_.true, if_.flow), WantPop(), want, self]
 
-@_visitor(FwdFlow, AndStart, Block, IfExprTrue)
+@_visitor(FwdFlow, IfStart, Block, IfExprTrue)
 def _visit_ifexpr(self, deco, start, block, true):
+    if start.pop:
+        raise NoMatch
     if self.flow in start.flow:
         raise NoMatch
     if block.stmts:
-        raise PythonError("extra if expr and statements")
-    return [IfExprTrue(ExprBoolAnd(start.expr, true.expr), start.flow + true.flow), self]
-
-@_visitor(FwdFlow, OrStart, Block, IfExprTrue)
-def _visit_ifexpr(self, deco, start, block, true):
-    if self.flow in start.flow:
-        raise NoMatch
-    if block.stmts:
-        raise PythonError("extra if expr or statements")
-    return [IfExprTrue(ExprBoolOr(start.expr, true.expr), start.flow + true.flow), self]
+        raise PythonError("extra if expr and/or statements")
+    if not start.neg:
+        return [IfExprTrue(ExprBoolAnd(start.expr, true.expr), start.flow + true.flow), self]
+    else:
+        return [IfExprTrue(ExprBoolOr(start.expr, true.expr), start.flow + true.flow), self]
 
 @_visitor(JumpSkipJunk, Expr)
 def _visit_ifexpr_true(self, deco, expr):
-    return [IfExprElse(ExprAnyTrue(), expr, self.flow), WantPop()]
+    return [
+        IfExprElse(ExprAnyTrue(), expr, self.flow),
+        WantPop()
+    ]
 
 # XXX nuke it
 def _ensure_dead_end(deco, block):
@@ -1235,27 +1281,31 @@ def _process_dead_end(deco, block):
         raise PythonError("invalid dead block {}".format(final))
     return block
 
-@_visitor(FwdFlow, AndStart, Block, MaybeWantFlow)
+@_visitor(FwdFlow, IfStart, Block, MaybeWantFlow)
 def _visit_dead_if(self, deco, start, block, want):
     block = _process_dead_end(deco, block)
+    if start.neg:
+        expr = ExprNot(start.expr)
+    else:
+        expr = start.expr
     if any(want):
-        return [FinalElse(want.any + want.true + want.false, FinalIf(start.expr, block)), Block([]), WantPop(), WantFlow([], [], start.flow), self]
+        return [
+            FinalElse(want.any + want.true + want.false, FinalIf(expr, block)),
+            Block([]),
+            _maybe_want_pop(start.pop),
+            WantFlow(start.flow, [], []),
+            self
+        ]
     elif self.flow in start.flow:
-        return [StmtIfDead(start.expr, block), WantPop(), WantFlow([], [], start.flow), self]
+        return [
+            StmtIfDead(expr, block),
+            _maybe_want_pop(start.pop),
+            WantFlow(start.flow, [], []),
+            self
+        ]
     else:
         true = unreturn(block)
         # TODO: somehow verify stuff is going to be returned in this case
-        return [start, Block([]), IfExprTrue(true, []), self]
-
-@_visitor(FwdFlow, OrStart, Block, MaybeWantFlow)
-def _visit_dead_if_not(self, deco, start, block, want):
-    block = _process_dead_end(deco, block)
-    if any(want):
-        return [FinalElse(want.any + want.true + want.false, FinalIf(ExprNot(start.expr), block)), Block([]), WantPop(), WantFlow([], start.flow, []), self]
-    elif self.flow in start.flow:
-        return [StmtIfDead(ExprNot(start.expr), block), WantPop(), WantFlow([], start.flow, []), self]
-    else:
-        true = unreturn(block)
         return [start, Block([]), IfExprTrue(true, []), self]
 
 # comparisons
@@ -1342,10 +1392,20 @@ def _visit_loop(self, deco):
 
 # continue
 
+CONTINUABLES = (
+    ForLoop,
+    Block,
+    IfStart,
+    FinalElse,
+    TryExceptMid,
+    TryExceptMatch,
+    TryExceptAny,
+)
+
 @_visitor(JumpContinue, Loop, LoopDammit)
 def _visit_continue(self, deco, loop, items):
     for item in items:
-        if isinstance(item, (ForLoop, TopForLoop, Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptEndTry)):
+        if isinstance(item, CONTINUABLES) or isinstance(item, (TopForLoop, TryExceptEndTry)):
             pass
         else:
             raise NoMatch
@@ -1361,7 +1421,7 @@ def _visit_continue(self, deco, loop, items):
     for item in items:
         if isinstance(item, (SetupExcept, SetupFinally, With)):
             seen = True
-        elif isinstance(item, (ForLoop, Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny)):
+        elif isinstance(item, CONTINUABLES):
             pass
         else:
             raise NoMatch
@@ -1444,7 +1504,7 @@ def _visit_while_true(self, deco, setup, body, flag=('has_while_true_end_opt', '
 @_visitor(JumpContinue, SetupLoop, Block, Loop, Block, LoopDammit)
 def _visit_continue(self, deco, setup, block, loop, body, items):
     for item in items:
-        if isinstance(item, (ForLoop, TopForLoop, Block, AndStart, OrStart, FinalElse, TryExceptMid, TryExceptMatch, TryExceptAny, TryExceptEndTry)):
+        if isinstance(item, CONTINUABLES) or isinstance(item, (TopForLoop, TryExceptEndTry)):
             pass
         else:
             raise NoMatch
@@ -1608,12 +1668,19 @@ def _visit_except_match_check(self, deco, try_, _, expr):
         raise PythonError("funny except match")
     return [try_, TryExceptMatchMid(expr)]
 
-@_visitor(JumpIfFalse, TryExceptMatchMid)
+@_visitor(JumpIfFalse, TryExceptMatchMid, flag='!has_new_jump')
 def _visit_except_match_jump(self, deco, mid):
     return [
         TryExceptMatchOk(mid.expr, self.flow),
         WantPop(),
         WantPop()
+    ]
+
+@_visitor(PopJumpIfFalse, TryExceptMatchMid, flag='has_new_jump')
+def _visit_except_match_jump(self, deco, mid):
+    return [
+        TryExceptMatchOk(mid.expr, self.flow),
+        WantPop(),
     ]
 
 @_visitor(OpcodePopTop, TryExceptMatchOk)
@@ -1646,7 +1713,7 @@ def _visit_except_match_end(self, deco, try_, match, block, want, _):
             None,
             try_.flows + want.any + want.true + want.false,
         ),
-        WantPop(),
+        _maybe_want_pop(deco.version.has_new_jump),
         WantFlow([], [], match.next),
         self
     ]
@@ -1661,7 +1728,7 @@ def _visit_except_match_end(self, deco, try_, match, block, _):
             None,
             try_.flows + self.flow,
         ),
-        WantPop(),
+        _maybe_want_pop(deco.version.has_new_jump),
         WantFlow([], [], match.next)
     ]
 
@@ -1675,7 +1742,7 @@ def _visit_except_match_end(self, deco, try_, match, block):
             None,
             try_.flows + self.flow,
         ),
-        WantPop(),
+        _maybe_want_pop(deco.version.has_new_jump),
         WantFlow([], [], match.next)
     ]
 
@@ -1690,7 +1757,7 @@ def _visit_except_match_end(self, deco, try_, match, block, want):
             None,
             try_.flows + want.any + want.true + want.false,
         ),
-        WantPop(),
+        _maybe_want_pop(deco.version.has_new_jump),
         WantFlow([], [], match.next),
         self
     ]
@@ -2370,7 +2437,9 @@ class DecoCtx:
                     pass
                 else:
                     for item in res:
-                        if isinstance(item, Regurgitable):
+                        if item is None:
+                            pass
+                        elif isinstance(item, Regurgitable):
                             self.process(item)
                         else:
                             self.stack.append(item)

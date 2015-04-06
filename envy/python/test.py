@@ -380,6 +380,7 @@ TESTS_27.update({
     'expr/set': '27',
     'comp/set': '27',
     'comp/dict': '27',
+    'opt/logic': '27',
 })
 
 TESTS_30 = TESTS_26.copy()

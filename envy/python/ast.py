@@ -3,6 +3,21 @@ from .helpers import PythonError
 from .stmt import *
 from .expr import *
 
+def unreturn(block):
+    expr = None
+    for stmt in reversed(block.stmts):
+        if expr is None:
+            if not isinstance(stmt, StmtReturn):
+                raise PythonError("lambda body has no return")
+            expr = stmt.val
+        else:
+            if not isinstance(stmt, StmtIfDead):
+                raise PythonError("weird stmt in lambda body: {}".format(type(stmt).__name__))
+            expr = ExprIf(stmt.cond, unreturn(stmt.body), expr)
+    if expr is None:
+        raise PythonError("empty lambda body")
+    return expr
+
 def uncomp(stmt, want_loop, want_top):
     items = []
     top = None
@@ -367,21 +382,6 @@ def ast_process(deco, version):
     #
     # - makes lambdas
     # - makes sure function/class-related junk is gone
-
-    def unreturn(block):
-        expr = None
-        for stmt in reversed(block.stmts):
-            if expr is None:
-                if not isinstance(stmt, StmtReturn):
-                    raise PythonError("lambda body has no return")
-                expr = stmt.val
-            else:
-                if not isinstance(stmt, StmtIfDead):
-                    raise PythonError("weird stmt in lambda body: {}".format(type(stmt).__name__))
-                expr = ExprIf(stmt.cond, unreturn(stmt.body), expr)
-        if expr is None:
-            raise PythonError("empty lambda body")
-        return expr
 
     def process_lambda(node):
         if node.name is not None and node.name != '<lambda>':

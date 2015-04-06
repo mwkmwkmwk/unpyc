@@ -6,7 +6,7 @@ from .stmt import *
 from .expr import *
 from .code import Code
 from .bytecode import *
-from .ast import uncomp
+from .ast import uncomp, unreturn
 
 TRACE = False
 
@@ -152,6 +152,7 @@ AndStart = namedtuple('AndStart', ['expr', 'flow'])
 OrStart = namedtuple('OrStart', ['expr', 'flow'])
 IfExprTrue = namedtuple('IfExprTrue', ['expr', 'flow'])
 IfExprElse = namedtuple('IfExprElse', ['cond', 'true', 'flow'])
+IfDead = namedtuple('IfDead', ['cond', 'true', 'flow'])
 
 CompareStart = namedtuple('CompareStart', ['items', 'flows'])
 Compare = namedtuple('Compare', ['items', 'flows'])
@@ -1223,16 +1224,23 @@ def _visit_dead_if(self, deco, start, block, want):
     block = _process_dead_end(deco, block)
     if any(want):
         return [FinalElse(want.any + want.true + want.false, FinalIf(start.expr, block)), Block([]), WantPop(), WantFlow([], [], start.flow), self]
-    else:
+    elif self.flow in start.flow:
         return [StmtIfDead(start.expr, block), WantPop(), WantFlow([], [], start.flow), self]
+    else:
+        true = unreturn(block)
+        # TODO: somehow verify stuff is going to be returned in this case
+        return [start, Block([]), IfExprTrue(true, []), self]
 
 @_visitor(FwdFlow, OrStart, Block, MaybeWantFlow)
 def _visit_dead_if_not(self, deco, start, block, want):
     block = _process_dead_end(deco, block)
     if any(want):
         return [FinalElse(want.any + want.true + want.false, FinalIf(ExprNot(start.expr), block)), Block([]), WantPop(), WantFlow([], start.flow, []), self]
-    else:
+    elif self.flow in start.flow:
         return [StmtIfDead(ExprNot(start.expr), block), WantPop(), WantFlow([], start.flow, []), self]
+    else:
+        true = unreturn(block)
+        return [start, Block([]), IfExprTrue(true, []), self]
 
 # comparisons
 

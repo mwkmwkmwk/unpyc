@@ -372,6 +372,7 @@ TESTS_26.update({
     'opt/if_return': '26',
     'opt/while_return': '26',
     'opt/try_return2': '26',
+    'opt/return_if': '26',
 })
 
 TESTS_27 = TESTS_26.copy()

@@ -161,6 +161,7 @@ CompareNext = namedtuple('CompareNext', ['items', 'flows'])
 WantPop = namedtuple('WantPop', [])
 WantRotPop = namedtuple('WantRotPop', [])
 WantFlow = namedtuple('WantFlow', ['any', 'true', 'false'])
+WantReturn = namedtuple('WantReturn', [])
 
 SetupLoop = namedtuple('SetupLoop', ['flow'])
 SetupFinally = namedtuple('SetupFinally', ['flow'])
@@ -1264,6 +1265,20 @@ def _visit_cmp_last_jump(self, deco, cmp):
         WantRotPop(),
         WantFlow([], [], cmp.flows)
     ]
+
+# end #2 - return
+@_visitor(OpcodeReturnValue, CompareLast, flag='has_dead_return')
+def _visit_cmp_last_jump(self, deco, cmp):
+    return [
+        StmtReturn(ExprCmp(cmp.items)),
+        WantReturn(),
+        WantRotPop(),
+        WantFlow([], [], cmp.flows),
+    ]
+
+@_visitor(OpcodeReturnValue, WantReturn)
+def _visit_want_return(self, deco, _):
+    return []
 
 # $loop framing
 

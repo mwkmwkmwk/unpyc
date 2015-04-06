@@ -418,6 +418,7 @@ class Pyc27(Pyc26):
     has_new_comp = True
     has_setup_with = True
     has_new_jump = True
+    has_genexp_loop = False
 
 # 62213 used in pypy 1.5
 # 62217 used in pypy 2.1

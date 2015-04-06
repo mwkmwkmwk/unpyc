@@ -1024,6 +1024,22 @@ def _visit_extra(self, deco, extra):
 def _visit_extra(self, deco, pop):
     return [self, pop]
 
+@_visitor(OpcodeJumpIfTrueOrPop)
+def _visit_pop_jit(self, deco):
+    return [JumpIfTrue(self.pos, self.nextpos, [self.flow]), OpcodePopTop(self.pos, self.nextpos)]
+
+@_visitor(OpcodeJumpIfFalseOrPop)
+def _visit_pop_jit(self, deco):
+    return [JumpIfFalse(self.pos, self.nextpos, [self.flow]), OpcodePopTop(self.pos, self.nextpos)]
+
+@_visitor(OpcodeJumpIfTrue)
+def _visit_pop_jit(self, deco):
+    return [JumpIfTrue(self.pos, self.nextpos, [self.flow])]
+
+@_visitor(OpcodeJumpIfFalse)
+def _visit_pop_jit(self, deco):
+    return [JumpIfFalse(self.pos, self.nextpos, [self.flow])]
+
 @_visitor(JumpIfTrue, WantFlow)
 def _visit_extra(self, deco, extra):
     if extra.false or extra.any:
@@ -2306,7 +2322,7 @@ class DecoCtx:
         # second pass: figure out the kinds of absolute jumps
         condflow = {op.nextpos: [] for op in ops}
         for op in ops:
-            if isinstance(op, (OpcodeJumpIfTrue, OpcodeJumpIfFalse, OpcodeForLoop, OpcodeForIter, OpcodeSetupExcept)):
+            if isinstance(op, (OpcodePopJumpIfTrue, OpcodePopJumpIfFalse, OpcodeJumpIfTrueOrPop, OpcodeJumpIfFalseOrPop, OpcodeJumpIfTrue, OpcodeJumpIfFalse, OpcodeForLoop, OpcodeForIter, OpcodeSetupExcept)):
                 condflow[op.flow.dst].append(op.flow)
         inflow = process_flow(ops)
         newops = []
@@ -2339,12 +2355,6 @@ class DecoCtx:
                     op = JumpSkipJunk(op.pos, op.nextpos, [op.flow])
                 else:
                     op = JumpUnconditional(op.pos, op.nextpos, [op.flow])
-                newops.append(op)
-            elif isinstance(op, OpcodeJumpIfTrue):
-                op = JumpIfTrue(op.pos, op.nextpos, [op.flow])
-                newops.append(op)
-            elif isinstance(op, OpcodeJumpIfFalse):
-                op = JumpIfFalse(op.pos, op.nextpos, [op.flow])
                 newops.append(op)
             else:
                 newops.append(op)

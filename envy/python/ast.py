@@ -32,12 +32,18 @@ def uncomp(stmt, want_loop, want_top):
                 if stmt.body.stmts:
                     raise PythonError("funny trailing statement in comp")
                 items.append(CompIf(ExprAnyTrue()))
+            elif isinstance(stmt, StmtFinalContinue):
+                pass
             else:
                 print(stmt)
                 raise PythonError("funny trailing statement in comp")
         if isinstance(stmt, StmtFor if want_loop else StmtForRaw):
             items.append(CompFor(stmt.dst, stmt.expr))
             body = stmt.body.stmts
+        elif isinstance(stmt, StmtIfDead):
+            comp = CompIf(stmt.cond)
+            body = stmt.body.stmts
+            items.append(comp)
         elif isinstance(stmt, StmtIfRaw):
             comp = CompIf(stmt.cond)
             body = stmt.body.stmts
@@ -125,7 +131,10 @@ def ast_process(deco, version):
             return StmtFor(raw.expr, raw.dst, raw.body, else_)
         elif isinstance(raw, StmtForTop):
             return node
+        elif isinstance(raw, StmtIfDead):
+            return StmtWhile(raw.cond, raw.body, else_)
         else:
+            print(raw)
             raise PythonError("$loop with funny contents")
 
     def process_1(node):
@@ -194,6 +203,32 @@ def ast_process(deco, version):
     #   of a single if statement are changed into elif
     # - get rid of empty else suites on try except statements
     # - for Python 1.0, convert all $print to expression statements
+
+    def _maybe_block(block):
+        if block.stmts:
+            return block
+        else:
+            return None
+
+    def _end_continue(block):
+        return block and block.stmts and isinstance(block.stmts[-1], StmtFinalContinue)
+
+    def process_block_2(node):
+        for idx, stmt in enumerate(node.stmts):
+            if isinstance(stmt, StmtIfDead) and _end_continue(stmt.body):
+                if_ = StmtIfRaw(stmt.cond, stmt.body, process_block_2(Block(node.stmts[idx+1:])))
+                return Block(node.stmts[:idx] + [if_])
+            if isinstance(stmt, StmtExceptDead):
+                if (_end_continue(stmt.try_) or _end_continue(stmt.any) or
+                any(_end_continue(item) for (_, _, item) in stmt.items)):
+                    try_ = StmtExcept(stmt.try_, stmt.items, stmt.any, _maybe_block(process_block_2(Block(node.stmts[idx+1:]))))
+                    return Block(node.stmts[:idx] + [try_])
+        return node
+
+    def process_block_3(node):
+        if node.stmts and isinstance(node.stmts[-1], StmtFinalContinue):
+            return Block(node.stmts[:-1])
+        return node
 
     def process_fun_body(node):
         stmts = node.code.block.stmts
@@ -318,16 +353,12 @@ def ast_process(deco, version):
             return process_fun_body(node)
         if isinstance(node, StmtAssign):
             return process_def(node)
-        if isinstance(node, StmtIfRaw):
-            return process_if(StmtIf([(node.cond, node.body)], node.else_))
-        if isinstance(node, StmtIfDead):
-            return process_if(StmtIf([(node.cond, node.body)], Block([])))
         if isinstance(node, StmtJunk):
             return process_if(StmtIf([(ExprAnyTrue(), Block([]))], node.body))
-        if isinstance(node, StmtExcept):
-            return process_except(node)
         if version.always_print_expr and isinstance(node, StmtPrintExpr):
             return StmtSingle(node.val)
+        if isinstance(node, Block):
+            return process_block_2(node)
         return node
 
     deco = process_2(deco)
@@ -349,7 +380,21 @@ def ast_process(deco, version):
 
     def process_3(node):
         node = node.subprocess(process_3)
-        if isinstance(node, ExprFunction):
+        if isinstance(node, StmtIfRaw):
+            return process_if(StmtIf([(node.cond, node.body)], node.else_))
+        if isinstance(node, StmtIfDead):
+            return StmtIf([(node.cond, node.body)], None)
+        if isinstance(node, StmtExceptDead):
+            return StmtExcept(node.try_, node.items, node.any, None)
+        if isinstance(node, StmtExcept):
+            return process_except(node)
+        if isinstance(node, StmtFor):
+            if not node.else_ or not node.else_.stmts:
+                return StmtFor(node.expr, node.dst, node.body, None)
+        if isinstance(node, StmtWhile):
+            if not node.else_ or not node.else_.stmts:
+                return StmtWhile(node.expr, node.body, None)
+        elif isinstance(node, ExprFunction):
             return process_lambda(node)
         elif isinstance(node, ExprClass):
             raise PythonError("$class still alive")
@@ -357,6 +402,8 @@ def ast_process(deco, version):
             raise PythonError("$args still alive")
         elif isinstance(node, StmtEndClass):
             raise PythonError("$endclass still alive")
+        if isinstance(node, Block):
+            return process_block_3(node)
         return node
 
     deco = process_3(deco)

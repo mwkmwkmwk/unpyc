@@ -727,6 +727,43 @@ class StmtExcept(Stmt):
             yield from indent(self.else_.show())
 
 
+class StmtExceptDead(Stmt):
+    __slots__ = 'try_', 'items', 'any'
+
+    def __init__(self, try_, items, any):
+        self.try_ = try_
+        self.items = items
+        self.any = any
+
+    def subprocess(self, process):
+        return StmtExceptDead(
+            process(self.try_),
+            [
+                (
+                    process(expr),
+                    process(dst) if dst else None,
+                    process(body),
+                )
+                for expr, dst, body in self.items
+            ],
+            process(self.any) if self.any else None,
+        )
+
+    def show(self):
+        yield "$trydead:"
+        yield from indent(self.try_.show())
+        for expr, dst, body in self.items:
+            if dst is None:
+                yield 'except {}:'.format(expr.show(None))
+            else:
+                # TODO as
+                yield 'except {}, {}:'.format(expr.show(None), dst.show(None))
+            yield from indent(body.show())
+        if self.any is not None:
+            yield "except:"
+            yield from indent(self.any.show())
+
+
 class StmtBreak(Stmt):
     __slots__ = ()
 
@@ -745,6 +782,16 @@ class StmtContinue(Stmt):
 
     def show(self):
         yield 'continue'
+
+
+class StmtFinalContinue(Stmt):
+    __slots__ = ()
+
+    def subprocess(self, process):
+        return self
+
+    def show(self):
+        yield '$finalcontinue'
 
 
 class StmtAccess(Stmt):

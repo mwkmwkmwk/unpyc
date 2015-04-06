@@ -111,7 +111,11 @@ TESTS_10 = {
     'opt/while_if': '10',
     'opt/while_except': '10',
     'opt/for_if': '10',
+    'opt/for_if_not': '10',
+    'opt/cond': '10',
+    'opt/cond_const': '10',
     'opt/if_while': '10',
+    'opt/if_while_true': '10',
     'opt/except_while': '10',
     'opt/deep': '10',
     'opt/continue_': '10',
@@ -123,6 +127,8 @@ TESTS_10 = {
     'opt/while_return': '10',
     'opt/while_continue': '10',
     'opt/for_return': '10',
+    'opt/for_try_if': '10',
+    'opt/return_cmp': '10',
 }
 
 TESTS_11 = TESTS_10.copy()
@@ -143,6 +149,7 @@ TESTS_11.update({
     'opt/try_return2': '11',
     'opt/while_return': '11',
     'opt/for_return': '11',
+    'opt/return_cmp': '11',
     'stmt/fake_assert': '11',
     'stmt/fake_assert2': '11',
 })
@@ -263,6 +270,8 @@ TESTS_23.update({
     'stmt/while_const': '23',
     'opt/while_return': '23',
     'opt/while_continue': '23',
+    'opt/cond_const': '23',
+    'opt/if_while_true': '23',
 })
 
 TESTS_24a1 = TESTS_23.copy()
@@ -297,6 +306,7 @@ TESTS_24a3.update({
     'misc/unpack': '24',
     'opt/if_and': '24',
     'opt/logic': '24',
+    'opt/cond_const': '24',
 })
 
 TESTS_24 = TESTS_24a3.copy()
@@ -333,6 +343,8 @@ TESTS_25a1.update({
     'comp/cond_const': '25',
     'genexp/complex': '25',
     'genexp/cond_const': '25',
+    'opt/cond_const': '25',
+    'opt/return_if': '25',
 })
 
 TESTS_25b3 = TESTS_25a1.copy()
@@ -358,6 +370,7 @@ TESTS_26.update({
     'names/fun': '24',
     'stmt/import5': '26',
     'opt/if_return': '26',
+    'opt/while_return': '26',
     'opt/try_return2': '26',
 })
 
@@ -569,10 +582,9 @@ for v in VERSIONS:
                 if exp != res:
                     print("Result mismatch for {}".format(test))
                     mismatch += 1
-            if exp != res:
-                with resfile.open("w") as resf:
-                    for line in res:
-                        resf.write(line)
+            with resfile.open("w") as resf:
+                for line in res:
+                    resf.write(line)
 
     if failed or mismatch or missing or nopyc:
         print("STATS: {} failed, {} missing, {} mismatch, {} no pyc".format(failed, missing, mismatch, nopyc))

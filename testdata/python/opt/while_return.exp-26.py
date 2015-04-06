@@ -32,7 +32,7 @@ def f():
 		return $global[c]
 		$global[d]
 		return $global[e]
-	else:
 		$global[f]
 		return $global[g]
+	else:
 		$global[h]

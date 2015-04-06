@@ -27,3 +27,12 @@ def f():
 	else:
 		$global[d]
 	$global[e]
+	while 1:
+		$global[b]
+		return $global[c]
+		$global[d]
+		return $global[e]
+	else:
+		$global[f]
+		return $global[g]
+		$global[h]

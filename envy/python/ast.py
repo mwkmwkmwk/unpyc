@@ -368,18 +368,36 @@ def ast_process(deco, version):
     # - makes lambdas
     # - makes sure function/class-related junk is gone
 
+    def unreturn(block):
+        expr = None
+        for stmt in reversed(block.stmts):
+            if expr is None:
+                if not isinstance(stmt, StmtReturn):
+                    raise PythonError("lambda body has no return")
+                expr = stmt.val
+            else:
+                if not isinstance(stmt, StmtIfDead):
+                    raise PythonError("weird stmt in lambda body: {}".format(type(stmt).__name__))
+                expr = ExprIf(stmt.cond, unreturn(stmt.body), expr)
+        if expr is None:
+            raise PythonError("empty lambda body")
+        return expr
+
     def process_lambda(node):
-        stmts = node.block.stmts
         if node.name is not None and node.name != '<lambda>':
             raise PythonError("lambda with a name: {}".format(node.name))
-        if len(stmts) != 1:
-            raise PythonError("lambda body too long")
-        if not isinstance(stmts[0], StmtReturn):
-            raise PythonError("lambda body has no return")
-        return ExprLambda(node.args, stmts[0].val)
+        return ExprLambda(node.args, unreturn(node.block))
 
     def process_3(node):
         node = node.subprocess(process_3)
+        if isinstance(node, ExprFunction):
+            return process_lambda(node)
+        return node
+
+    deco = process_3(deco)
+
+    def process_4(node):
+        node = node.subprocess(process_4)
         if isinstance(node, StmtIfRaw):
             return process_if(StmtIf([(node.cond, node.body)], node.else_))
         if isinstance(node, StmtIfDead):
@@ -394,8 +412,6 @@ def ast_process(deco, version):
         if isinstance(node, StmtWhile):
             if not node.else_ or not node.else_.stmts:
                 return StmtWhile(node.expr, node.body, None)
-        elif isinstance(node, ExprFunction):
-            return process_lambda(node)
         elif isinstance(node, ExprClass):
             raise PythonError("$class still alive")
         elif isinstance(node, StmtArgs):
@@ -406,7 +422,7 @@ def ast_process(deco, version):
             return process_block_3(node)
         return node
 
-    deco = process_3(deco)
+    deco = process_4(deco)
 
     # wrap the top level
     stmts = deco.block.stmts

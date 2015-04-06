@@ -161,7 +161,7 @@ CompareNext = namedtuple('CompareNext', ['items', 'flows'])
 WantPop = namedtuple('WantPop', [])
 WantRotPop = namedtuple('WantRotPop', [])
 WantFlow = namedtuple('WantFlow', ['any', 'true', 'false'])
-WantReturn = namedtuple('WantReturn', [])
+WantReturn = namedtuple('WantReturn', ['expr'])
 
 SetupLoop = namedtuple('SetupLoop', ['flow'])
 SetupFinally = namedtuple('SetupFinally', ['flow'])
@@ -1085,12 +1085,26 @@ def _visit_and(self, deco, start, block, expr, want):
     want.false.extend(start.flow)
     return [ExprBoolAnd(start.expr, expr), want, self]
 
+@_visitor(FwdFlow, AndStart, Block, WantReturn, MaybeWantFlow)
+def _visit_and(self, deco, start, block, ret, want):
+    if block.stmts:
+        raise PythonError("extra and statements")
+    want.false.extend(start.flow)
+    return [WantReturn(ExprBoolAnd(start.expr, ret.expr)), want, self]
+
 @_visitor(FwdFlow, OrStart, Block, Expr, MaybeWantFlow)
 def _visit_and(self, deco, start, block, expr, want):
     if block.stmts:
         raise PythonError("extra or statements")
     want.true.extend(start.flow)
     return [ExprBoolOr(start.expr, expr), want, self]
+
+@_visitor(FwdFlow, OrStart, Block, WantReturn, MaybeWantFlow)
+def _visit_and(self, deco, start, block, ret, want):
+    if block.stmts:
+        raise PythonError("extra or statements")
+    want.true.extend(start.flow)
+    return [WantReturn(ExprBoolOr(start.expr, ret.expr)), want, self]
 
 @_visitor(FwdFlow, AndStart, Block, FinalElse, Block, WantPop, flag='has_jump_cond_fold')
 def _visit_folded_if(self, deco, start, blocka, final, blockb, _):
@@ -1270,15 +1284,14 @@ def _visit_cmp_last_jump(self, deco, cmp):
 @_visitor(OpcodeReturnValue, CompareLast, flag='has_dead_return')
 def _visit_cmp_last_jump(self, deco, cmp):
     return [
-        StmtReturn(ExprCmp(cmp.items)),
-        WantReturn(),
+        WantReturn(ExprCmp(cmp.items)),
         WantRotPop(),
         WantFlow([], [], cmp.flows),
     ]
 
 @_visitor(OpcodeReturnValue, WantReturn)
-def _visit_want_return(self, deco, _):
-    return []
+def _visit_want_return(self, deco, want):
+    return [StmtReturn(want.expr)]
 
 # $loop framing
 

@@ -2373,16 +2373,20 @@ class DecoCtx:
             after_jif = {}
             after_jit = {}
             for op in ops:
-                if isinstance(op, OpcodeJumpIfFalse):
+                if isinstance(op, (OpcodeJumpIfFalse, OpcodeJumpIfFalseOrPop, OpcodePopJumpIfFalse)):
                     after_jif[op.nextpos] = op.pos
-                elif isinstance(op, OpcodeJumpIfTrue):
+                elif isinstance(op, (OpcodeJumpIfTrue, OpcodeJumpIfTrueOrPop, OpcodePopJumpIfTrue)):
                     after_jit[op.nextpos] = op.pos
             newops = []
             for op in ops:
                 if isinstance(op, OpcodeJumpIfFalse) and op.flow.dst in after_jit:
                     newops.append(OpcodeJumpIfFalse(op.pos, op.nextpos, Flow(op.pos, after_jit[op.flow.dst])))
+                elif isinstance(op, OpcodePopJumpIfFalse) and op.flow.dst in after_jit:
+                    newops.append(OpcodeJumpIfFalseOrPop(op.pos, op.nextpos, Flow(op.pos, after_jit[op.flow.dst])))
                 elif isinstance(op, OpcodeJumpIfTrue) and op.flow.dst in after_jif:
                     newops.append(OpcodeJumpIfTrue(op.pos, op.nextpos, Flow(op.pos, after_jif[op.flow.dst])))
+                elif isinstance(op, OpcodePopJumpIfTrue) and op.flow.dst in after_jif:
+                    newops.append(OpcodeJumpIfTrueOrPop(op.pos, op.nextpos, Flow(op.pos, after_jif[op.flow.dst])))
                 else:
                     newops.append(op)
             ops = newops

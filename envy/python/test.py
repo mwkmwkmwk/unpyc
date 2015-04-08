@@ -381,6 +381,8 @@ TESTS_27.update({
     'comp/set': '27',
     'comp/dict': '27',
     'opt/logic': '27',
+    'expr/logic_const': '27',
+    'stmt/while_const': '27',
 })
 
 TESTS_30 = TESTS_26.copy()

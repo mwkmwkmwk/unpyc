@@ -63,7 +63,6 @@ TRACE = False
 # - py 3.0:
 #
 #   - yeah, well, unicode is everywhere
-#   - annotations
 #   - real funny except
 #   - nonlocal
 #   - ellipsis allowed everywhere
@@ -689,12 +688,12 @@ def visit_unpack_opt_three_skip(self, deco, a, b, c, _1, _2):
 
 @_visitor(OpcodeUnpackArg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
+    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None, {})
     return [StmtArgs(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(OpcodeUnpackVararg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None)
+    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None, {})
     return [StmtArgs(res), UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(Store, UnpackArgSlot)
@@ -1857,45 +1856,58 @@ def _visit_except_end(self, deco, try_):
 
 @_visitor(OpcodeBuildFunction, Code)
 def _visit_build_function(self, deco, code):
-    return [ExprFunctionRaw(deco_code(code), [], {}, [])]
+    return [ExprFunctionRaw(deco_code(code), [], {}, {}, [])]
 
 @_visitor(OpcodeSetFuncArgs, ExprTuple, ExprFunctionRaw)
 def _visit_set_func_args(self, deco, args, fun):
     # bug alert: def f(a, b=1) is compiled as def f(a=1, b)
-    return [ExprFunctionRaw(fun.code, args.exprs, {}, [])]
+    return [ExprFunctionRaw(fun.code, args.exprs, {}, {}, [])]
 
 # make function - py 1.3+
 
+def _make_ann(deco, ann):
+    if not ann:
+        return {}
+    *vals, keys = ann
+    if not isinstance(keys, ExprTuple):
+        raise PythonError("no ann tuple")
+    if len(vals) != len(keys.exprs):
+        raise PythonError("ann len mismatch")
+    return {deco.string(k): v for k, v in zip(keys.exprs, vals)}
+
 @_visitor(OpcodeMakeFunction, Exprs('param', 1), Code)
 def _visit_make_function(self, deco, args, code):
-    return [ExprFunctionRaw(deco_code(code), args, {}, [])]
+    return [ExprFunctionRaw(deco_code(code), args, {}, {}, [])]
 
-@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Code, flag='!has_qualname')
-def _visit_make_function(self, deco, kwargs, args, code):
+@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Exprs('ann', 1), Code, flag='!has_qualname')
+def _visit_make_function(self, deco, kwargs, args, ann, code):
     return [ExprFunctionRaw(
         deco_code(code),
         args,
         {deco.string(name): arg for name, arg in kwargs},
+        _make_ann(deco, ann),
         []
     )]
 
-@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Code, ExprUnicode, flag=('has_qualname', 'has_reversed_def_kwargs'))
-def _visit_make_function(self, deco, kwargs, args, code, qualname):
+@_visitor(OpcodeMakeFunctionNew, Exprs('kwargs', 2), Exprs('args', 1), Exprs('ann', 1), Code, ExprUnicode, flag=('has_qualname', 'has_reversed_def_kwargs'))
+def _visit_make_function(self, deco, kwargs, args, ann, code, qualname):
     # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),
         args,
         {deco.string(name): arg for name, arg in kwargs},
+        _make_ann(deco, ann),
         []
     )]
 
-@_visitor(OpcodeMakeFunctionNew, Exprs('args', 1), Exprs('kwargs', 2), Code, ExprUnicode, flag=('has_qualname', '!has_reversed_def_kwargs'))
-def _visit_make_function(self, deco, args, kwargs, code, qualname):
+@_visitor(OpcodeMakeFunctionNew, Exprs('args', 1), Exprs('kwargs', 2), Exprs('ann', 1), Code, ExprUnicode, flag=('has_qualname', '!has_reversed_def_kwargs'))
+def _visit_make_function(self, deco, args, kwargs, ann, code, qualname):
     # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),
         args,
         {deco.string(name): arg for name, arg in kwargs},
+        _make_ann(deco, ann),
         []
     )]
 
@@ -1905,38 +1917,41 @@ def visit_closure_tuple(self, deco, closures):
 
 @_visitor(OpcodeMakeClosure, Exprs('param', 1), UglyClosures, Code, flag='!has_sane_closure')
 def _visit_make_function(self, deco, args, closures, code):
-    return [ExprFunctionRaw(deco_code(code), args, {}, closures)]
+    return [ExprFunctionRaw(deco_code(code), args, {}, {}, closures)]
 
 @_visitor(OpcodeMakeClosure, Exprs('param', 1), ClosuresTuple, Code, flag='has_sane_closure')
 def _visit_make_function(self, deco, args, closures, code):
-    return [ExprFunctionRaw(deco_code(code), args, {}, closures.vars)]
+    return [ExprFunctionRaw(deco_code(code), args, {}, {}, closures.vars)]
 
-@_visitor(OpcodeMakeClosureNew, Exprs('kwargs', 2), Exprs('args', 1), ClosuresTuple, Code, flag='!has_qualname')
-def _visit_make_function(self, deco, kwargs, args, closures, code):
+@_visitor(OpcodeMakeClosureNew, Exprs('kwargs', 2), Exprs('args', 1), Exprs('ann', 1), ClosuresTuple, Code, flag='!has_qualname')
+def _visit_make_function(self, deco, kwargs, args, ann, closures, code):
     return [ExprFunctionRaw(
         deco_code(code),
         args,
         {deco.string(name): arg for name, arg in kwargs},
+        _make_ann(deco, ann),
         closures.vars
     )]
 
-@_visitor(OpcodeMakeClosureNew, Exprs('kwargs', 2), Exprs('args', 1), ClosuresTuple, Code, ExprUnicode, flag=('has_qualname', 'has_reversed_def_kwargs'))
-def _visit_make_function(self, deco, kwargs, args, closures, code, qualname):
+@_visitor(OpcodeMakeClosureNew, Exprs('kwargs', 2), Exprs('args', 1), Exprs('ann', 1), ClosuresTuple, Code, ExprUnicode, flag=('has_qualname', 'has_reversed_def_kwargs'))
+def _visit_make_function(self, deco, kwargs, args, ann, closures, code, qualname):
     # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),
         args,
         {deco.string(name): arg for name, arg in kwargs},
+        _make_ann(deco, ann),
         closures.vars
     )]
 
-@_visitor(OpcodeMakeClosureNew, Exprs('args', 1), Exprs('kwargs', 2), ClosuresTuple, Code, ExprUnicode, flag=('has_qualname', '!has_reversed_def_kwargs'))
-def _visit_make_function(self, deco, args, kwargs, closures, code, qualname):
+@_visitor(OpcodeMakeClosureNew, Exprs('args', 1), Exprs('kwargs', 2), Exprs('ann', 1), ClosuresTuple, Code, ExprUnicode, flag=('has_qualname', '!has_reversed_def_kwargs'))
+def _visit_make_function(self, deco, args, kwargs, ann, closures, code, qualname):
     # XXX qualname
     return [ExprFunctionRaw(
         deco_code(code),
         args,
         {deco.string(name): arg for name, arg in kwargs},
+        _make_ann(deco, ann),
         closures.vars
     )]
 
@@ -1961,7 +1976,7 @@ def _visit_build_class(self, deco, name, bases, call):
     fun = call.expr
     if not isinstance(fun, ExprFunctionRaw):
         raise PythonError("class call with non-function")
-    if fun.defargs or fun.defkwargs:
+    if fun.defargs or fun.defkwargs or fun.ann:
         raise PythonError("class call with a function with default arguments")
     return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), fun.code, fun.closures)]
 
@@ -2173,6 +2188,7 @@ def visit_listcomp_item(self, deco, tmp, val, _, key):
 def visit_call_function(self, deco, fun, arg):
     if (fun.defargs
         or fun.defkwargs
+        or fun.ann
         or self.args != 1
         or self.kwargs != 0
     ):

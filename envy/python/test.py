@@ -412,6 +412,7 @@ TESTS_30.update({
     'defs/gen': '30',
     'defs/cls': '30',
     'defs/fun5': '30',
+    'defs/fun6': '30',
     'defs/lambda2': '30',
     'stmt/except2': '30',
     'stmt/with_': '30',

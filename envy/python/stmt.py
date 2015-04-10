@@ -1,10 +1,11 @@
 from envy.show import indent
 from .helpers import PythonError
+from .expr import ExprFast
 
 class FunArgs:
-    __slots__ = 'args', 'defargs', 'vararg', 'kwargs', 'defkwargs', 'varkw'
+    __slots__ = 'args', 'defargs', 'vararg', 'kwargs', 'defkwargs', 'varkw', 'ann'
 
-    def __init__(self, args, defargs, vararg, kwargs, defkwargs, varkw):
+    def __init__(self, args, defargs, vararg, kwargs, defkwargs, varkw, ann):
         self.args = args
         if len(defargs) < len(args):
             defargs = [None] * (len(args) - len(defargs)) + defargs
@@ -13,6 +14,7 @@ class FunArgs:
         self.kwargs = kwargs
         self.defkwargs = defkwargs
         self.varkw = varkw
+        self.ann = ann
 
     def subprocess(self, process):
         return FunArgs(
@@ -22,37 +24,44 @@ class FunArgs:
             [process(arg) for arg in self.kwargs],
             {name: process(arg) for name, arg in self.defkwargs.items()},
             process(self.varkw) if self.varkw else None,
+            {name: process(arg) for name, arg in self.ann.items()},
         )
 
-    def setdefs(self, defargs, defkwargs):
+    def setdefs(self, defargs, defkwargs, ann):
         return FunArgs(
             self.args,
             defargs,
             self.vararg,
             self.kwargs,
             defkwargs,
-            self.varkw
+            self.varkw,
+            ann
         )
 
     def show(self):
+        def _ann(arg):
+            if not isinstance(arg, ExprFast):
+                return None
+            return self.ann.get(arg.name)
         chunks = [
-            ('', arg, defarg)
+            ('', arg, defarg, _ann(arg))
             for arg, defarg in zip(self.args, self.defargs)
         ]
         if self.vararg:
-            chunks.append(('*', self.vararg, None))
+            chunks.append(('*', self.vararg, None, _ann(self.vararg)))
         elif self.kwargs:
-            chunks.append(('*', None, None))
-        chunks.extend([('', arg, self.defkwargs.get(arg.name)) for arg in self.kwargs])
+            chunks.append(('*', None, None, None))
+        chunks.extend([('', arg, self.defkwargs.get(arg.name), _ann(arg)) for arg in self.kwargs])
         if self.varkw:
-            chunks.append(('**', self.varkw, None))
+            chunks.append(('**', self.varkw, None, _ann(self.varkw)))
         return ', '.join(
-            '{}{}{}'.format(
+            '{}{}{}{}'.format(
                 pref,
                 arg.show(None) if arg else '',
+                ": {}".format(ann.show(None)) if ann else '',
                 "={}".format(defarg.show(None)) if defarg else ''
             )
-            for pref, arg, defarg in chunks
+            for pref, arg, defarg, ann in chunks
         )
 
 
@@ -913,9 +922,10 @@ class StmtDef(Stmt):
     def show(self):
         for d in self.deco:
             yield '@{}'.format(d.show(None))
-        yield 'def {}({}):'.format(
+        yield 'def {}({}){}:'.format(
             self.name,
-            self.args.show()
+            self.args.show(),
+            ' -> {}'.format(self.args.ann['return'].show(None)) if 'return' in self.args.ann else '',
         )
         yield from indent(self.body.show())
 

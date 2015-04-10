@@ -245,7 +245,7 @@ class Code:
                 argidx += 1
             else:
                 varkw = None
-            self.args = FunArgs(args, [], vararg, kwargs, {}, varkw)
+            self.args = FunArgs(args, [], vararg, kwargs, {}, varkw, {})
 
     def show(self):
         yield 'CODE'

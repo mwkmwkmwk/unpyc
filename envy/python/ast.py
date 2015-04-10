@@ -165,7 +165,7 @@ def ast_process(deco, version):
                 raise PythonError("funny args to $buildclass")
             name = args[1][1].val
             fun = args[0][1]
-            if fun.defargs or fun.defkwargs:
+            if fun.defargs or fun.defkwargs or fun.ann:
                 raise PythonError("class function has def args")
             # TODO closure information lost here
             return ExprClass(name, CallArgs(args[2:]), process_class_body_new(fun.code, name))
@@ -252,7 +252,7 @@ def ast_process(deco, version):
             # complex arguments (if any) are handled as assignment statements
             # at the beginning
             # TODO: move the unshare to a saner location
-            args = process_2(node.code.code.args).setdefs(node.defargs, node.defkwargs)
+            args = process_2(node.code.code.args).setdefs(node.defargs, node.defkwargs, node.ann)
             if version.has_complex_args:
                 # split leaking on purpose
                 for split, stmt in enumerate(stmts):
@@ -287,7 +287,7 @@ def ast_process(deco, version):
             # old code - the first statement should be $args unpacking
             if not stmts or not isinstance(stmts[0], StmtArgs):
                 raise PythonError("no $args in function def")
-            args = stmts[0].args.setdefs(node.defargs, node.defkwargs)
+            args = stmts[0].args.setdefs(node.defargs, node.defkwargs, node.ann)
             split = 1
         return ExprFunction(
             node.code.code.name,
@@ -384,6 +384,8 @@ def ast_process(deco, version):
     # - makes sure function/class-related junk is gone
 
     def process_lambda(node):
+        if node.args.ann:
+            raise PythonError("lambda with ann")
         if node.name is not None and node.name != '<lambda>':
             raise PythonError("lambda with a name: {}".format(node.name))
         return ExprLambda(node.args, unreturn(node.block))

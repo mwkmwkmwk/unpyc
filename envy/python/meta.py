@@ -21,12 +21,16 @@ class BaseField:
                 self.type.__name__,
                 val
             ))
+        val = self.process(val)
         if not self.volatile and hasattr(obj, self.name):
             raise TypeError("field already set")
         self.slot.__set__(obj, val)
 
     def __delete__(self, obj):
         raise TypeError("cannot delete node attribute")
+
+    def process(self, val):
+        return val
 
 class Field(BaseField):
     def typecheck(self, val):
@@ -50,13 +54,19 @@ class MaybeField(BaseField):
 
 class ListField(BaseField):
     def typecheck(self, val):
-        if not isinstance(val, list):
+        if not isinstance(val, (tuple, list)):
             return False
         return all(isinstance(x, self.type) for x in val)
 
     def subprocess(self, val, process):
         if self.sub:
             return [process(x) for x in val]
+        else:
+            return val
+
+    def process(self, val):
+        if not self.volatile:
+            return tuple(val)
         else:
             return val
 

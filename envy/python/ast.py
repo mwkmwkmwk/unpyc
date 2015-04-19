@@ -10,7 +10,7 @@ class Stmt(Node, abstract=True):
 
 
 class Block(Node):
-    stmts = ListField(Stmt)
+    stmts = ListField(Stmt, volatile=True)
 
     def show(self):
         for stmt in self.stmts:
@@ -22,7 +22,7 @@ class Block(Node):
 class FunArgs(Node):
     args = ListField(Expr)
     defargs = ListField(Expr)
-    vararg = MaybeField(Expr, volatile=True)
+    vararg = MaybeField(Expr)
     kwargs = ListField(Expr)
     defkwargs = DictField(str, Expr)
     varkw = MaybeField(Expr)
@@ -47,7 +47,7 @@ class FunArgs(Node):
             return self.ann.get(arg.name)
         chunks = [
             ('', arg, defarg, _ann(arg))
-            for arg, defarg in zip(self.args, [None] * (len(self.args) - len(self.defargs)) + self.defargs)
+            for arg, defarg in zip(self.args, [None] * (len(self.args) - len(self.defargs)) + list(self.defargs))
         ]
         if self.vararg:
             chunks.append(('*', self.vararg, None, _ann(self.vararg)))

@@ -719,13 +719,13 @@ def visit_unpack_opt_three_skip(self, deco, a, b, c, _1, _2):
 
 @_visitor(OpcodeUnpackArg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([], [], None, [], {}, None, {})
-    return [StmtArgs(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
+    res = StmtArgs([], None)
+    return [res] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(OpcodeUnpackVararg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([], [], None, [], {}, None, {})
-    return [StmtArgs(res), UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
+    res = StmtArgs([], None)
+    return [res, UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(Store, UnpackArgSlot)
 def visit_store_unpack_arg(self, deco, slot):

@@ -179,7 +179,7 @@ def ast_process(deco, version):
                 if not isinstance(stmts[0], StmtReturn) or not isinstance(stmts[0].val, (ExprNewListCompRaw, ExprNewSetCompRaw, ExprNewDictCompRaw)):
                     raise PythonError("weird comp function")
                 expr = stmts[0].val
-                items = [CompFor(expr.topdst, node.expr)] + expr.items
+                items = [CompFor(expr.topdst, node.expr)] + list(expr.items)
                 if not isinstance(expr.arg, ExprFast) or expr.arg.idx != 0:
                     raise PythonError("comp arg mismatch")
                 if isinstance(expr, ExprNewListCompRaw):
@@ -255,6 +255,7 @@ def ast_process(deco, version):
             args = process_2(node.code.code.args).setdefs(node.defargs, node.defkwargs, node.ann)
             if version.has_complex_args:
                 # split leaking on purpose
+                myargs = list(args.args)
                 for split, stmt in enumerate(stmts):
                     if not (
                         # stmt has to be an assignment...
@@ -274,7 +275,16 @@ def ast_process(deco, version):
                     # make sure the arg is still a fast var...
                     if not isinstance(args.args[stmt.expr.idx], ExprFast):
                         raise PythonError("a tuple arg already substituted?")
-                    args.args[stmt.expr.idx] = stmt.dests[0]
+                    myargs[stmt.expr.idx] = stmt.dests[0]
+                args = FunArgs(
+                    myargs,
+                    args.defargs,
+                    args.vararg,
+                    args.kwargs,
+                    args.defkwargs,
+                    args.varkw,
+                    args.ann
+                )
             else:
                 split = 0
             # now validate closures, if any
@@ -287,7 +297,8 @@ def ast_process(deco, version):
             # old code - the first statement should be $args unpacking
             if not stmts or not isinstance(stmts[0], StmtArgs):
                 raise PythonError("no $args in function def")
-            args = stmts[0].args.setdefs(node.defargs, node.defkwargs, node.ann)
+            stmt = stmts[0]
+            args = FunArgs(stmt.args, node.defargs, stmt.vararg, [], node.defkwargs, None, node.ann)
             split = 1
         return ExprFunction(
             node.code.code.name,

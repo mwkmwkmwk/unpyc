@@ -153,7 +153,7 @@ class ExprUnicode(Expr):
 
 
 class ExprTuple(Expr):
-    exprs = ListField(Expr)
+    exprs = ListField(Expr, volatile=True)
 
     def show(self, ctx):
         # XXX
@@ -164,7 +164,7 @@ class ExprTuple(Expr):
 
 
 class ExprList(Expr):
-    exprs = ListField(Expr)
+    exprs = ListField(Expr, volatile=True)
 
     def show(self, ctx):
         # XXX
@@ -174,7 +174,7 @@ class ExprList(Expr):
 
 
 class ExprSet(Expr):
-    exprs = ListField(Expr)
+    exprs = ListField(Expr, volatile=True)
 
     def show(self, ctx):
         # XXX
@@ -226,7 +226,7 @@ class DictItem(Node):
 
 
 class ExprDict(Expr):
-    items = ListField(DictItem)
+    items = ListField(DictItem, volatile=True)
 
     def show(self, ctx):
         return '{{{}}}'.format(
@@ -238,9 +238,9 @@ class ExprDict(Expr):
 
 
 class ExprUnpackEx(Expr):
-    before = ListField(Expr)
+    before = ListField(Expr, volatile=True)
     star = MaybeField(Expr, volatile=True)
-    after = ListField(Expr)
+    after = ListField(Expr, volatile=True)
 
     def show(self, ctx):
         if not self.before and not self.after:

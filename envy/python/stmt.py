@@ -469,10 +469,16 @@ class StmtAccess(Stmt):
 
 
 class StmtArgs(Stmt):
-    args = Field(FunArgs)
+    args = ListField(Expr, volatile=True)
+    vararg = MaybeField(Expr, volatile=True)
 
     def show(self):
-        yield "$args {}".format(self.args.show())
+        yield "$args {}".format(
+            ', '.join(
+                [x.show(None) for x in self.args] +
+                [self.vararg.show(None)] if self.vararg else []
+            )
+        )
 
 
 class StmtClass(Stmt):

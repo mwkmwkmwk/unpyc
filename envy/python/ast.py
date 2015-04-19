@@ -1,4 +1,4 @@
-from .meta import Node, Field, MaybeField, ListField, DictField
+from envy.meta import Node, Field, MaybeField, ListField, DictField
 
 
 class Expr(Node, abstract=True):

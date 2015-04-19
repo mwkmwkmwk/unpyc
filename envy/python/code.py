@@ -120,20 +120,20 @@ class CodeDict:
     """
     __slots__ = 'names',
 
-    def __init__(self, val):
-        self.names = [None for x in range(len(val))]
-        if not val:
+    def __init__(self, items):
+        self.names = [None for x in range(len(items))]
+        if not items:
             raise PythonError("empty CodeDict")
-        for k, v in val:
-            if not isinstance(k, MarshalString):
+        for item in items:
+            if not isinstance(item.key, MarshalString):
                 raise PythonError("CodeDict key not string")
-            if not isinstance(v, MarshalInt):
+            if not isinstance(item.val, MarshalInt):
                 raise PythonError("CodeDict value not int")
-            if v.val not in range(len(val)):
+            if item.val.val not in range(len(items)):
                 raise PythonError("funny var index in CodeDict")
-            if self.names[v.val] is not None:
+            if self.names[item.val.val] is not None:
                 raise PythonError("duplicate var index in CodeDict")
-            self.names[v.val] = k.val.decode('ascii')
+            self.names[item.val.val] = item.key.val.decode('ascii')
 
     def show(self):
         yield "DICT"
@@ -203,7 +203,7 @@ class Code:
             if isinstance(const, MarshalCode):
                 self.consts.append(Code(const, version))
             elif isinstance(const, MarshalDict):
-                self.consts.append(CodeDict(const.val))
+                self.consts.append(CodeDict(const.items))
             else:
                 self.consts.append(from_marshal(const, version))
         # names

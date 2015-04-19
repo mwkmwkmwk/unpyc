@@ -1,4 +1,4 @@
-from envy.meta import Node, Field, MaybeField, ListField, DictField
+from envy.meta import Node, Field, ListField, DictField
 
 
 class Expr(Node, abstract=True):
@@ -22,10 +22,10 @@ class Block(Node):
 class FunArgs(Node):
     args = ListField(Expr)
     defargs = ListField(Expr)
-    vararg = MaybeField(Expr)
+    vararg = Field(Expr, optional=True)
     kwargs = ListField(Expr)
     defkwargs = DictField(str, Expr)
-    varkw = MaybeField(Expr)
+    varkw = Field(Expr, optional=True)
     ann = DictField(str, Expr)
 
     def setdefs(self, defargs, defkwargs, ann):

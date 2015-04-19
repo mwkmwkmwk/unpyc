@@ -138,9 +138,9 @@ class StmtDel(Stmt):
 
 
 class StmtRaise(Stmt):
-    cls = MaybeField(Expr)
-    val = MaybeField(Expr)
-    tb = MaybeField(Expr)
+    cls = Field(Expr, optional=True)
+    val = Field(Expr, optional=True)
+    tb = Field(Expr, optional=True)
 
     def show(self):
         if self.cls is None:
@@ -187,7 +187,7 @@ class StmtMapAdd(Stmt):
 
 class StmtAssert(Stmt):
     expr = Field(Expr)
-    msg = MaybeField(Expr)
+    msg = Field(Expr, optional=True)
 
     def show(self):
         if self.msg is None:
@@ -208,7 +208,7 @@ class StmtImport(Stmt):
 
 class FromItem(Node):
     name = Field(str)
-    expr = MaybeField(Expr)
+    expr = Field(Expr, optional=True)
 
 
 class StmtFromImport(Stmt):
@@ -237,8 +237,8 @@ class StmtImportStar(Stmt):
 
 class StmtExec(Stmt):
     code = Field(Expr)
-    globals = MaybeField(Expr)
-    locals = MaybeField(Expr)
+    globals = Field(Expr, optional=True)
+    locals = Field(Expr, optional=True)
 
     def show(self):
         if self.globals is None:
@@ -294,7 +294,7 @@ class IfItem(Node):
 
 class StmtIf(Stmt):
     items = ListField(IfItem)
-    else_ = MaybeField(Block)
+    else_ = Field(Block, optional=True)
 
     def show(self):
         for idx, item in enumerate(self.items):
@@ -307,7 +307,7 @@ class StmtIf(Stmt):
 
 class StmtLoop(Stmt):
     body = Field(Block)
-    else_ = MaybeField(Block, volatile=True)
+    else_ = Field(Block, volatile=True, optional=True)
 
     def show(self):
         yield "$loop:"
@@ -328,7 +328,7 @@ class StmtWhileRaw(Stmt):
 class StmtWhile(Stmt):
     expr = Field(Expr)
     body = Field(Block)
-    else_ = MaybeField(Block)
+    else_ = Field(Block, optional=True)
 
     def show(self):
         yield "while {}:".format(self.expr.show(None))
@@ -362,7 +362,7 @@ class StmtFor(Stmt):
     expr = Field(Expr)
     dst = Field(Expr)
     body = Field(Block)
-    else_ = MaybeField(Block)
+    else_ = Field(Block, optional=True)
 
     def show(self):
         yield "for {} in {}:".format(self.dst.show(None), self.expr.show(None))
@@ -385,7 +385,7 @@ class StmtFinally(Stmt):
 
 class ExceptClause(Node):
     expr = Field(Expr)
-    dst = MaybeField(Expr)
+    dst = Field(Expr, optional=True)
     body = Field(Block)
 
     def show(self):
@@ -400,8 +400,8 @@ class ExceptClause(Node):
 class StmtExcept(Stmt):
     try_ = Field(Block)
     items = ListField(ExceptClause)
-    any = MaybeField(Block)
-    else_ = MaybeField(Block, volatile=True)
+    any = Field(Block, optional=True)
+    else_ = Field(Block, volatile=True, optional=True)
 
     def show(self):
         yield "try:"
@@ -419,7 +419,7 @@ class StmtExcept(Stmt):
 class StmtExceptDead(Stmt):
     try_ = Field(Block)
     items = ListField(ExceptClause)
-    any = MaybeField(Block)
+    any = Field(Block, optional=True)
 
     def show(self):
         yield "$trydead:"
@@ -470,7 +470,7 @@ class StmtAccess(Stmt):
 
 class StmtArgs(Stmt):
     args = ListField(Expr, volatile=True)
-    vararg = MaybeField(Expr, volatile=True)
+    vararg = Field(Expr, volatile=True, optional=True)
 
     def show(self):
         yield "$args {}".format(
@@ -533,7 +533,7 @@ class StmtDef(Stmt):
 
 class StmtWith(Stmt):
     expr = Field(Expr)
-    dst = MaybeField(Expr)
+    dst = Field(Expr, optional=True)
     body = Field(Block)
 
     def show(self):

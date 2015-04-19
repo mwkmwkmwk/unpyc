@@ -154,6 +154,7 @@ import binascii
 
 from .helpers import read_byte, read_le, read_bytes, FormatError
 from envy.show import preindent, indent
+from envy.meta import Node, Field, ListField
 
 class MarshalError(FormatError):
     pass
@@ -161,11 +162,9 @@ class MarshalError(FormatError):
 
 # nodes
 
-class MarshalNode:
+class MarshalNode(Node, abstract=True):
     """A marshal object.  Does not include the NULL type - it's represented
     by a None instead."""
-    __slots__ = ()
-
     def show(self):
         yield str(self)
 
@@ -174,18 +173,13 @@ class MarshalNode:
 
 class MarshalNone(MarshalNode):
     """A marshal None singleton."""
-    __slots__ = ()
-
     def __str__(self):
         return 'None'
 
 
 class MarshalBool(MarshalNode):
     """A marshal bool value."""
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
+    val = Field(bool)
 
     def __str__(self):
         return str(self.val)
@@ -193,8 +187,6 @@ class MarshalBool(MarshalNode):
 
 class MarshalEllipsis(MarshalNode):
     """A marshal ellipsis singleton."""
-    __slots__ = ()
-
     def __str__(self):
         return "..."
 
@@ -205,10 +197,7 @@ class MarshalInt(MarshalNode):
     """A marshal int value.  It's used for Python-level ints, no matter how
     they were represented in marshal stream - it includes INT64 for python 2
     and LONG for python 3."""
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
+    val = Field(int)
 
     def __str__(self):
         return str(self.val)
@@ -217,10 +206,7 @@ class MarshalInt(MarshalNode):
 class MarshalLong(MarshalNode):
     """A marshal long value.  Only used for py2 - py3k TYPE_LONG is instead
     loaded as MarshalInt."""
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
+    val = Field(int)
 
     def __str__(self):
         return str(self.val) + 'L'
@@ -228,10 +214,7 @@ class MarshalLong(MarshalNode):
 
 class MarshalFloat(MarshalNode):
     """A marshal float value, loaded from text or binary format."""
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
+    val = Field(float)
 
     def __str__(self):
         return str(self.val)
@@ -239,10 +222,7 @@ class MarshalFloat(MarshalNode):
 
 class MarshalComplex(MarshalNode):
     """A marshal complex value, loaded from text or binary format."""
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
+    val = Field(complex)
 
     def __str__(self):
         return str(self.val)
@@ -252,10 +232,7 @@ class MarshalString(MarshalNode):
     # TODO: should we remember whether string is interned?
     """A marshal byte string value.  Corresponds to py2 str and py3k bytes.
     Information on interning is lost."""
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
+    val = Field(bytes)
 
     def __str__(self):
         return repr(self.val)
@@ -265,10 +242,7 @@ class MarshalUnicode(MarshalNode):
     # TODO: should we remember whether string is interned?
     """A marshal unicode string value.  Corresponds to py2 unicode and py3k
     str.  Information on interning is lost."""
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
+    val = Field(str)
 
     def __str__(self):
         return repr(self.val)
@@ -278,10 +252,7 @@ class MarshalUnicode(MarshalNode):
 
 class MarshalTuple(MarshalNode):
     """A marshal tuple.  val is actually a list."""
-    __slots__ = 'val'
-
-    def __init__(self, val):
-        self.val = val
+    val = ListField(MarshalNode, volatile=True)
 
     def __str__(self):
         return '({}{})'.format(', '.join(str(v) for v in self.val), ',' if len(self.val) == 1 else '')
@@ -289,33 +260,32 @@ class MarshalTuple(MarshalNode):
 
 class MarshalList(MarshalNode):
     """A marshal list.  Should only occur in Python 1.0."""
-    __slots__ = 'val'
-
-    def __init__(self, val):
-        self.val = val
+    val = ListField(MarshalNode, volatile=True)
 
     def __str__(self):
         return '[{}]'.format(', '.join(str(v) for v in self.val))
 
 
+class MarshalKeyValue(Node):
+    key = Field(MarshalNode)
+    val = Field(MarshalNode)
+
+    def __str__(self):
+        return '{}: {}'.format(self.key, self.val)
+
+
 class MarshalDict(MarshalNode):
     """A marshal dict.  Should only occur before Python 1.3.  val is actually
     a list of (k, v) pairs."""
-    __slots__ = 'val'
-
-    def __init__(self, val):
-        self.val = val
+    items = ListField(MarshalKeyValue, volatile=True)
 
     def __str__(self):
-        return '{{{}}}'.format(', '.join('{}: {}'.format(k, v) for k, v in self.val))
+        return '{{{}}}'.format(', '.join(str(item) for item in self.items))
 
 
 class MarshalFrozenset(MarshalNode):
     """A marshal frozenset.  val is actualy a list."""
-    __slots__ = 'val'
-
-    def __init__(self, val):
-        self.val = val
+    val = ListField(MarshalNode, volatile=True)
 
     def __str__(self):
         return 'frozenset([{}])'.format(', '.join(str(v) for v in self.val))
@@ -353,23 +323,21 @@ class MarshalCode(MarshalNode):
     converted to unicode through ascii decoding, to make handling uniform in
     further stages (py2 doesn't support non-ascii in identifiers anyway).
     """
-    __slots__ = (
-        'argcount',
-        'kwonlyargcount',
-        'nlocals',
-        'stacksize',
-        'flags',
-        'code',
-        'consts',
-        'names',
-        'varnames',
-        'freevars',
-        'cellvars',
-        'filename',
-        'name',
-        'firstlineno',
-        'lnotab',
-    )
+    argcount = Field(int, volatile=True, optional=True)
+    kwonlyargcount = Field(int, volatile=True, optional=True)
+    nlocals = Field(int, volatile=True, optional=True)
+    stacksize = Field(int, volatile=True, optional=True)
+    flags = Field(int, volatile=True, optional=True)
+    code = Field(bytes, volatile=True, optional=True)
+    consts = ListField(MarshalNode, volatile=True, optional=True)
+    names = ListField((bytes, str), volatile=True, optional=True)
+    varnames = ListField((bytes, str), volatile=True, optional=True)
+    freevars = ListField((bytes, str), volatile=True, optional=True)
+    cellvars = ListField((bytes, str), volatile=True, optional=True)
+    filename = Field((bytes, str), volatile=True, optional=True)
+    name = Field((bytes, str), volatile=True, optional=True)
+    firstlineno = Field(int, volatile=True, optional=True)
+    lnotab = Field(bytes, volatile=True, optional=True)
 
     def __str__(self):
         return '<code>'
@@ -645,7 +613,7 @@ def load_dict(ctx, flag):
         if key is None:
             break
         val = ctx.load_object()
-        res.val.append((key, val))
+        res.items.append(MarshalKeyValue(key, val))
     return res
 
 # code - old and new

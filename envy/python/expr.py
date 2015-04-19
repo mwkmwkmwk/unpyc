@@ -239,7 +239,7 @@ class ExprDict(Expr):
 
 class ExprUnpackEx(Expr):
     before = ListField(Expr, volatile=True)
-    star = MaybeField(Expr, volatile=True)
+    star = Field(Expr, volatile=True, optional=True)
     after = ListField(Expr, volatile=True)
 
     def show(self, ctx):
@@ -418,8 +418,8 @@ class ExprSubscr(Expr):
 
 
 class ExprSlice2(Expr):
-    start = MaybeField(Expr)
-    end = MaybeField(Expr)
+    start = Field(Expr, optional=True)
+    end = Field(Expr, optional=True)
 
     def show(self, ctx):
         def maybe(x):
@@ -428,9 +428,9 @@ class ExprSlice2(Expr):
 
 
 class ExprSlice3(Expr):
-    start = MaybeField(Expr)
-    end = MaybeField(Expr)
-    step = MaybeField(Expr)
+    start = Field(Expr, optional=True)
+    end = Field(Expr, optional=True)
+    step = Field(Expr, optional=True)
 
     def show(self, ctx):
         def maybe(x):
@@ -515,7 +515,7 @@ class ExprFunctionRaw(Expr):
 
 
 class ExprFunction(Expr):
-    name = MaybeField(str)
+    name = Field(str, optional=True)
     args = Field(FunArgs)
     block = Field(Block)
 

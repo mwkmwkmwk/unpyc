@@ -3,12 +3,16 @@ from itertools import zip_longest
 from enum import Enum
 
 class BaseField:
-    def __init__(self, type, volatile=False):
-        self.type = type
+    def __init__(self, type_, volatile=False, optional=False):
+        self.type = type_
         self.volatile = volatile
-        self.sub = issubclass(type, Node)
-        if not (self.sub or self.type in (int, bool, str, bytes, float, complex, object) or issubclass(self.type, Enum)):
-            raise TypeError("weird field type {}".format(self.type))
+        self.optional = optional
+        self.sub = isinstance(type_, type) and issubclass(type_, Node)
+        types = self.type if isinstance(self.type, tuple) else (self.type,)
+        if not self.sub:
+            for type_ in types:
+                if not (type_ in (int, bool, str, bytes, float, complex, object) or issubclass(type_, Enum)):
+                    raise TypeError("weird field type {}".format(type_))
 
     def __get__(self, obj, type=None):
         return self.slot.__get__(obj, type)
@@ -34,17 +38,7 @@ class BaseField:
 
 class Field(BaseField):
     def typecheck(self, val):
-        return isinstance(val, self.type)
-
-    def subprocess(self, val, process):
-        if self.sub:
-            return process(val)
-        else:
-            return val
-
-class MaybeField(BaseField):
-    def typecheck(self, val):
-        return isinstance(val, self.type) or val is None
+        return isinstance(val, self.type) or (val is None and self.optional)
 
     def subprocess(self, val, process):
         if self.sub and val is not None:
@@ -54,34 +48,38 @@ class MaybeField(BaseField):
 
 class ListField(BaseField):
     def typecheck(self, val):
+        if val is None and self.optional:
+            return True
         if not isinstance(val, (tuple, list)):
             return False
         return all(isinstance(x, self.type) for x in val)
 
     def subprocess(self, val, process):
-        if self.sub:
+        if self.sub and val is not None:
             return [process(x) for x in val]
         else:
             return val
 
     def process(self, val):
-        if not self.volatile:
+        if val is not None and not self.volatile:
             return tuple(val)
         else:
             return val
 
 class DictField(BaseField):
-    def __init__(self, keytype, type):
+    def __init__(self, keytype, type, *args, **kwargs):
         self.keytype = keytype
-        super().__init__(type)
+        super().__init__(type, *args, **kwargs)
 
     def typecheck(self, val):
+        if val is None and self.optional:
+            return True
         if not isinstance(val, dict):
             return False
         return all(isinstance(k, self.keytype) and isinstance(v, self.type) for k, v in val.items())
 
     def subprocess(self, val, process):
-        if self.sub:
+        if self.sub and val is not None:
             return {k: process(v) for k, v in val.items()}
         else:
             return val

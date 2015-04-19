@@ -239,7 +239,7 @@ class ExprDict(Expr):
 
 class ExprUnpackEx(Expr):
     before = ListField(Expr)
-    star = MaybeField(Expr)
+    star = MaybeField(Expr, volatile=True)
     after = ListField(Expr)
 
     def show(self, ctx):

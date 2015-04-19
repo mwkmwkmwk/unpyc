@@ -22,7 +22,7 @@ class Block(Node):
 class FunArgs(Node):
     args = ListField(Expr)
     defargs = ListField(Expr)
-    vararg = MaybeField(Expr)
+    vararg = MaybeField(Expr, volatile=True)
     kwargs = ListField(Expr)
     defkwargs = DictField(str, Expr)
     varkw = MaybeField(Expr)

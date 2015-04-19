@@ -261,7 +261,7 @@ class StmtExec(Stmt):
 class StmtIfRaw(Stmt):
     cond = Field(Expr)
     body = Field(Block)
-    else_ = Field(Block)
+    else_ = Field(Block, volatile=True)
 
     def show(self):
         yield "$if {}:".format(self.cond.show(None))
@@ -307,7 +307,7 @@ class StmtIf(Stmt):
 
 class StmtLoop(Stmt):
     body = Field(Block)
-    else_ = MaybeField(Block)
+    else_ = MaybeField(Block, volatile=True)
 
     def show(self):
         yield "$loop:"
@@ -401,7 +401,7 @@ class StmtExcept(Stmt):
     try_ = Field(Block)
     items = ListField(ExceptClause)
     any = MaybeField(Block)
-    else_ = MaybeField(Block)
+    else_ = MaybeField(Block, volatile=True)
 
     def show(self):
         yield "try:"

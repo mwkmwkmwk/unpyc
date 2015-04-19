@@ -3,8 +3,9 @@ from itertools import zip_longest
 from enum import Enum
 
 class BaseField:
-    def __init__(self, type):
+    def __init__(self, type, volatile=False):
         self.type = type
+        self.volatile = volatile
         self.sub = issubclass(type, Node)
         if not (self.sub or self.type in (int, bool, str, bytes, float, complex, object) or issubclass(self.type, Enum)):
             raise TypeError("weird field type {}".format(self.type))
@@ -20,6 +21,8 @@ class BaseField:
                 self.type.__name__,
                 val
             ))
+        if not self.volatile and hasattr(obj, self.name):
+            raise TypeError("field already set")
         self.slot.__set__(obj, val)
 
     def __delete__(self, obj):

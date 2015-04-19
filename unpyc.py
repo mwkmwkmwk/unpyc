@@ -71,7 +71,7 @@ import sys
 from envy.format.pyc import PycFile
 from envy.python.code import Code
 from envy.python.deco import deco_code
-from envy.python.ast import ast_process
+from envy.python.postproc import ast_process
 
 if sys.argv[1] == '-t':
     import envy.python.deco

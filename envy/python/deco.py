@@ -6,7 +6,7 @@ from .stmt import *
 from .expr import *
 from .code import Code
 from .bytecode import *
-from .ast import uncomp, unreturn
+from .postproc import uncomp, unreturn
 
 TRACE = False
 
@@ -152,10 +152,10 @@ IfExprTrue = namedtuple('IfExprTrue', ['expr', 'flow'])
 IfExprElse = namedtuple('IfExprElse', ['cond', 'true', 'flow'])
 IfDead = namedtuple('IfDead', ['cond', 'true', 'flow'])
 
-CompareStart = namedtuple('CompareStart', ['items', 'flows'])
-Compare = namedtuple('Compare', ['items', 'flows'])
-CompareLast = namedtuple('CompareLast', ['items', 'flows'])
-CompareNext = namedtuple('CompareNext', ['items', 'flows'])
+CompareStart = namedtuple('CompareStart', ['first', 'rest', 'flows'])
+Compare = namedtuple('Compare', ['first', 'rest', 'flows'])
+CompareLast = namedtuple('CompareLast', ['first', 'rest', 'flows'])
+CompareNext = namedtuple('CompareNext', ['first', 'rest', 'flows'])
 
 WantPop = namedtuple('WantPop', [])
 WantRotPop = namedtuple('WantRotPop', [])
@@ -550,40 +550,67 @@ def visit_build_map(self, deco):
 
 @_visitor(OpcodeStoreSubscr, ExprDict, DupTop, Expr, RotTwo, Expr, flag='has_reversed_kv')
 def visit_build_map_step(self, deco, dict_, _1, val, _2, key):
-    dict_.items.append((key, val))
+    dict_.items.append(DictItem(key, val))
     return [dict_]
 
 @_visitor(OpcodeStoreSubscr, ExprDict, DupTop, Expr, Expr, RotThree, flag=('!has_reversed_kv', '!has_store_map'))
 def visit_build_map_step(self, deco, dict_, _1, key, val, _2):
-    dict_.items.append((key, val))
+    dict_.items.append(DictItem(key, val))
     return [dict_]
 
 @_visitor(OpcodeStoreMap, ExprDict, Expr, Expr)
 def visit_build_map_step(self, deco, dict_, val, key):
-    dict_.items.append((key, val))
+    dict_.items.append(DictItem(key, val))
     return [dict_]
 
 # expressions - function call
 
 @_visitor(OpcodeBinaryCall, Expr, ExprTuple)
 def visit_binary_call(self, deco, expr, params):
-    return [ExprCall(expr, CallArgs([('', arg) for arg in params.exprs]))]
+    return [ExprCall(expr, CallArgs([CallArgPos(arg) for arg in params.exprs]))]
 
 @_visitor(OpcodeCallFunction, Expr, Exprs('args', 1), Exprs('kwargs', 2))
 def visit_call_function(self, deco, fun, args, kwargs):
-    return [ExprCall(fun, CallArgs([('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs]))]
+    return [ExprCall(
+        fun,
+        CallArgs(
+            [CallArgPos(arg) for arg in args] +
+            [CallArgKw(arg, deco.string(name)) for name, arg in kwargs]
+        )
+    )]
 
 @_visitor(OpcodeCallFunctionVar, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr)
 def visit_call_function(self, deco, fun, args, kwargs, vararg):
-    return [ExprCall(fun, CallArgs([('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('*', vararg)]))]
+    return [ExprCall(
+        fun,
+        CallArgs(
+            [CallArgPos(arg) for arg in args] +
+            [CallArgKw(arg, deco.string(name)) for name, arg in kwargs] +
+            [CallArgVar(vararg)]
+        )
+    )]
 
 @_visitor(OpcodeCallFunctionKw, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr)
 def visit_call_function(self, deco, fun, args, kwargs, varkw):
-    return [ExprCall(fun, CallArgs([('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('**', varkw)]))]
+    return [ExprCall(
+        fun,
+        CallArgs(
+            [CallArgPos(arg) for arg in args] +
+            [CallArgKw(arg, deco.string(name)) for name, arg in kwargs] +
+            [CallArgVarKw(varkw)]
+        )
+    )]
 
 @_visitor(OpcodeCallFunctionVarKw, Expr, Exprs('args', 1), Exprs('kwargs', 2), Expr, Expr)
 def visit_call_function(self, deco, fun, args, kwargs, vararg, varkw):
-    return [ExprCall(fun, CallArgs([('', arg) for arg in args] + [(deco.string(name), arg) for name, arg in kwargs] + [('*', vararg), ('**', varkw)]))]
+    return [ExprCall(
+        fun,
+        CallArgs(
+            [CallArgPos(arg) for arg in args] +
+            [CallArgKw(arg, deco.string(name)) for name, arg in kwargs] +
+            [CallArgVar(vararg), CallArgVarKw(varkw)]
+        )
+    )]
 
 # expressions - load const
 
@@ -619,24 +646,27 @@ def visit_store_subscr(self, deco, expr, idx):
 
 @_lsd_visitor(OpcodeSliceNN, OpcodeStoreSliceNN, OpcodeDeleteSliceNN, Expr)
 def visit_store_slice_nn(self, deco, expr):
-    return ExprSubscr(expr, ExprSlice(None, None))
+    return ExprSubscr(expr, ExprSlice2(None, None))
 
 @_lsd_visitor(OpcodeSliceEN, OpcodeStoreSliceEN, OpcodeDeleteSliceEN, Expr, Expr)
 def visit_store_slice_en(self, deco, expr, start):
-    return ExprSubscr(expr, ExprSlice(start, None))
+    return ExprSubscr(expr, ExprSlice2(start, None))
 
 @_lsd_visitor(OpcodeSliceNE, OpcodeStoreSliceNE, OpcodeDeleteSliceNE, Expr, Expr)
 def visit_store_slice_ne(self, deco, expr, end):
-    return ExprSubscr(expr, ExprSlice(None, end))
+    return ExprSubscr(expr, ExprSlice2(None, end))
 
 @_lsd_visitor(OpcodeSliceEE, OpcodeStoreSliceEE, OpcodeDeleteSliceEE, Expr, Expr, Expr)
 def visit_store_slice_ee(self, deco, expr, start, end):
-    return ExprSubscr(expr, ExprSlice(start, end))
+    return ExprSubscr(expr, ExprSlice2(start, end))
 
 @_visitor(OpcodeBuildSlice, Exprs('param', 1))
 def visit_build_slice(self, deco, exprs):
-    if self.param in (2, 3):
-        return [ExprSlice(*[None if isinstance(expr, ExprNone) else expr for expr in exprs])]
+    params = [None if isinstance(expr, ExprNone) else expr for expr in exprs]
+    if self.param == 2:
+        return [ExprSlice2(*params)]
+    elif self.param == 3:
+        return [ExprSlice3(*params)]
     else:
         raise PythonError("funny slice length")
 
@@ -645,17 +675,18 @@ def visit_build_slice(self, deco, exprs):
 @_visitor(OpcodeUnpackTuple)
 @_visitor(OpcodeUnpackSequence)
 def visit_unpack_sequence(self, deco):
-    res = ExprTuple([None for _ in range(self.param)])
+    res = ExprTuple([])
     return [Store(res)] + [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(OpcodeUnpackList)
 def visit_unpack_list(self, deco):
-    res = ExprList([None for _ in range(self.param)])
+    res = ExprList([])
     return [Store(res)] + [UnpackSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(Store, UnpackSlot)
 def visit_store_unpack(self, deco, slot):
-    slot.expr.exprs[slot.idx] = self.dst
+    assert len(slot.expr.exprs) == slot.idx
+    slot.expr.exprs.append(self.dst)
     return []
 
 # optimized unpacking
@@ -663,42 +694,43 @@ def visit_store_unpack(self, deco, slot):
 @_visitor(JumpSkipJunk, Expr, Expr, RotTwo, flag=('has_unpack_opt', 'has_nop'))
 def visit_unpack_opt_two_skip(self, deco, a, b, _):
     src = ExprTuple([a, b])
-    dst = ExprTuple([None, None])
+    dst = ExprTuple([])
     return [StmtAssign([dst], src), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow(self.flow, [], [])]
 
 @_visitor(JumpSkipJunk, Expr, Expr, Expr, RotThree, RotTwo, flag=('has_unpack_opt', 'has_nop'))
 def visit_unpack_opt_three_skip(self, deco, a, b, c, _1, _2):
     src = ExprTuple([a, b, c])
-    dst = ExprTuple([None, None, None])
+    dst = ExprTuple([])
     return [StmtAssign([dst], src), UnpackSlot(dst, 2), UnpackSlot(dst, 1), UnpackSlot(dst, 0), WantFlow(self.flow, [], [])]
 
 @_visitor(Store, Expr, Expr, RotTwo, flag=('has_unpack_opt', '!has_nop'))
 def visit_unpack_opt_two_skip(self, deco, a, b, _):
     src = ExprTuple([a, b])
-    dst = ExprTuple([self.dst, None])
+    dst = ExprTuple([self.dst])
     return [StmtAssign([dst], src), UnpackSlot(dst, 1)]
 
 @_visitor(Store, Expr, Expr, Expr, RotThree, RotTwo, flag=('has_unpack_opt', '!has_nop'))
 def visit_unpack_opt_three_skip(self, deco, a, b, c, _1, _2):
     src = ExprTuple([a, b, c])
-    dst = ExprTuple([self.dst, None, None])
+    dst = ExprTuple([self.dst])
     return [StmtAssign([dst], src), UnpackSlot(dst, 2), UnpackSlot(dst, 1)]
 
 # old argument unpacking
 
 @_visitor(OpcodeUnpackArg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None, {})
+    res = FunArgs([], [], None, [], {}, None, {})
     return [StmtArgs(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(OpcodeUnpackVararg)
 def visit_unpack_arg(self, deco):
-    res = FunArgs([None for _ in range(self.param)], [], None, [], {}, None, {})
+    res = FunArgs([], [], None, [], {}, None, {})
     return [StmtArgs(res), UnpackVarargSlot(res)] + [UnpackArgSlot(res, idx) for idx in reversed(range(self.param))]
 
 @_visitor(Store, UnpackArgSlot)
 def visit_store_unpack_arg(self, deco, slot):
-    slot.args.args[slot.idx] = self.dst
+    assert len(slot.args.args) == slot.idx
+    slot.args.args.append(self.dst)
     return []
 
 @_visitor(Store, UnpackVarargSlot)
@@ -710,11 +742,7 @@ def visit_store_unpack_vararg(self, deco, slot):
 
 @_visitor(OpcodeUnpackEx)
 def visit_unpack_sequence(self, deco):
-    res = ExprUnpackEx(
-        [None for _ in range(self.before)],
-        None,
-        [None for _ in range(self.after)],
-    )
+    res = ExprUnpackEx([], None, [])
     return [
         Store(res)
     ] + [
@@ -727,7 +755,8 @@ def visit_unpack_sequence(self, deco):
 
 @_visitor(Store, UnpackBeforeSlot)
 def visit_store_unpack_before(self, deco, slot):
-    slot.expr.before[slot.idx] = self.dst
+    assert len(slot.expr.before) == slot.idx
+    slot.expr.before.append(self.dst)
     return []
 
 @_visitor(Store, UnpackStarSlot)
@@ -737,7 +766,8 @@ def visit_store_unpack_star(self, deco, slot):
 
 @_visitor(Store, UnpackAfterSlot)
 def visit_store_unpack_after(self, deco, slot):
-    slot.expr.after[slot.idx] = self.dst
+    assert len(slot.expr.after) == slot.idx
+    slot.expr.after.append(self.dst)
     return []
 
 # statements
@@ -917,9 +947,9 @@ def _visit_raise_from(self, deco, exprs):
 @_visitor(OpcodeExecStmt, Expr, Expr, DupTop)
 def _visit_exec_3(self, deco, code, env, _):
     if isinstance(env, ExprNone):
-        return [StmtExec(code)]
+        return [StmtExec(code, None, None)]
     else:
-        return [StmtExec(code, env)]
+        return [StmtExec(code, env, None)]
 
 @_visitor(OpcodeExecStmt, Expr, Expr, Expr)
 def _visit_exec_3(self, deco, code, globals, locals):
@@ -954,7 +984,7 @@ def _visit_import_from(self, deco, import_):
 
 @_visitor(OpcodePopTop, Import)
 def _visit_import_from_end(self, deco, import_):
-    return [StmtFromImport(-1, import_.name, [(x, None) for x in import_.items])]
+    return [StmtFromImport(-1, import_.name, [FromItem(x, None) for x in import_.items])]
 
 # imports - v2
 
@@ -998,14 +1028,13 @@ def _visit_import_star(self, deco, import_):
 @_visitor(OpcodeImportFrom, Import2From)
 def _visit_import_from(self, deco, import_):
     idx = len(import_.exprs)
-    import_.exprs.append(None)
     if (idx >= len(import_.fromlist) or import_.fromlist[idx] != self.param):
         raise PythonError("fromlist mismatch")
     return [import_, UnpackSlot(import_, idx)]
 
 @_visitor(OpcodePopTop, Import2From)
 def _visit_import_from_end(self, deco, import_):
-    return [StmtFromImport(import_.level, import_.name, list(zip(import_.fromlist, import_.exprs)))]
+    return [StmtFromImport(import_.level, import_.name, [FromItem(a, b) for a, b in zip(import_.fromlist, import_.exprs)])]
 
 # misc flow
 
@@ -1313,7 +1342,7 @@ def _visit_dead_if(self, deco, start, block, want):
 def _visit_cmp(self, deco, e1, e2):
     if self.param is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [ExprCmp([e1, self.param, e2])]
+    return [ExprCmp(e1, [CmpItem(self.param, e2)])]
 
 # chained comparisons
 
@@ -1322,32 +1351,32 @@ def _visit_cmp(self, deco, e1, e2):
 def _visit_cmp_start(self, deco, a, b, _dup, _rot):
     if self.param is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareStart([a, self.param, b], [])]
+    return [CompareStart(a, [CmpItem(self.param, b)], [])]
 
 # start #2 and middle #3
 @_visitor(JumpIfFalse, CompareStart)
 def _visit_cmp_jump(self, deco, cmp):
-    return [Compare(cmp.items, cmp.flows + self.flow), WantPop()]
+    return [Compare(cmp.first, cmp.rest, cmp.flows + self.flow), WantPop()]
 
 # middle #2
 @_visitor(OpcodeCompareOp, Compare, Expr, DupTop, RotThree)
 def _visit_cmp_next(self, deco, cmp, expr, _dup, _rot):
     if self.param is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareStart(cmp.items + [self.param, expr], cmp.flows)]
+    return [CompareStart(cmp.first, cmp.rest + [CmpItem(self.param, expr)], cmp.flows)]
 
 # end #1
 @_visitor(OpcodeCompareOp, Compare, Expr)
 def _visit_cmp_last(self, deco, cmp, expr):
     if self.param is CmpOp.EXC_MATCH:
         raise NoMatch
-    return [CompareLast(cmp.items + [self.param, expr], cmp.flows)]
+    return [CompareLast(cmp.first, cmp.rest + [CmpItem(self.param, expr)], cmp.flows)]
 
 # end #2
 @_visitor(JumpUnconditional, CompareLast)
 def _visit_cmp_last_jump(self, deco, cmp):
     return [
-        ExprCmp(cmp.items),
+        ExprCmp(cmp.first, cmp.rest),
         WantFlow(self.flow, [], []),
         WantRotPop(),
         WantFlow([], [], cmp.flows)
@@ -1357,7 +1386,7 @@ def _visit_cmp_last_jump(self, deco, cmp):
 @_visitor(OpcodeReturnValue, CompareLast, flag='has_dead_return')
 def _visit_cmp_last_jump(self, deco, cmp):
     return [
-        WantReturn(ExprCmp(cmp.items)),
+        WantReturn(ExprCmp(cmp.first, cmp.rest)),
         WantRotPop(),
         WantFlow([], [], cmp.flows),
     ]
@@ -1708,7 +1737,7 @@ def _visit_except_match_end(self, deco, try_, match, block, want, _):
         TryExceptMid(
             try_.else_,
             try_.body,
-            try_.items + [(match.expr, match.dst, _process_dead_end(deco, block))],
+            try_.items + [ExceptClause(match.expr, match.dst, _process_dead_end(deco, block))],
             None,
             try_.flows + want.any + want.true + want.false,
         ),
@@ -1723,7 +1752,7 @@ def _visit_except_match_end(self, deco, try_, match, block, _):
         TryExceptMid(
             try_.else_,
             try_.body,
-            try_.items + [(match.expr, match.dst, block)],
+            try_.items + [ExceptClause(match.expr, match.dst, block)],
             None,
             try_.flows + self.flow,
         ),
@@ -1737,7 +1766,7 @@ def _visit_except_match_end(self, deco, try_, match, block):
         TryExceptMid(
             try_.else_,
             try_.body,
-            try_.items + [(match.expr, match.dst, block)],
+            try_.items + [ExceptClause(match.expr, match.dst, block)],
             None,
             try_.flows + self.flow,
         ),
@@ -1752,7 +1781,7 @@ def _visit_except_match_end(self, deco, try_, match, block, want):
         TryExceptMid(
             try_.else_,
             try_.body,
-            try_.items + [(match.expr, match.dst, block)],
+            try_.items + [ExceptClause(match.expr, match.dst, block)],
             None,
             try_.flows + want.any + want.true + want.false,
         ),
@@ -1967,7 +1996,12 @@ def visit_load_closure(self, deco):
 
 @_visitor(OpcodeBuildClass, Expr, ExprTuple, UnaryCall)
 def _visit_build_class(self, deco, name, bases, call):
-    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), call.code, [])]
+    return [ExprClassRaw(
+        deco.string(name),
+        CallArgs([CallArgPos(expr) for expr in bases.exprs]),
+        call.code,
+        []
+    )]
 
 @_visitor(OpcodeBuildClass, Expr, ExprTuple, ExprCall, flag='has_kwargs')
 def _visit_build_class(self, deco, name, bases, call):
@@ -1978,7 +2012,12 @@ def _visit_build_class(self, deco, name, bases, call):
         raise PythonError("class call with non-function")
     if fun.defargs or fun.defkwargs or fun.ann:
         raise PythonError("class call with a function with default arguments")
-    return [ExprClassRaw(deco.string(name), CallArgs([('', expr) for expr in bases.exprs]), fun.code, fun.closures)]
+    return [ExprClassRaw(
+        deco.string(name),
+        CallArgs([CallArgPos(expr) for expr in bases.exprs]),
+        fun.code,
+        fun.closures
+    )]
 
 @_visitor(OpcodeLoadLocals)
 def _visit_load_locals(self, deco):
@@ -2112,19 +2151,19 @@ def _visit_inplace_store_subscr(self, deco, inp, _rot):
 
 @_visitor(OpcodeStoreSliceNN, InplaceSliceNN, RotTwo)
 def _visit_inplace_store_slice_nn(self, deco, inp, _rot):
-    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, None)), inp.src)]
+    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice2(None, None)), inp.src)]
 
 @_visitor(OpcodeStoreSliceEN, InplaceSliceEN, RotThree)
 def _visit_inplace_store_slice_en(self, deco, inp, _rot):
-    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, None)), inp.src)]
+    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice2(inp.start, None)), inp.src)]
 
 @_visitor(OpcodeStoreSliceNE, InplaceSliceNE, RotThree)
 def _visit_inplace_store_slice_ne(self, deco, inp, _rot):
-    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice(None, inp.end)), inp.src)]
+    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice2(None, inp.end)), inp.src)]
 
 @_visitor(OpcodeStoreSliceEE, InplaceSliceEE, RotFour)
 def _visit_inplace_store_slice_ee(self, deco, inp, _rot):
-    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice(inp.start, inp.end)), inp.src)]
+    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice2(inp.start, inp.end)), inp.src)]
 
 # list comprehensions
 
@@ -2145,10 +2184,10 @@ def _visit_listcomp(self, deco, start):
         and isinstance(stmt.val, ExprCall)
         and stmt.val.expr == start.tmp
         and len(stmt.val.args.args) == 1
-        and not stmt.val.args.args[0][0]
+        and isinstance(stmt.val.args.args[0], CallArgPos)
     ):
         raise PythonError("weird old list comp")
-    return [ExprListComp(Comp(stmt.val.args.args[0][1], items)), TmpVarCleanup(start.tmp)]
+    return [ExprListComp(Comp(stmt.val.args.args[0].expr, items)), TmpVarCleanup(start.tmp)]
 
 @_visitor(StmtForRaw, MultiAssign, flag='has_list_append')
 def _visit_listcomp(self, deco, ass):
@@ -2361,7 +2400,7 @@ class DecoCtx:
             ))
         if not isinstance(self.stack[0], Block):
             raise PythonError("weirdness on stack at the end")
-        self.res = DecoCode(self.stack[0], code, self.varnames)
+        self.res = DecoCode(self.stack[0], code, self.varnames or [])
 
     def preproc(self, ops):
         # first pass: undo jump over true const
@@ -2501,18 +2540,3 @@ class DecoCtx:
 
 def deco_code(code):
     return DecoCtx(code).res
-
-
-class DecoCode:
-    __slots__ = 'block', 'code', 'varnames'
-
-    def __init__(self, block, code, varnames):
-        self.block = block
-        self.code = code
-        self.varnames = varnames
-
-    def subprocess(self, process):
-        return DecoCode(process(self.block), self.code, self.varnames)
-
-    def show(self):
-        return self.block.show()

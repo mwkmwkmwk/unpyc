@@ -9,7 +9,7 @@ from envy.format.helpers import FormatError
 from envy.python.helpers import PythonError
 from envy.python.code import Code
 from envy.python.deco import deco_code
-from envy.python.ast import ast_process
+from envy.python.postproc import ast_process
 from envy.python.version import *
 
 root_dir = (Path(__file__).parent / '..' / '..').resolve()

@@ -16,25 +16,7 @@ from envy.format.marshal import (
 
 from .helpers import PythonError
 
-class CallArgs:
-    __slots__ = 'args'
-
-    def __init__(self, args):
-        self.args = args
-
-    def subprocess(self, process):
-        return CallArgs(
-            [(how, process(arg)) for how, arg in self.args]
-        )
-
-    def show(self):
-        return ', '.join(
-            "{}{}".format(
-                how if how in ('', '*', '**') else how + '=',
-                arg.show(None)
-            )
-            for how, arg in self.args
-        )
+from .ast import *
 
 class CmpOp(IntEnum):
     LT = 0
@@ -62,43 +44,25 @@ COMPARE_OPS = {
     CmpOp.IS_NOT: 'is not',
 }
 
-class CompFor:
-    __slots__ = 'dst', 'expr'
+class CompItem(Node, abstract=True):
+    pass
 
-    def __init__(self, dst, expr):
-        self.dst = dst
-        self.expr = expr
-
-    def subprocess(self, process):
-        return CompFor(process(self.dst), process(self.expr))
+class CompFor(CompItem):
+    dst = Field(Expr)
+    expr = Field(Expr)
 
     def show(self):
         return 'for {} in {}'.format(self.dst.show(None), self.expr.show(None))
 
-class CompIf:
-    __slots__ = 'expr'
-
-    def __init__(self, expr):
-        self.expr = expr
-
-    def subprocess(self, process):
-        return CompIf(process(self.expr))
+class CompIf(CompItem):
+    expr = Field(Expr)
 
     def show(self):
         return 'if {}'.format(self.expr.show(None))
 
-class Comp:
-    __slots__ = 'expr', 'items'
-
-    def __init__(self, expr, items):
-        self.expr = expr
-        self.items = items
-
-    def subprocess(self, process):
-        return Comp(
-            process(self.expr),
-            [process(item) for item in self.items]
-        )
+class Comp(Node):
+    expr = Field(Expr)
+    items = ListField(CompItem)
 
     def show(self):
         return '{} {}'.format(
@@ -112,106 +76,74 @@ class Comp:
 # TODO: nuke frozenset from load_from_marshal
 
 
-class Expr:
-    __slots__ = ()
-
 
 # singletons
 
 class ExprNone(Expr):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self, ctx):
         return 'None'
 
 
 class ExprEllipsis(Expr):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self, ctx):
         return "..."
 
 class ExprBuildClass(Expr):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self, ctx):
         return '$buildclass'
 
 class ExprAnyTrue(Expr):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self, ctx):
         return '$true'
 
 # literals
 
-class ExprSimple(Expr):
-    __slots__ = 'val',
 
-    def subprocess(self, process):
-        return self
-
-    def __init__(self, val):
-        self.val = val
-
-
-class ExprBool(ExprSimple):
-    __slots__ = ()
+class ExprBool(Expr):
+    val = Field(bool)
 
     def show(self, ctx):
         return str(self.val)
 
 
-class ExprInt(ExprSimple):
-    __slots__ = ()
+class ExprInt(Expr):
+    val = Field(int)
 
     def show(self, ctx):
         return str(self.val)
 
 
-class ExprLong(ExprSimple):
-    __slots__ = ()
+class ExprLong(Expr):
+    val = Field(int)
 
     def show(self, ctx):
         return str(self.val) + 'L'
 
 
-class ExprFloat(ExprSimple):
-    __slots__ = ()
+class ExprFloat(Expr):
+    val = Field(float)
 
     def show(self, ctx):
         return str(self.val)
 
 
-class ExprComplex(ExprSimple):
-    __slots__ = ()
+class ExprComplex(Expr):
+    val = Field(complex)
 
     def show(self, ctx):
         return str(self.val)
 
 
-class ExprString(ExprSimple):
-    __slots__ = ()
+class ExprString(Expr):
+    val = Field(bytes)
 
     def show(self, ctx):
         # XXX
         return repr(self.val)
 
 
-class ExprUnicode(ExprSimple):
-    __slots__ = ()
+class ExprUnicode(Expr):
+    val = Field(str)
 
     def show(self, ctx):
         # XXX
@@ -219,18 +151,9 @@ class ExprUnicode(ExprSimple):
 
 # containers
 
-class ExprSequence(Expr):
-    __slots__ = 'exprs',
 
-    def __init__(self, exprs):
-        self.exprs = exprs
-
-    def subprocess(self, process):
-        return type(self)([process(expr) for expr in self.exprs])
-
-
-class ExprTuple(ExprSequence):
-    __slots__ = ()
+class ExprTuple(Expr):
+    exprs = ListField(Expr)
 
     def show(self, ctx):
         # XXX
@@ -240,8 +163,8 @@ class ExprTuple(ExprSequence):
         )
 
 
-class ExprList(ExprSequence):
-    __slots__ = ()
+class ExprList(Expr):
+    exprs = ListField(Expr)
 
     def show(self, ctx):
         # XXX
@@ -250,8 +173,8 @@ class ExprList(ExprSequence):
         )
 
 
-class ExprSet(ExprSequence):
-    __slots__ = ()
+class ExprSet(Expr):
+    exprs = ListField(Expr)
 
     def show(self, ctx):
         # XXX
@@ -261,38 +184,23 @@ class ExprSet(ExprSequence):
 
 
 class ExprListComp(Expr):
-    __slots__ = ('comp')
-
-    def __init__(self, comp=None):
-        self.comp = comp
+    comp = Field(Comp)
 
     def show(self, ctx):
         return '[{}]'.format(self.comp.show())
 
-    def subprocess(self, process):
-        return ExprListComp(process(self.comp))
-
 
 class ExprSetComp(Expr):
-    __slots__ = ('comp')
-
-    def __init__(self, comp=None):
-        self.comp = comp
+    comp = Field(Comp)
 
     def show(self, ctx):
         return '{{{}}}'.format(self.comp.show())
 
-    def subprocess(self, process):
-        return ExprSetComp(process(self.comp))
-
 
 class ExprDictComp(Expr):
-    __slots__ = 'key', 'val', 'items'
-
-    def __init__(self, key, val, items):
-        self.key = key
-        self.val = val
-        self.items = items
+    key = Field(Expr)
+    val = Field(Expr)
+    items = ListField(CompItem)
 
     def show(self, ctx):
         return '{{{}: {} {}}}'.format(
@@ -301,76 +209,38 @@ class ExprDictComp(Expr):
             ' '.join(item.show() for item in self.items)
         )
 
-    def subprocess(self, process):
-        return ExprDictComp(
-            process(self.key),
-            process(self.val),
-            [process(item) for item in self.items]
-        )
-
 
 class ExprGenExp(Expr):
-    __slots__ = ('comp')
-
-    def __init__(self, comp=None):
-        self.comp = comp
+    comp = Field(Comp)
 
     def show(self, ctx):
         return '({})'.format(self.comp.show())
 
-    def subprocess(self, process):
-        return ExprGenExp(process(self.comp))
 
+class DictItem(Node):
+    key = Field(Expr)
+    val = Field(Expr)
 
-class ExprCallComp(Expr):
-    __slots__ = 'fun', 'expr'
-
-    def __init__(self, fun, expr):
-        self.fun = fun
-        self.expr = expr
-
-    def subprocess(self, process):
-        return ExprCallComp(process(self.fun), process(self.expr))
-
-    def show(self, ctx):
-        return '$callcomp({})'.format(self.expr.show(None))
+    def show(self):
+        return '{}: {}'.format(self.key.show(None), self.val.show(None))
 
 
 class ExprDict(Expr):
-    __slots__ = 'items',
-
-    def __init__(self, items):
-        self.items = items
-
-    def subprocess(self, process):
-        return ExprDict([
-            (process(k), process(v))
-            for k, v in self.items
-        ])
+    items = ListField(DictItem)
 
     def show(self, ctx):
         return '{{{}}}'.format(
             ', '.join(
-                '{}: {}'.format(k.show(ctx), v.show(ctx))
-                for k, v in self.items
+                item.show()
+                for item in self.items
             ),
         )
 
 
 class ExprUnpackEx(Expr):
-    __slots__ = 'before', 'star', 'after'
-
-    def __init__(self, before, star, after):
-        self.before = before
-        self.star = star
-        self.after = after
-
-    def subprocess(self, process):
-        return ExprUnpackEx(
-            [process(expr) for expr in self.before],
-            process(self.star),
-            [process(expr) for expr in self.after],
-        )
+    before = ListField(Expr)
+    star = MaybeField(Expr)
+    after = ListField(Expr)
 
     def show(self, ctx):
         if not self.before and not self.after:
@@ -386,14 +256,8 @@ class ExprUnpackEx(Expr):
 
 # unary
 
-class ExprUn(Expr):
-    __slots__ = 'e1',
-
-    def __init__(self, e1):
-        self.e1 = e1
-
-    def subprocess(self, process):
-        return type(self)(process(self.e1))
+class ExprUn(Expr, abstract=True):
+    e1 = Field(Expr)
 
     def show(self, ctx):
         # XXX
@@ -401,54 +265,40 @@ class ExprUn(Expr):
 
 
 class ExprPos(ExprUn):
-    __slots__ = ()
     sign = '+'
 
 
 class ExprNeg(ExprUn):
-    __slots__ = ()
     sign = '-'
 
 
 class ExprNot(ExprUn):
-    __slots__ = ()
     sign = 'not '
 
 
 class ExprRepr(ExprUn):
-    __slots__ = ()
-
     def show(self, ctx):
         # XXX
         return '(`{}`)'.format(self.e1.show(ctx))
 
 
 class ExprInvert(ExprUn):
-    __slots__ = ()
     sign = '~'
 
 
 class ExprYield(ExprUn):
-    __slots__ = ()
     sign = 'yield '
 
 
 class ExprYieldFrom(ExprUn):
-    __slots__ = ()
     sign = 'yield from '
 
 
 # binary
 
-class ExprBin(Expr):
-    __slots__ = 'e1', 'e2'
-
-    def __init__(self, e1, e2):
-        self.e1 = e1
-        self.e2 = e2
-
-    def subprocess(self, process):
-        return type(self)(process(self.e1), process(self.e2))
+class ExprBin(Expr, abstract=True):
+    e1 = Field(Expr)
+    e2 = Field(Expr)
 
     def show(self, ctx):
         # XXX
@@ -456,99 +306,73 @@ class ExprBin(Expr):
 
 
 class ExprPow(ExprBin):
-    __slots__ = ()
     sign = '**'
 
 
 class ExprMul(ExprBin):
-    __slots__ = ()
     sign = '*'
 
 
 class ExprDiv(ExprBin):
-    __slots__ = ()
     sign = '/'
 
 
 class ExprMod(ExprBin):
-    __slots__ = ()
     sign = '%'
 
 
 class ExprAdd(ExprBin):
-    __slots__ = ()
     sign = '+'
 
 
 class ExprSub(ExprBin):
-    __slots__ = ()
     sign = '-'
 
 
 class ExprShl(ExprBin):
-    __slots__ = ()
     sign = '<<'
 
 
 class ExprShr(ExprBin):
-    __slots__ = ()
     sign = '>>'
 
 
 class ExprAnd(ExprBin):
-    __slots__ = ()
     sign = '&'
 
 
 class ExprOr(ExprBin):
-    __slots__ = ()
     sign = '|'
 
 
 class ExprXor(ExprBin):
-    __slots__ = ()
     sign = '^'
 
 
 class ExprBoolAnd(ExprBin):
-    __slots__ = ()
     sign = 'and'
 
 
 class ExprBoolOr(ExprBin):
-    __slots__ = ()
     sign = 'or'
 
 
 class ExprTrueDiv(ExprBin):
-    __slots__ = ()
     sign = '$/'
 
 
 class ExprFloorDiv(ExprBin):
-    __slots__ = ()
     sign = '//'
 
 
 class ExprMatMul(ExprBin):
-    __slots__ = ()
     sign = '@'
 
 
 class ExprIf(Expr):
-    __slots__ = 'cond', 'true', 'false'
-
-    def __init__(self, cond, true, false):
-        self.cond = cond
-        self.true = true
-        self.false = false
-
-    def subprocess(self, process):
-        return ExprIf(
-            process(self.cond),
-            process(self.true),
-            process(self.false),
-        )
+    cond = Field(Expr)
+    true = Field(Expr)
+    false = Field(Expr)
 
     def show(self, ctx):
         return '({} if {} else {})'.format(
@@ -560,88 +384,65 @@ class ExprIf(Expr):
 
 # compares
 
+class CmpItem(Node):
+    op = Field(CmpOp)
+    expr = Field(Expr)
+
 class ExprCmp(Expr):
-    __slots__ = ('items')
-
-    def __init__(self, items):
-        self.items = items
-
-    def subprocess(self, process):
-        return ExprCmp([
-            process(item) if isinstance(item, Expr) else item
-            for item in self.items
-        ])
+    first = Field(Expr)
+    rest = ListField(CmpItem)
 
     def show(self, ctx):
-        return '({})'.format(' '.join(
-            COMPARE_OPS[item]
-            if isinstance(item, CmpOp)
-            else item.show(ctx)
-            for item in self.items
+        return '({} {})'.format(self.first.show(ctx), ' '.join(
+            '{} {}'.format(COMPARE_OPS[item.op], item.expr.show(ctx))
+            for item in self.rest
         ))
 
 
 # attributes, indexing
 
 class ExprAttr(Expr):
-    __slots__ = 'expr', 'name'
-
-    def __init__(self, expr, name):
-        self.expr = expr
-        self.name = name
-
-    def subprocess(self, process):
-        return ExprAttr(process(self.expr), self.name)
+    expr = Field(Expr)
+    name = Field(str)
 
     def show(self, ctx):
         return '({}).{}'.format(self.expr.show(ctx), self.name)
 
 
-class ExprSubscr(ExprBin):
-    __slots__ = ()
+class ExprSubscr(Expr):
+    e1 = Field(Expr)
+    e2 = Field(Expr)
 
     def show(self, ctx):
         return '{}[{}]'.format(self.e1.show(ctx), self.e2.show(ctx))
 
 
-class ExprSlice(Expr):
-    __slots__ = 'start', 'end', 'step'
-
-    def __init__(self, start, end, step=False):
-        self.start = start
-        self.end = end
-        self.step = step
-
-    def subprocess(self, process):
-        return ExprSlice(
-            process(self.start) if self.start else None,
-            process(self.end) if self.end else None,
-            process(self.step) if self.step else self.step,
-        )
+class ExprSlice2(Expr):
+    start = MaybeField(Expr)
+    end = MaybeField(Expr)
 
     def show(self, ctx):
         def maybe(x):
             return x.show(ctx) if x is not None else ''
-        if self.step is False:
-            return '{}:{}'.format(maybe(self.start), maybe(self.end))
-        else:
-            return '{}:{}:{}'.format(maybe(self.start), maybe(self.end), maybe(self.step))
+        return '{}:{}'.format(maybe(self.start), maybe(self.end))
+
+
+class ExprSlice3(Expr):
+    start = MaybeField(Expr)
+    end = MaybeField(Expr)
+    step = MaybeField(Expr)
+
+    def show(self, ctx):
+        def maybe(x):
+            return x.show(ctx) if x is not None else ''
+        return '{}:{}:{}'.format(maybe(self.start), maybe(self.end), maybe(self.step))
 
 
 # calls
 
 class ExprCall(Expr):
-    __slots__ = 'expr', 'args'
-
-    def __init__(self, expr, args):
-        self.expr = expr
-        self.args = args
-
-    def subprocess(self, process):
-        return ExprCall(
-            process(self.expr),
-            process(self.args),
-        )
+    expr = Field(Expr)
+    args = Field(CallArgs)
 
     def show(self, ctx):
         return '{}({})'.format(
@@ -653,90 +454,53 @@ class ExprCall(Expr):
 # names
 
 class ExprName(Expr):
-    __slots__ = 'name',
-
-    def __init__(self, name):
-        self.name = name
-
-    def subprocess(self, process):
-        return self
+    name = Field(str)
 
     def show(self, ctx):
         return self.name
 
-    def __eq__(self, other):
-        return type(self) is type(other) and self.name == other.name
-
 
 class ExprGlobal(Expr):
-    __slots__ = 'name',
-
-    def __init__(self, name):
-        self.name = name
-
-    def subprocess(self, process):
-        return self
+    name = Field(str)
 
     def show(self, ctx):
         return '$global[{}]'.format(self.name)
 
-    def __eq__(self, other):
-        return type(self) is type(other) and self.name == other.name
-
 
 class ExprFast(Expr):
-    __slots__ = 'idx', 'name',
-
-    def __init__(self, idx, name):
-        self.idx = idx
-        self.name = name
-
-    def subprocess(self, process):
-        return self
+    idx = Field(int)
+    name = Field(str)
 
     def show(self, ctx):
         return '{}${}'.format(self.name, self.idx)
 
-    def __eq__(self, other):
-        return type(self) is type(other) and self.idx == other.idx
-
 
 class ExprDeref(Expr):
-    __slots__ = 'idx', 'name',
-
-    def __init__(self, idx, name):
-        self.idx = idx
-        self.name = name
-
-    def subprocess(self, process):
-        return self
+    idx = Field(int)
+    name = Field(str)
 
     def show(self, ctx):
         return '{}$d{}'.format(self.name, self.idx)
 
-    def __eq__(self, other):
-        return type(self) is type(other) and self.idx == other.idx
-
 # functions - to be cleaned up by prettifier
 
+
+class DecoCode(Node):
+    block = Field(Block)
+    # XXX has to go
+    code = Field(object)
+    varnames = ListField(str)
+
+    def show(self):
+        return self.block.show()
+
+
 class ExprFunctionRaw(Expr):
-    __slots__ = 'code', 'defargs', 'defkwargs', 'ann', 'closures'
-
-    def __init__(self, code, defargs=[], defkwargs={}, ann={}, closures=[]):
-        self.code = code
-        self.defargs = defargs
-        self.defkwargs = defkwargs
-        self.ann = ann
-        self.closures = closures
-
-    def subprocess(self, process):
-        return ExprFunctionRaw(
-            process(self.code),
-            [process(arg) for arg in self.defargs],
-            {name: process(arg) for name, arg in self.defkwargs.items()},
-            {name: process(arg) for name, arg in self.ann.items()},
-            [process(c) for c in self.closures]
-        )
+    code = Field(DecoCode)
+    defargs = ListField(Expr)
+    defkwargs = DictField(str, Expr)
+    ann = DictField(str, Expr)
+    closures = ListField(Expr)
 
     def show(self, ctx):
         # TODO some better idea?
@@ -751,19 +515,9 @@ class ExprFunctionRaw(Expr):
 
 
 class ExprFunction(Expr):
-    __slots__ = 'name', 'args', 'block',
-
-    def __init__(self, name, args, block):
-        self.name = name
-        self.args = args
-        self.block = block
-
-    def subprocess(self, process):
-        return ExprFunction(
-            self.name,
-            process(self.args),
-            process(self.block)
-        )
+    name = MaybeField(str)
+    args = Field(FunArgs)
+    block = Field(Block)
 
     def show(self, ctx):
         # TODO some better idea?
@@ -771,21 +525,10 @@ class ExprFunction(Expr):
 
 
 class ExprClassRaw(Expr):
-    __slots__ = 'name', 'args', 'code', 'closures'
-
-    def __init__(self, name, args, code, closures):
-        self.name = name
-        self.args = args
-        self.code = code
-        self.closures = closures
-
-    def subprocess(self, process):
-        return ExprClassRaw(
-            self.name,
-            process(self.args),
-            process(self.code),
-            [process(c) for c in self.closures]
-        )
+    name = Field(str)
+    args = Field(CallArgs)
+    code = Field(DecoCode)
+    closures = ListField(Expr)
 
     def show(self, ctx):
         if self.args.args:
@@ -798,19 +541,9 @@ class ExprClassRaw(Expr):
 
 
 class ExprClass(Expr):
-    __slots__ = 'name', 'args', 'body'
-
-    def __init__(self, name, args, body):
-        self.name = name
-        self.args = args
-        self.body = body
-
-    def subprocess(self, process):
-        return ExprClass(
-            self.name,
-            process(self.args),
-            process(self.body)
-        )
+    name = Field(str)
+    args = Field(CallArgs)
+    body = Field(Block)
 
     def show(self, ctx):
         if self.args.args:
@@ -823,38 +556,18 @@ class ExprClass(Expr):
 
 
 class ExprLambda(Expr):
-    __slots__ = 'args', 'expr',
-
-    def __init__(self, args, expr):
-        self.args = args
-        self.expr = expr
-
-    def subprocess(self, process):
-        return ExprLambda(
-            process(self.args),
-            process(self.expr)
-        )
+    args = Field(FunArgs)
+    expr = Field(Expr)
 
     def show(self, ctx):
         return '(lambda {}: {})'.format(self.args.show(), self.expr.show(None))
 
 
 class ExprNewListCompRaw(Expr):
-    __slots__ = 'expr', 'topdst', 'items', 'arg'
-
-    def __init__(self, expr, topdst, items, arg):
-        self.expr = expr
-        self.topdst = topdst
-        self.items = items
-        self.arg = arg
-
-    def subprocess(self, process):
-        return ExprNewListCompRaw(
-            process(self.expr),
-            process(self.topdst),
-            [process(item) for item in self.items],
-            process(self.arg),
-        )
+    expr = Field(Expr)
+    topdst = Field(Expr)
+    items = ListField(CompItem)
+    arg = Field(Expr)
 
     def show(self, ctx):
         return '$newlistcompraw({} top {} in {} {})'.format(
@@ -866,21 +579,10 @@ class ExprNewListCompRaw(Expr):
 
 
 class ExprNewSetCompRaw(Expr):
-    __slots__ = 'expr', 'topdst', 'items', 'arg'
-
-    def __init__(self, expr, topdst, items, arg):
-        self.expr = expr
-        self.topdst = topdst
-        self.items = items
-        self.arg = arg
-
-    def subprocess(self, process):
-        return ExprNewSetCompRaw(
-            process(self.expr),
-            process(self.topdst),
-            [process(item) for item in self.items],
-            process(self.arg),
-        )
+    expr = Field(Expr)
+    topdst = Field(Expr)
+    items = ListField(CompItem)
+    arg = Field(Expr)
 
     def show(self, ctx):
         return '$newsetcompraw({} top {} in {} {})'.format(
@@ -892,23 +594,11 @@ class ExprNewSetCompRaw(Expr):
 
 
 class ExprNewDictCompRaw(Expr):
-    __slots__ = 'key', 'val', 'topdst', 'items', 'arg'
-
-    def __init__(self, key, val, topdst, items, arg):
-        self.key = key
-        self.val = val
-        self.topdst = topdst
-        self.items = items
-        self.arg = arg
-
-    def subprocess(self, process):
-        return ExprNewDictCompRaw(
-            process(self.key),
-            process(self.val),
-            process(self.topdst),
-            [process(item) for item in self.items],
-            process(self.arg),
-        )
+    key = Field(Expr)
+    val = Field(Expr)
+    topdst = Field(Expr)
+    items = ListField(CompItem)
+    arg = Field(Expr)
 
     def show(self, ctx):
         return '$newdictcompraw({}: {} top {} in {} {})'.format(
@@ -920,11 +610,16 @@ class ExprNewDictCompRaw(Expr):
         )
 
 
-class Frozenset:
-    __slots__ = 'exprs',
+class ExprCallComp(Expr):
+    fun = Field(ExprFunctionRaw)
+    expr = Field(Expr)
 
-    def __init__(self, exprs):
-        self.exprs = exprs
+    def show(self, ctx):
+        return '$callcomp({})'.format(self.expr.show(None))
+
+
+class Frozenset(Node):
+    exprs = ListField(Expr)
 
 
 def from_marshal(obj, version):

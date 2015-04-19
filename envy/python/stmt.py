@@ -2,111 +2,20 @@ from envy.show import indent
 from .helpers import PythonError
 from .expr import ExprFast
 
-class FunArgs:
-    __slots__ = 'args', 'defargs', 'vararg', 'kwargs', 'defkwargs', 'varkw', 'ann'
+from .ast import *
 
-    def __init__(self, args, defargs, vararg, kwargs, defkwargs, varkw, ann):
-        self.args = args
-        if len(defargs) < len(args):
-            defargs = [None] * (len(args) - len(defargs)) + defargs
-        self.defargs = defargs
-        self.vararg = vararg
-        self.kwargs = kwargs
-        self.defkwargs = defkwargs
-        self.varkw = varkw
-        self.ann = ann
-
-    def subprocess(self, process):
-        return FunArgs(
-            [process(arg) for arg in self.args],
-            [process(arg) if arg else None for arg in self.defargs],
-            process(self.vararg) if self.vararg else None,
-            [process(arg) for arg in self.kwargs],
-            {name: process(arg) for name, arg in self.defkwargs.items()},
-            process(self.varkw) if self.varkw else None,
-            {name: process(arg) for name, arg in self.ann.items()},
-        )
-
-    def setdefs(self, defargs, defkwargs, ann):
-        return FunArgs(
-            self.args,
-            defargs,
-            self.vararg,
-            self.kwargs,
-            defkwargs,
-            self.varkw,
-            ann
-        )
-
-    def show(self):
-        def _ann(arg):
-            if not isinstance(arg, ExprFast):
-                return None
-            return self.ann.get(arg.name)
-        chunks = [
-            ('', arg, defarg, _ann(arg))
-            for arg, defarg in zip(self.args, self.defargs)
-        ]
-        if self.vararg:
-            chunks.append(('*', self.vararg, None, _ann(self.vararg)))
-        elif self.kwargs:
-            chunks.append(('*', None, None, None))
-        chunks.extend([('', arg, self.defkwargs.get(arg.name), _ann(arg)) for arg in self.kwargs])
-        if self.varkw:
-            chunks.append(('**', self.varkw, None, _ann(self.varkw)))
-        return ', '.join(
-            '{}{}{}{}'.format(
-                pref,
-                arg.show(None) if arg else '',
-                ": {}".format(ann.show(None)) if ann else '',
-                "={}".format(defarg.show(None)) if defarg else ''
-            )
-            for pref, arg, defarg, ann in chunks
-        )
-
-
-class Block:
-    __slots__ = 'stmts',
-
-    def __init__(self, stmts):
-        self.stmts = stmts
-
-    def subprocess(self, process):
-        return Block([process(stmt) for stmt in self.stmts])
-
-    def show(self):
-        for stmt in self.stmts:
-            yield from stmt.show()
-        if not self.stmts:
-            yield 'pass'
-
-
-class Stmt:
-    __slots__ = ()
 
 
 class StmtReturn(Stmt):
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
-
-    def subprocess(self, process):
-        return StmtReturn(process(self.val))
+    val = Field(Expr)
 
     def show(self):
         yield "return {}".format(self.val.show(None))
 
 
 class StmtPrint(Stmt):
-    __slots__ = 'vals', 'nl'
-
-    def __init__(self, vals, nl=True):
-        self.vals = vals
-        self.nl = nl
-
-    def subprocess(self, process):
-        return StmtPrint([process(expr) for expr in self.vals], self.nl)
+    vals = ListField(Expr)
+    nl = Field(bool)
 
     def show(self):
         if self.vals:
@@ -117,15 +26,9 @@ class StmtPrint(Stmt):
 
 
 class StmtPrintTo(Stmt):
-    __slots__ = 'to', 'vals', 'nl'
-
-    def __init__(self, to, vals, nl=True):
-        self.to = to
-        self.vals = vals
-        self.nl = nl
-
-    def subprocess(self, process):
-        return StmtPrintTo(process(self.to), [process(expr) for expr in self.vals], self.nl)
+    to = Field(Expr)
+    vals = ListField(Expr)
+    nl = Field(bool)
 
     def show(self):
         if self.vals:
@@ -136,40 +39,22 @@ class StmtPrintTo(Stmt):
 
 
 class StmtSingle(Stmt):
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
-
-    def subprocess(self, process):
-        return StmtSingle(process(self.val))
+    val = Field(Expr)
 
     def show(self):
         yield self.val.show(None)
 
 
 class StmtPrintExpr(Stmt):
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
-
-    def subprocess(self, process):
-        return StmtPrintExpr(process(self.val))
+    val = Field(Expr)
 
     def show(self):
         yield "$print {}".format(self.val.show(None))
 
 
 class StmtAssign(Stmt):
-    __slots__ = 'dests', 'expr'
-
-    def __init__(self, dests, expr):
-        self.dests = dests
-        self.expr = expr
-
-    def subprocess(self, process):
-        return StmtAssign([process(dst) for dst in self.dests], process(self.expr))
+    dests = ListField(Expr)
+    expr = Field(Expr)
 
     def show(self):
         yield '{}{}'.format(
@@ -181,117 +66,81 @@ class StmtAssign(Stmt):
         )
 
 
-class StmtInplace(Stmt):
-    __slots__ = 'dest', 'src'
-
-    def __init__(self, dest, src):
-        self.dest = dest
-        self.src = src
-
-    def subprocess(self, process):
-        return type(self)(process(self.dest), process(self.src))
+class StmtInplace(Stmt, abstract=True):
+    dest = Field(Expr)
+    src = Field(Expr)
 
     def show(self):
         yield '{} {} {}'.format(self.dest.show(None), self.sign, self.src.show(None))
 
 
 class StmtInplaceAdd(StmtInplace):
-    __slots__ = ()
     sign = '+='
 
 
 class StmtInplaceSubtract(StmtInplace):
-    __slots__ = ()
     sign = '-='
 
 
 class StmtInplaceMultiply(StmtInplace):
-    __slots__ = ()
     sign = '*='
 
 
 class StmtInplaceDivide(StmtInplace):
-    __slots__ = ()
     sign = '/='
 
 
 class StmtInplaceModulo(StmtInplace):
-    __slots__ = ()
     sign = '%='
 
 
 class StmtInplacePower(StmtInplace):
-    __slots__ = ()
     sign = '**='
 
 
 class StmtInplaceLshift(StmtInplace):
-    __slots__ = ()
     sign = '<<='
 
 
 class StmtInplaceRshift(StmtInplace):
-    __slots__ = ()
     sign = '>>='
 
 
 class StmtInplaceAnd(StmtInplace):
-    __slots__ = ()
     sign = '&='
 
 
 class StmtInplaceOr(StmtInplace):
-    __slots__ = ()
     sign = '|='
 
 
 class StmtInplaceXor(StmtInplace):
-    __slots__ = ()
     sign = '^='
 
 
 class StmtInplaceTrueDivide(StmtInplace):
-    __slots__ = ()
     sign = '$/='
 
 
 class StmtInplaceFloorDivide(StmtInplace):
-    __slots__ = ()
     sign = '//='
 
 
 class StmtInplaceMatrixMultiply(StmtInplace):
-    __slots__ = ()
     sign = '@='
 
 
 class StmtDel(Stmt):
-    __slots__ = 'val',
-
-    def __init__(self, val):
-        self.val = val
-
-    def subprocess(self, process):
-        return StmtDel(process(self.val))
+    val = Field(Expr)
 
     def show(self):
         yield "del {}".format(self.val.show(None))
 
 
 class StmtRaise(Stmt):
-    __slots__ = 'cls', 'val', 'tb'
-
-    def __init__(self, cls=None, val=None, tb=None):
-        self.cls = cls
-        self.val = val
-        self.tb = tb
-
-    def subprocess(self, process):
-        return StmtRaise(
-            process(self.cls) if self.cls else None,
-            process(self.val) if self.val else None,
-            process(self.tb) if self.tb else None,
-        )
+    cls = MaybeField(Expr)
+    val = MaybeField(Expr)
+    tb = MaybeField(Expr)
 
     def show(self):
         if self.cls is None:
@@ -308,53 +157,25 @@ class StmtRaise(Stmt):
 
 
 class StmtListAppend(Stmt):
-    __slots__ = 'tmp', 'val'
-
-    def __init__(self, tmp, val):
-        self.tmp = tmp
-        self.val = val
-
-    def subprocess(self, process):
-        return StmtListAppend(
-            process(self.tmp),
-            process(self.val)
-        )
+    tmp = Field(Expr)
+    val = Field(Expr)
 
     def show(self):
         yield "$listappend {}, {}".format(self.tmp.show(None), self.val.show(None))
 
 
 class StmtSetAdd(Stmt):
-    __slots__ = 'tmp', 'val'
-
-    def __init__(self, tmp, val):
-        self.tmp = tmp
-        self.val = val
-
-    def subprocess(self, process):
-        return StmtSetAdd(
-            process(self.tmp),
-            process(self.val)
-        )
+    tmp = Field(Expr)
+    val = Field(Expr)
 
     def show(self):
         yield "$setadd {}, {}".format(self.tmp.show(None), self.val.show(None))
 
 
 class StmtMapAdd(Stmt):
-    __slots__ = 'tmp', 'key', 'val'
-
-    def __init__(self, tmp, key, val):
-        self.tmp = tmp
-        self.key = key
-        self.val = val
-
-    def subprocess(self, process):
-        return StmtMapAdd(
-            process(self.tmp),
-            process(self.key),
-            process(self.val)
-        )
+    tmp = Field(Expr)
+    key = Field(Expr)
+    val = Field(Expr)
 
     def show(self):
         yield "$mapadd {}, {}: {}".format(
@@ -365,17 +186,8 @@ class StmtMapAdd(Stmt):
 
 
 class StmtAssert(Stmt):
-    __slots__ = 'expr', 'msg'
-
-    def __init__(self, expr, msg=None):
-        self.expr = expr
-        self.msg = msg
-
-    def subprocess(self, process):
-        return StmtAssert(
-            process(self.expr),
-            process(self.msg) if self.msg else None,
-        )
+    expr = Field(Expr)
+    msg = MaybeField(Expr)
 
     def show(self):
         if self.msg is None:
@@ -385,80 +197,48 @@ class StmtAssert(Stmt):
 
 
 class StmtImport(Stmt):
-    __slots__ = 'level', 'name', 'attrs', 'as_'
-
-    def __init__(self, level, name, attrs, as_):
-        self.level = level
-        self.name = name
-        self.attrs = attrs
-        self.as_ = as_
-
-    def subprocess(self, process):
-        return StmtImport(
-            self.level,
-            self.name,
-            self.attrs,
-            process(self.as_)
-        )
+    level = Field(int)
+    name = Field(str)
+    attrs = ListField(str)
+    as_ = Field(Expr)
 
     def show(self):
         yield "import {} {} as{} {}".format(self.level, self.name, ''.join('.' + attr for attr in self.attrs), self.as_.show(None))
 
 
+class FromItem(Node):
+    name = Field(str)
+    expr = MaybeField(Expr)
+
+
 class StmtFromImport(Stmt):
-    __slots__ = 'level', 'name', 'items'
-
-    def __init__(self, level, name, items):
-        self.level = level
-        self.name = name
-        self.items = items
-
-    def subprocess(self, process):
-        return StmtFromImport(
-            self.level,
-            self.name,
-            [(name, process(expr) if expr else None) for name, expr in self.items]
-        )
+    level = Field(int)
+    name = Field(str)
+    items = ListField(FromItem)
 
     def show(self):
         yield "from {} {} import {}".format(
             self.level,
             self.name,
             ', '.join(
-                "{} as {}".format(name, expr.show(None)) if expr else name
-                for name, expr in self.items
+                "{} as {}".format(item.name, item.expr.show(None)) if item.expr else item.name
+                for item in self.items
             )
         )
 
 
 class StmtImportStar(Stmt):
-    __slots__ = 'level', 'name'
-
-    def __init__(self, level, name):
-        self.level = level
-        self.name = name
-
-    def subprocess(self, process):
-        return self
+    level = Field(int)
+    name = Field(str)
 
     def show(self):
         yield "from {} {} import *".format(self.level, self.name)
 
 
 class StmtExec(Stmt):
-    __slots__ = 'code', 'globals', 'locals'
-
-    def __init__(self, code, globals=None, locals=None):
-        self.code = code
-        self.globals = globals
-        self.locals = locals
-
-    def subprocess(self, process):
-        return StmtExec(
-            process(self.code),
-            process(self.globals) if self.globals else None,
-            process(self.locals) if self.locals else None,
-        )
+    code = Field(Expr)
+    globals = MaybeField(Expr)
+    locals = MaybeField(Expr)
 
     def show(self):
         if self.globals is None:
@@ -479,19 +259,9 @@ class StmtExec(Stmt):
 
 
 class StmtIfRaw(Stmt):
-    __slots__ = 'cond', 'body', 'else_'
-
-    def __init__(self, cond, body, else_):
-        self.cond = cond
-        self.body = body
-        self.else_ = else_
-
-    def subprocess(self, process):
-        return StmtIfRaw(
-            process(self.cond),
-            process(self.body),
-            process(self.else_),
-        )
+    cond = Field(Expr)
+    body = Field(Block)
+    else_ = Field(Block)
 
     def show(self):
         yield "$if {}:".format(self.cond.show(None))
@@ -501,17 +271,8 @@ class StmtIfRaw(Stmt):
 
 
 class StmtIfDead(Stmt):
-    __slots__ = 'cond', 'body'
-
-    def __init__(self, cond, body):
-        self.cond = cond
-        self.body = body
-
-    def subprocess(self, process):
-        return StmtIfDead(
-            process(self.cond),
-            process(self.body),
-        )
+    cond = Field(Expr)
+    body = Field(Block)
 
     def show(self):
         yield "$if {}:".format(self.cond.show(None))
@@ -519,58 +280,34 @@ class StmtIfDead(Stmt):
 
 
 class StmtJunk(Stmt):
-    __slots__ = 'body'
-
-    def __init__(self, body):
-        self.body = body
-
-    def subprocess(self, process):
-        return StmtJunk(
-            process(self.body),
-        )
+    body = Field(Block)
 
     def show(self):
         yield "$junk:"
         yield from indent(self.body.show())
 
 
+class IfItem(Node):
+    cond = Field(Expr)
+    body = Field(Block)
+
+
 class StmtIf(Stmt):
-    __slots__ = 'items', 'else_'
-
-    def __init__(self, items, else_):
-        self.items = items
-        self.else_ = else_
-
-    def subprocess(self, process):
-        return StmtIf(
-            [
-                (process(expr), process(block))
-                for expr, block in self.items
-            ],
-            process(self.else_) if self.else_ else None
-        )
+    items = ListField(IfItem)
+    else_ = MaybeField(Block)
 
     def show(self):
-        for idx, (expr, block) in enumerate(self.items):
-            yield "{} {}:".format('if' if idx == 0 else 'elif', expr.show(None))
-            yield from indent(block.show())
+        for idx, item in enumerate(self.items):
+            yield "{} {}:".format('if' if idx == 0 else 'elif', item.cond.show(None))
+            yield from indent(item.body.show())
         if self.else_:
             yield "else:"
             yield from indent(self.else_.show())
 
 
 class StmtLoop(Stmt):
-    __slots__ = 'body', 'else_'
-
-    def __init__(self, body, else_):
-        self.body = body
-        self.else_ = else_
-
-    def subprocess(self, process):
-        return StmtLoop(
-            process(self.body),
-            process(self.else_)
-        )
+    body = Field(Block)
+    else_ = MaybeField(Block)
 
     def show(self):
         yield "$loop:"
@@ -580,14 +317,8 @@ class StmtLoop(Stmt):
 
 
 class StmtWhileRaw(Stmt):
-    __slots__ = 'expr', 'body'
-
-    def __init__(self, expr, body):
-        self.expr = expr
-        self.body = body
-
-    def subprocess(self, process):
-        return StmtWhileRaw(process(self.expr), process(self.body))
+    expr = Field(Expr)
+    body = Field(Block)
 
     def show(self):
         yield "$while {}:".format(self.expr.show(None))
@@ -595,19 +326,9 @@ class StmtWhileRaw(Stmt):
 
 
 class StmtWhile(Stmt):
-    __slots__ = 'expr', 'body', 'else_'
-
-    def __init__(self, expr, body, else_):
-        self.expr = expr
-        self.body = body
-        self.else_ = else_
-
-    def subprocess(self, process):
-        return StmtWhile(
-            process(self.expr),
-            process(self.body),
-            process(self.else_) if self.else_ else None
-        )
+    expr = Field(Expr)
+    body = Field(Block)
+    else_ = MaybeField(Block)
 
     def show(self):
         yield "while {}:".format(self.expr.show(None))
@@ -618,15 +339,9 @@ class StmtWhile(Stmt):
 
 
 class StmtForRaw(Stmt):
-    __slots__ = 'expr', 'dst', 'body'
-
-    def __init__(self, expr, dst, body):
-        self.expr = expr
-        self.dst = dst
-        self.body = body
-
-    def subprocess(self, process):
-        return StmtForRaw(process(self.expr), process(self.dst), process(self.body))
+    expr = Field(Expr)
+    dst = Field(Expr)
+    body = Field(Block)
 
     def show(self):
         yield "$for {} in {}:".format(self.dst.show(None), self.expr.show(None))
@@ -634,15 +349,9 @@ class StmtForRaw(Stmt):
 
 
 class StmtForTop(Stmt):
-    __slots__ = 'expr', 'dst', 'body'
-
-    def __init__(self, expr, dst, body):
-        self.expr = expr
-        self.dst = dst
-        self.body = body
-
-    def subprocess(self, process):
-        return StmtForTop(process(self.expr), process(self.dst), process(self.body))
+    expr = Field(Expr)
+    dst = Field(Expr)
+    body = Field(Block)
 
     def show(self):
         yield "$top {} in {}:".format(self.dst.show(None), self.expr.show(None))
@@ -650,21 +359,10 @@ class StmtForTop(Stmt):
 
 
 class StmtFor(Stmt):
-    __slots__ = 'expr', 'dst', 'body', 'else_'
-
-    def __init__(self, expr, dst, body, else_):
-        self.expr = expr
-        self.dst = dst
-        self.body = body
-        self.else_ = else_
-
-    def subprocess(self, process):
-        return StmtFor(
-            process(self.expr),
-            process(self.dst),
-            process(self.body),
-            process(self.else_) if self.else_ else None
-        )
+    expr = Field(Expr)
+    dst = Field(Expr)
+    body = Field(Block)
+    else_ = MaybeField(Block)
 
     def show(self):
         yield "for {} in {}:".format(self.dst.show(None), self.expr.show(None))
@@ -675,17 +373,8 @@ class StmtFor(Stmt):
 
 
 class StmtFinally(Stmt):
-    __slots__ = 'try_', 'finally_'
-
-    def __init__(self, try_, finally_):
-        self.try_ = try_
-        self.finally_ = finally_
-
-    def subprocess(self, process):
-        return StmtFinally(
-            process(self.try_),
-            process(self.finally_),
-        )
+    try_ = Field(Block)
+    finally_  = Field(Block)
 
     def show(self):
         yield "try:"
@@ -694,40 +383,31 @@ class StmtFinally(Stmt):
         yield from indent(self.finally_.show())
 
 
+class ExceptClause(Node):
+    expr = Field(Expr)
+    dst = MaybeField(Expr)
+    body = Field(Block)
+
+    def show(self):
+        if self.dst is None:
+            yield 'except {}:'.format(self.expr.show(None))
+        else:
+            # TODO as
+            yield 'except {}, {}:'.format(self.expr.show(None), self.dst.show(None))
+        yield from indent(self.body.show())
+
+
 class StmtExcept(Stmt):
-    __slots__ = 'try_', 'items', 'any', 'else_'
-
-    def __init__(self, try_, items, any, else_):
-        self.try_ = try_
-        self.items = items
-        self.any = any
-        self.else_ = else_
-
-    def subprocess(self, process):
-        return StmtExcept(
-            process(self.try_),
-            [
-                (
-                    process(expr),
-                    process(dst) if dst else None,
-                    process(body),
-                )
-                for expr, dst, body in self.items
-            ],
-            process(self.any) if self.any else None,
-            process(self.else_) if self.else_ else None,
-        )
+    try_ = Field(Block)
+    items = ListField(ExceptClause)
+    any = MaybeField(Block)
+    else_ = MaybeField(Block)
 
     def show(self):
         yield "try:"
         yield from indent(self.try_.show())
-        for expr, dst, body in self.items:
-            if dst is None:
-                yield 'except {}:'.format(expr.show(None))
-            else:
-                # TODO as
-                yield 'except {}, {}:'.format(expr.show(None), dst.show(None))
-            yield from indent(body.show())
+        for item in self.items:
+            yield from item.show()
         if self.any is not None:
             yield "except:"
             yield from indent(self.any.show())
@@ -737,84 +417,43 @@ class StmtExcept(Stmt):
 
 
 class StmtExceptDead(Stmt):
-    __slots__ = 'try_', 'items', 'any'
-
-    def __init__(self, try_, items, any):
-        self.try_ = try_
-        self.items = items
-        self.any = any
-
-    def subprocess(self, process):
-        return StmtExceptDead(
-            process(self.try_),
-            [
-                (
-                    process(expr),
-                    process(dst) if dst else None,
-                    process(body),
-                )
-                for expr, dst, body in self.items
-            ],
-            process(self.any) if self.any else None,
-        )
+    try_ = Field(Block)
+    items = ListField(ExceptClause)
+    any = MaybeField(Block)
 
     def show(self):
         yield "$trydead:"
         yield from indent(self.try_.show())
-        for expr, dst, body in self.items:
-            if dst is None:
-                yield 'except {}:'.format(expr.show(None))
-            else:
-                # TODO as
-                yield 'except {}, {}:'.format(expr.show(None), dst.show(None))
-            yield from indent(body.show())
+        for item in self.items:
+            yield from item.show()
         if self.any is not None:
             yield "except:"
             yield from indent(self.any.show())
 
 
 class StmtBreak(Stmt):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self):
         yield 'break'
 
 
 class StmtContinue(Stmt):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self):
         yield 'continue'
 
 
 class StmtFinalContinue(Stmt):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self):
         yield '$finalcontinue'
 
 
 class StmtAccess(Stmt):
-    __slots__ = 'name', 'mode'
+    name = Field(str)
+    mode = Field(int)
 
-    # TODO: decode that crap
     def __init__(self, name, mode):
         if mode & ~0o666 or not mode:
             raise PythonError("funny access mode")
-        self.name = name
-        self.mode = mode
-
-    def subprocess(self, process):
-        return self
+        super().__init__(name, mode)
 
     def show(self):
         chunks = []
@@ -830,34 +469,17 @@ class StmtAccess(Stmt):
 
 
 class StmtArgs(Stmt):
-    __slots__ = 'args'
-
-    def __init__(self, args):
-        self.args = args
-
-    def subprocess(self, process):
-        return StmtArgs(process(self.args))
+    args = Field(FunArgs)
 
     def show(self):
         yield "$args {}".format(self.args.show())
 
 
 class StmtClass(Stmt):
-    __slots__ = 'deco', 'name', 'args', 'body'
-
-    def __init__(self, deco, name, args, body):
-        self.deco = deco
-        self.name = name
-        self.args = args
-        self.body = body
-
-    def subprocess(self, process):
-        return StmtClass(
-            [process(d) for d in self.deco],
-            self.name,
-            process(self.args),
-            process(self.body)
-        )
+    deco = ListField(Expr)
+    name = Field(str)
+    args = Field(CallArgs)
+    body = Field(Block)
 
     def show(self):
         for d in self.deco:
@@ -873,51 +495,25 @@ class StmtClass(Stmt):
 
 
 class StmtEndClass(Stmt):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self):
         yield '$endclass'
 
 
 class StmtReturnClass(Stmt):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self):
         yield '$returnclass'
 
 
 class StmtStartClass(Stmt):
-    __slots__ = ()
-
-    def subprocess(self, process):
-        return self
-
     def show(self):
         yield '$startclass'
 
 
 class StmtDef(Stmt):
-    __slots__ = 'deco', 'name', 'args', 'body'
-
-    def __init__(self, deco, name, args, body):
-        self.deco = deco
-        self.name = name
-        self.args = args
-        self.body = body
-
-    def subprocess(self, process):
-        return StmtDef(
-            [process(d) for d in self.deco],
-            self.name,
-            process(self.args),
-            process(self.body)
-        )
+    deco = ListField(Expr)
+    name = Field(str)
+    args = Field(FunArgs)
+    body = Field(Block)
 
     def show(self):
         for d in self.deco:
@@ -930,19 +526,9 @@ class StmtDef(Stmt):
         yield from indent(self.body.show())
 
 class StmtWith(Stmt):
-    __slots__ = 'expr', 'dst', 'body'
-
-    def __init__(self, expr, dst, body):
-        self.expr = expr
-        self.dst = dst
-        self.body = body
-
-    def subprocess(self, process):
-        return StmtWith(
-            process(self.expr),
-            process(self.dst) if self.dst else None,
-            process(self.body),
-        )
+    expr = Field(Expr)
+    dst = MaybeField(Expr)
+    body = Field(Block)
 
     def show(self):
         if self.dst:

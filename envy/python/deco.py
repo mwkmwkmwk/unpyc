@@ -325,7 +325,7 @@ class Closures(metaclass=Wantable):
     def parse(res, opcode):
         if not all(isinstance(x, Closure) for x in res):
             raise NoMatch
-        return res
+        return [x.var for x in res]
 
 
 class MaybeWantFlow(metaclass=Wantable):
@@ -2669,7 +2669,7 @@ def visit_closure_tuple(
     op: OpcodeBuildTuple,
     closures: Closures,
 ):
-    return [ClosuresTuple([closure.var for closure in closures])]
+    return [ClosuresTuple(closures)]
 
 @visitor
 def _visit_make_function(

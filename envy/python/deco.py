@@ -190,18 +190,12 @@ Locals = namedtuple('Locals', [])
 
 DupAttr = namedtuple('DupAttr', ['expr', 'name'])
 DupSubscr = namedtuple('DupSubscr', ['expr', 'index'])
-DupSliceNN = namedtuple('DupSliceNN', ['expr'])
-DupSliceEN = namedtuple('DupSliceEN', ['expr', 'start'])
-DupSliceNE = namedtuple('DupSliceNE', ['expr', 'end'])
-DupSliceEE = namedtuple('DupSliceEE', ['expr', 'start', 'end'])
+DupSlice = namedtuple('DupSlice', ['expr', 'start', 'end'])
 
 InplaceSimple = namedtuple('InplaceSimple', ['dst', 'src', 'stmt'])
 InplaceAttr = namedtuple('InplaceAttr', ['expr', 'name', 'src', 'stmt'])
 InplaceSubscr = namedtuple('InplaceSubscr', ['expr', 'index', 'src', 'stmt'])
-InplaceSliceNN = namedtuple('InplaceSliceNN', ['expr', 'src', 'stmt'])
-InplaceSliceEN = namedtuple('InplaceSliceEN', ['expr', 'start', 'src', 'stmt'])
-InplaceSliceNE = namedtuple('InplaceSliceNE', ['expr', 'end', 'src', 'stmt'])
-InplaceSliceEE = namedtuple('InplaceSliceEE', ['expr', 'start', 'end', 'src', 'stmt'])
+InplaceSlice = namedtuple('InplaceSlice', ['expr', 'start', 'end', 'src', 'stmt'])
 
 TmpVarAttrStart = namedtuple('TmpVarAttrStart', ['tmp', 'expr', 'name'])
 TmpVarCleanup = namedtuple('TmpVarCleanup', ['tmp'])
@@ -358,14 +352,6 @@ class LoopDammit(metaclass=Wantable):
         pos += 1 + idx
         return stack[pos:orig], pos
 
-    def parse(res, opcode):
-        pass
-        if looplen:
-            arg = stack[-looplen:]
-            del stack[-looplen:]
-        else:
-            arg = []
-
 
 class SimpleWant(Wantable):
     def __init__(self, cls):
@@ -382,20 +368,15 @@ class SimpleWant(Wantable):
 
 
 class WantIfOp(Wantable):
-    def __init__(self, cls, op):
-        self.cls = cls
+    def __init__(self, want, op):
+        self.want = want if isinstance(want, Wantable) else SimpleWant(want)
         self.op = op
 
-    def count(self, top, opcode, prev):
-        return 1 if isinstance(opcode, self.op) else 0
-
-    def parse(self, res, opcode):
-        if not res:
-            return None
-        res, = res
-        if not isinstance(res, self.cls):
-            raise NoMatch
-        return res
+    def get(self, stack, pos, opcode, prev, next):
+        if isinstance(opcode, self.op):
+            return self.want.get(stack, pos, opcode, prev, next)
+        else:
+            return None, pos
 
 
 # visitors
@@ -2555,20 +2536,32 @@ def _visit_set_func_args(
 
 @visitor
 def _visit_make_function(
-    self,
-    op: OpcodeMakeFunction,
+    self: '!has_sane_closure',
+    op: (OpcodeMakeFunction, OpcodeMakeClosure),
     args: Exprs('param', 1),
+    closures: WantIfOp(UglyClosures, OpcodeMakeClosure),
     code: Code,
 ):
-    return [ExprFunctionRaw(deco_code(code), args, {}, {}, [])]
+    return [ExprFunctionRaw(deco_code(code), args, {}, {}, closures or [])]
+
+@visitor
+def _visit_make_function(
+    self: 'has_sane_closure',
+    op: (OpcodeMakeFunction, OpcodeMakeClosure),
+    args: Exprs('param', 1),
+    closures: WantIfOp(ClosuresTuple, OpcodeMakeClosure),
+    code: Code,
+):
+    return [ExprFunctionRaw(deco_code(code), args, {}, {}, closures.vars if closures else [])]
 
 @visitor
 def _visit_make_function(
     self: '!has_qualname',
-    op: OpcodeMakeFunctionNew,
+    op: (OpcodeMakeFunctionNew, OpcodeMakeClosureNew),
     kwargs: Exprs('kwargs', 2),
     args: Exprs('args', 1),
     ann: Exprs('ann', 1),
+    closures: WantIfOp(ClosuresTuple, OpcodeMakeClosureNew),
     code: Code,
 ):
     return [ExprFunctionRaw(
@@ -2576,16 +2569,17 @@ def _visit_make_function(
         args,
         {self.string(name): arg for name, arg in kwargs},
         self.make_ann(ann),
-        []
+        closures.vars if closures else [],
     )]
 
 @visitor
 def _visit_make_function(
     self: ('has_qualname', 'has_reversed_def_kwargs'),
-    op: OpcodeMakeFunctionNew,
+    op: (OpcodeMakeFunctionNew, OpcodeMakeClosureNew),
     kwargs: Exprs('kwargs', 2),
     args: Exprs('args', 1),
     ann: Exprs('ann', 1),
+    closures: WantIfOp(ClosuresTuple, OpcodeMakeClosureNew),
     code: Code,
     qualname: ExprUnicode,
 ):
@@ -2595,16 +2589,17 @@ def _visit_make_function(
         args,
         {self.string(name): arg for name, arg in kwargs},
         self.make_ann(ann),
-        []
+        closures.vars if closures else [],
     )]
 
 @visitor
 def _visit_make_function(
     self: ('has_qualname', '!has_reversed_def_kwargs'),
-    op: OpcodeMakeFunctionNew,
+    op: (OpcodeMakeFunctionNew, OpcodeMakeClosureNew),
     args: Exprs('args', 1),
     kwargs: Exprs('kwargs', 2),
     ann: Exprs('ann', 1),
+    closures: WantIfOp(ClosuresTuple, OpcodeMakeClosureNew),
     code: Code,
     qualname: ExprUnicode,
 ):
@@ -2614,7 +2609,7 @@ def _visit_make_function(
         args,
         {self.string(name): arg for name, arg in kwargs},
         self.make_ann(ann),
-        []
+        closures.vars if closures else [],
     )]
 
 @visitor
@@ -2624,84 +2619,6 @@ def visit_closure_tuple(
     closures: Closures,
 ):
     return [ClosuresTuple(closures)]
-
-@visitor
-def _visit_make_function(
-    self: '!has_sane_closure',
-    op: OpcodeMakeClosure,
-    args: Exprs('param', 1),
-    closures: UglyClosures,
-    code: Code,
-):
-    return [ExprFunctionRaw(deco_code(code), args, {}, {}, closures)]
-
-@visitor
-def _visit_make_function(
-    self: 'has_sane_closure',
-    op: OpcodeMakeClosure,
-    args: Exprs('param', 1),
-    closures: ClosuresTuple,
-    code: Code,
-):
-    return [ExprFunctionRaw(deco_code(code), args, {}, {}, closures.vars)]
-
-@visitor
-def _visit_make_function(
-    self: '!has_qualname',
-    op: OpcodeMakeClosureNew,
-    kwargs: Exprs('kwargs', 2),
-    args: Exprs('args', 1),
-    ann: Exprs('ann', 1),
-    closures: ClosuresTuple,
-    code: Code,
-):
-    return [ExprFunctionRaw(
-        deco_code(code),
-        args,
-        {self.string(name): arg for name, arg in kwargs},
-        self.make_ann(ann),
-        closures.vars
-    )]
-
-@visitor
-def _visit_make_function(
-    self: ('has_qualname', 'has_reversed_def_kwargs'),
-    op: OpcodeMakeClosureNew,
-    kwargs: Exprs('kwargs', 2),
-    args: Exprs('args', 1),
-    ann: Exprs('ann', 1),
-    closures: ClosuresTuple,
-    code: Code,
-    qualname: ExprUnicode,
-):
-    # XXX qualname
-    return [ExprFunctionRaw(
-        deco_code(code),
-        args,
-        {self.string(name): arg for name, arg in kwargs},
-        self.make_ann(ann),
-        closures.vars
-    )]
-
-@visitor
-def _visit_make_function(
-    self: ('has_qualname', '!has_reversed_def_kwargs'),
-    op: OpcodeMakeClosureNew,
-    args: Exprs('args', 1),
-    kwargs: Exprs('kwargs', 2),
-    ann: Exprs('ann', 1),
-    closures: ClosuresTuple,
-    code: Code,
-    qualname: ExprUnicode,
-):
-    # XXX qualname
-    return [ExprFunctionRaw(
-        deco_code(code),
-        args,
-        {self.string(name): arg for name, arg in kwargs},
-        self.make_ann(ann),
-        closures.vars
-    )]
 
 @visitor
 def _visit_unary_call(
@@ -2851,40 +2768,13 @@ def _visit_inplace_subscr(
     return [InplaceSubscr(dup.expr, dup.index, src, op.stmt)]
 
 @visitor
-def _visit_inplace_slice_nn(
+def _visit_inplace_slice(
     self,
     op: Inplace,
-    dup: DupSliceNN,
+    dup: DupSlice,
     src: Expr,
 ):
-    return [InplaceSliceNN(dup.expr, src, op.stmt)]
-
-@visitor
-def _visit_inplace_slice_en(
-    self,
-    op: Inplace,
-    dup: DupSliceEN,
-    src: Expr,
-):
-    return [InplaceSliceEN(dup.expr, dup.start, src, op.stmt)]
-
-@visitor
-def _visit_inplace_slice_ne(
-    self,
-    op: Inplace,
-    dup: DupSliceNE,
-    src: Expr,
-):
-    return [InplaceSliceNE(dup.expr, dup.end, src, op.stmt)]
-
-@visitor
-def _visit_inplace_slice_ee(
-    self,
-    op: Inplace,
-    dup: DupSliceEE,
-    src: Expr,
-):
-    return [InplaceSliceEE(dup.expr, dup.start, dup.end, src, op.stmt)]
+    return [InplaceSlice(dup.expr, dup.start, dup.end, src, op.stmt)]
 
 @visitor
 def _visit_load_attr_dup(
@@ -2906,44 +2796,17 @@ def _visit_load_subscr_dup(
     return [DupSubscr(a, b)]
 
 @visitor
-def _visit_slice_nn_dup(
-    self,
-    op: OpcodeSliceNN,
-    expr: Expr,
-    _: DupTop,
-):
-    return [DupSliceNN(expr)]
-
-@visitor
-def _visit_slice_en_dup(
-    self,
-    op: OpcodeSliceEN,
-    a: Expr,
-    b: Expr,
-    _dup: DupTwo,
-):
-    return [DupSliceEN(a, b)]
-
-@visitor
-def _visit_slice_ne_dup(
-    self,
-    op: OpcodeSliceNE,
-    a: Expr,
-    b: Expr,
-    _dup: DupTwo,
-):
-    return [DupSliceNE(a, b)]
-
-@visitor
 def _visit_slice_ee_dup(
     self,
-    op: OpcodeSliceEE,
-    a: Expr,
-    b: Expr,
-    c: Expr,
-    _dup: DupThree,
+    op: (OpcodeSliceNN, OpcodeSliceEN, OpcodeSliceNE, OpcodeSliceEE),
+    expr: Expr,
+    start: WantIfOp(Expr, (OpcodeSliceEN, OpcodeSliceEE)),
+    end: WantIfOp(Expr, (OpcodeSliceNE, OpcodeSliceEE)),
+    _dup1: WantIfOp(DupTop, OpcodeSliceNN),
+    _dup2: WantIfOp(DupTwo, (OpcodeSliceNE, OpcodeSliceEN)),
+    _dup3: WantIfOp(DupThree, OpcodeSliceEE),
 ):
-    return [DupSliceEE(a, b, c)]
+    return [DupSlice(expr, start, end)]
 
 @visitor
 def _visit_inplace_store_name(
@@ -2978,36 +2841,11 @@ def _visit_inplace_store_subscr(
 @visitor
 def _visit_inplace_store_slice_nn(
     self,
-    op: OpcodeStoreSliceNN,
-    inp: InplaceSliceNN,
-    _rot: RotTwo,
-):
-    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice2(None, None)), inp.src)]
-
-@visitor
-def _visit_inplace_store_slice_en(
-    self,
-    op: OpcodeStoreSliceEN,
-    inp: InplaceSliceEN,
-    _rot: RotThree,
-):
-    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice2(inp.start, None)), inp.src)]
-
-@visitor
-def _visit_inplace_store_slice_ne(
-    self,
-    op: OpcodeStoreSliceNE,
-    inp: InplaceSliceNE,
-    _rot: RotThree,
-):
-    return [inp.stmt(ExprSubscr(inp.expr, ExprSlice2(None, inp.end)), inp.src)]
-
-@visitor
-def _visit_inplace_store_slice_ee(
-    self,
-    op: OpcodeStoreSliceEE,
-    inp: InplaceSliceEE,
-    _rot: RotFour,
+    op: (OpcodeStoreSliceNN, OpcodeStoreSliceEN, OpcodeStoreSliceNE, OpcodeStoreSliceEE),
+    inp: InplaceSlice,
+    _rot2: WantIfOp(RotTwo, OpcodeStoreSliceNN),
+    _rot3: WantIfOp(RotThree, (OpcodeStoreSliceEN, OpcodeStoreSliceNE)),
+    _rot4: WantIfOp(RotFour, OpcodeStoreSliceEE),
 ):
     return [inp.stmt(ExprSubscr(inp.expr, ExprSlice2(inp.start, inp.end)), inp.src)]
 

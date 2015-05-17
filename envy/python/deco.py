@@ -242,14 +242,6 @@ class FinalExcept(namedtuple('FinalExcept', ['body', 'items', 'any'])):
     def __call__(self, else_):
         return StmtExcept(self.body, self.items, self.any, else_)
 
-# a special marker to put in stack want lists - will match getattr(opcode, attr)
-# expressions and pass a list
-Exprs = namedtuple('Exprs', ['attr', 'factor'])
-UglyClosures = object()
-Closures = object()
-MaybeWantFlow = object()
-LoopDammit = object()
-
 # regurgitables
 
 class Regurgitable: __slots__ = ()
@@ -281,6 +273,114 @@ def _maybe_want_pop(flag):
     else:
         return WantPop()
 
+# wantables
+
+class Wantable:
+    def __init__(self, name, bases, namespace):
+        self.__dict__.update(namespace)
+
+    def get(self, stack, pos, opcode, prev, next):
+        top = stack[pos-1] if pos else None
+        cnt = self.count(top, opcode, prev)
+        newpos = pos - cnt
+        if newpos < 0:
+            raise NoMatch
+        return self.parse(stack[newpos:pos], opcode), newpos
+
+
+class Exprs(Wantable):
+    __slots__ = 'attr', 'factor'
+    def __init__(self, attr, factor):
+        self.attr = attr
+        self.factor = factor
+
+    def count(self, top, opcode, prev):
+        return getattr(opcode, self.attr) * self.factor
+
+    def parse(self, res, opcode):
+        if not all(isinstance(x, Expr) for x in res):
+            raise NoMatch
+        if self.factor != 1:
+            res = list(zip(*[iter(res)] * self.factor))
+        return res
+
+
+class UglyClosures(metaclass=Wantable):
+    def count(top, opcode, prev):
+        assert prev
+        code = prev[-1]
+        assert isinstance(code, Code)
+        return len(code.freevars)
+
+    def parse(res, opcode):
+        if not all(isinstance(x, Closure) for x in res):
+            raise NoMatch
+        return [x.var for x in res]
+
+
+class Closures(metaclass=Wantable):
+    def count(top, opcode, prev):
+        return opcode.param
+
+    def parse(res, opcode):
+        if not all(isinstance(x, Closure) for x in res):
+            raise NoMatch
+        return res
+
+
+class MaybeWantFlow(metaclass=Wantable):
+    def count(top, opcode, prev):
+        if isinstance(top, WantFlow):
+            return 1
+        else:
+            return 0
+
+    def parse(res, opcode):
+        if res:
+            return res[0]
+        else:
+            return WantFlow([], [], [])
+
+
+class LoopDammit(metaclass=Wantable):
+    def get(stack, pos, opcode, prev, next):
+        for idx, item in enumerate(next):
+            if isinstance(item, SimpleWant) and item.cls is Loop:
+                break
+        else:
+            assert 0
+        orig = pos
+        pos -= 1
+        while pos >= 0 and not isinstance(stack[pos], Loop):
+            pos -= 1
+        if pos < 0:
+            raise NoMatch
+        pos += 1 + idx
+        return stack[pos:orig], pos
+
+    def parse(res, opcode):
+        pass
+        if looplen:
+            arg = stack[-looplen:]
+            del stack[-looplen:]
+        else:
+            arg = []
+
+
+class SimpleWant(Wantable):
+    def __init__(self, cls):
+        self.cls = cls
+
+    def count(self, top, opcode, prev):
+        return 1
+
+    def parse(self, res, opcode):
+        res, = res
+        if not isinstance(res, self.cls):
+            raise NoMatch
+        return res
+
+
 # visitors
 
 class NoMatch(Exception):
@@ -293,108 +393,29 @@ class _Visitor:
 
     def __init__(self, func, wanted, flag=None):
         self.func = func
-        self.wanted = wanted
+        self.wanted = [
+            x if isinstance(x, Wantable) else SimpleWant(x)
+            for x in reversed(wanted)
+        ]
         self.flag = flag
 
     def visit(self, opcode, deco):
         if not deco.version.match(self.flag):
             raise NoMatch
-        total = 0
-        closure_num = None
-        for want in self.wanted:
-            if isinstance(want, Exprs):
-                total += getattr(opcode, want.attr) * want.factor
-            elif want is Closures:
-                total += opcode.param
-            elif want is UglyClosures:
-                # fuck you.
-                if not deco.stack:
-                    raise NoMatch
-                code = deco.stack[-1]
-                if not isinstance(code, Code):
-                    raise NoMatch
-                closure_num = len(code.freevars)
-                total += closure_num
-            elif want is MaybeWantFlow:
-                if deco.stack and isinstance(deco.stack[-1], WantFlow):
-                    total += 1
-            elif want is LoopDammit:
-                looppos = len(self.wanted) - self.wanted.index(Loop) - 2
-                for idx in reversed(range(len(deco.stack))):
-                    if isinstance(deco.stack[idx], Loop):
-                        looplen = len(deco.stack) - idx - 1 - looppos
-                        total += looplen
-                        break
-                else:
-                    raise NoMatch
-            else:
-                total += 1
-        if len(deco.stack) < total:
-            raise NoMatch
-        if total:
-            stack = deco.stack[-total:]
-        else:
-            stack = []
-        args = []
-        for want in reversed(self.wanted):
-            if isinstance(want, Exprs):
-                num = getattr(opcode, want.attr)
-                arg = []
-                for _ in range(num):
-                    exprs = []
-                    for _ in range(want.factor):
-                        expr = stack.pop()
-                        if not isinstance(expr, Expr):
-                            raise NoMatch
-                        exprs.append(expr)
-                    exprs.reverse()
-                    arg.append(expr if want.factor == 1 else exprs)
-                arg.reverse()
-            elif want is Closures:
-                arg = []
-                for _ in range(opcode.param):
-                    expr = stack.pop()
-                    if not isinstance(expr, Closure):
-                        raise NoMatch
-                    arg.append(expr)
-                arg.reverse()
-            elif want is UglyClosures:
-                arg = []
-                for _ in range(closure_num):
-                    closure = stack.pop()
-                    if not isinstance(closure, Closure):
-                        raise NoMatch
-                    arg.append(closure.var)
-                arg.reverse()
-            elif want is MaybeWantFlow:
-                if deco.stack and isinstance(deco.stack[-1], WantFlow):
-                    arg = stack.pop()
-                    if not isinstance(arg, WantFlow):
-                        raise NoMatch
-                else:
-                    arg = WantFlow([], [], [])
-            elif want is LoopDammit:
-                if looplen:
-                    arg = stack[-looplen:]
-                    del stack[-looplen:]
-                else:
-                    arg = []
-            else:
-                arg = stack.pop()
-                if not isinstance(arg, want):
-                    raise NoMatch
-            args.append(arg)
-        args.reverse()
-        newstack = self.func(deco, opcode, *args)
+        pos = len(deco.stack)
+        prev = []
+        for idx, want in enumerate(self.wanted):
+            cur, pos = want.get(deco.stack, pos, opcode, prev, self.wanted[idx+1:])
+            prev.append(cur)
+        newstack = self.func(deco, opcode, *reversed(prev))
         if TRACE:
             print("\tVISIT {} [{} -> {}] {}".format(
-                ', '.join(type(x).__name__ for x in (deco.stack[:-total] if total else deco.stack)),
-                ', '.join(type(x).__name__ for x in (deco.stack[-total:] if total else [])),
+                ', '.join(type(x).__name__ for x in deco.stack[:pos]),
+                ', '.join(type(x).__name__ for x in deco.stack[pos:]),
                 ', '.join(type(x).__name__ for x in newstack),
                 type(opcode).__name__
             ))
-        if total:
-            deco.stack[-total:] = []
+        del deco.stack[pos:]
         return newstack
 
 def visitor(func):

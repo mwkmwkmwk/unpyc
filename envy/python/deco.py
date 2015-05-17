@@ -1920,20 +1920,8 @@ def _visit_pop_loop(
 # actual loops
 
 @visitor
-def _visit_cont_in(
-    self,
-    op: RevFlow,
-    loop: Loop,
-    block: Block,
-):
-    if block.stmts:
-        raise NoMatch
-    loop.flow.append(op.flow)
-    return [loop, block]
-
-@visitor
 def _visit_loop(self, op: RevFlow):
-    return [Loop([op.flow]), Block([])]
+    return [Loop(op.flow), Block([])]
 
 # continue
 
@@ -3390,12 +3378,15 @@ class DecoCtx:
         ops, inflow = self.preproc(code.ops)
         for op in ops:
             if hasattr(op, 'pos'):
+                rev = []
                 for flow in reversed(inflow[op.pos]):
                     if flow.dst > flow.src:
                         flow = FwdFlow(flow)
+                        self.process(flow)
                     else:
-                        flow = RevFlow(flow)
-                    self.process(flow)
+                        rev.append(flow)
+                if rev:
+                    self.process(RevFlow(rev))
             self.process(op)
         if len(self.stack) != 1:
             raise PythonError("stack non-empty at the end: {}".format(

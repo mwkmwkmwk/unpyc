@@ -381,6 +381,23 @@ class SimpleWant(Wantable):
         return res
 
 
+class WantIfOp(Wantable):
+    def __init__(self, cls, op):
+        self.cls = cls
+        self.op = op
+
+    def count(self, top, opcode, prev):
+        return 1 if isinstance(opcode, self.op) else 0
+
+    def parse(self, res, opcode):
+        if not res:
+            return None
+        res, = res
+        if not isinstance(res, self.cls):
+            raise NoMatch
+        return res
+
+
 # visitors
 
 class NoMatch(Exception):
@@ -418,16 +435,20 @@ class _Visitor:
         del deco.stack[pos:]
         return newstack
 
+def register_visitor(func, op, stack, flag):
+    if not isinstance(op, tuple):
+        op = op,
+    vis = _Visitor(func, stack, flag)
+    for op in op:
+        _VISITORS.setdefault(op, []).append(vis)
+
 def visitor(func):
     asp = inspect.getfullargspec(func)
     aself, aop, *astack = asp.args
     flag = asp.annotations.get(aself)
     stack = [asp.annotations[x] for x in astack]
     op = asp.annotations[aop]
-    if not isinstance(op, tuple):
-        op = op,
-    for op in op:
-        _VISITORS.setdefault(op, []).append(_Visitor(func, stack, flag))
+    register_visitor(func, op, stack, flag)
     return func
 
 def lsd_visitor(func):
@@ -449,9 +470,9 @@ def lsd_visitor(func):
         dst = func(self, op, *args)
         return [StmtDel(dst)]
 
-    _VISITORS.setdefault(lop, []).append(_Visitor(visit_lsd_load, stack, flag))
-    _VISITORS.setdefault(sop, []).append(_Visitor(visit_lsd_store, stack, flag))
-    _VISITORS.setdefault(dop, []).append(_Visitor(visit_lsd_delete, stack, flag))
+    register_visitor(visit_lsd_load, lop, stack, flag)
+    register_visitor(visit_lsd_store, sop, stack, flag)
+    register_visitor(visit_lsd_delete, dop, stack, flag)
     return func
 
 # visitors
@@ -676,71 +697,20 @@ def visit_binary_call(
 @visitor
 def visit_call_function(
     self,
-    op: OpcodeCallFunction,
+    op: (OpcodeCallFunction, OpcodeCallFunctionVar, OpcodeCallFunctionKw, OpcodeCallFunctionVarKw),
     fun: Expr,
     args: Exprs('args', 1),
     kwargs: Exprs('kwargs', 2),
-):
-    return [ExprCall(
-        fun,
-        CallArgs(
-            [CallArgPos(arg) for arg in args] +
-            [CallArgKw(arg, self.string(name)) for name, arg in kwargs]
-        )
-    )]
-
-@visitor
-def visit_call_function(
-    self,
-    op: OpcodeCallFunctionVar,
-    fun: Expr,
-    args: Exprs('args', 1),
-    kwargs: Exprs('kwargs', 2),
-    vararg: Expr,
+    vararg: WantIfOp(Expr, (OpcodeCallFunctionVar, OpcodeCallFunctionVarKw)),
+    varkw: WantIfOp(Expr, (OpcodeCallFunctionKw, OpcodeCallFunctionVarKw)),
 ):
     return [ExprCall(
         fun,
         CallArgs(
             [CallArgPos(arg) for arg in args] +
             [CallArgKw(arg, self.string(name)) for name, arg in kwargs] +
-            [CallArgVar(vararg)]
-        )
-    )]
-
-@visitor
-def visit_call_function(
-    self,
-    op: OpcodeCallFunctionKw,
-    fun: Expr,
-    args: Exprs('args', 1),
-    kwargs: Exprs('kwargs', 2),
-    varkw: Expr,
-):
-    return [ExprCall(
-        fun,
-        CallArgs(
-            [CallArgPos(arg) for arg in args] +
-            [CallArgKw(arg, self.string(name)) for name, arg in kwargs] +
-            [CallArgVarKw(varkw)]
-        )
-    )]
-
-@visitor
-def visit_call_function(
-    self,
-    op: OpcodeCallFunctionVarKw,
-    fun: Expr,
-    args: Exprs('args', 1),
-    kwargs: Exprs('kwargs', 2),
-    vararg: Expr,
-    varkw: Expr,
-):
-    return [ExprCall(
-        fun,
-        CallArgs(
-            [CallArgPos(arg) for arg in args] +
-            [CallArgKw(arg, self.string(name)) for name, arg in kwargs] +
-            [CallArgVar(vararg), CallArgVarKw(varkw)]
+            ([CallArgVar(vararg)] if vararg else []) +
+            ([CallArgVarKw(varkw)] if varkw else [])
         )
     )]
 
@@ -803,36 +773,20 @@ def visit_store_subscr(
 @lsd_visitor
 def visit_store_slice_nn(
     self,
-    op: (OpcodeSliceNN, OpcodeStoreSliceNN, OpcodeDeleteSliceNN),
+    op: (
+        (OpcodeSliceNN, OpcodeSliceEN, OpcodeSliceNE, OpcodeSliceEE),
+        (OpcodeStoreSliceNN, OpcodeStoreSliceEN, OpcodeStoreSliceNE, OpcodeStoreSliceEE),
+        (OpcodeDeleteSliceNN, OpcodeDeleteSliceEN, OpcodeDeleteSliceNE, OpcodeDeleteSliceEE),
+    ),
     expr: Expr,
-):
-    return ExprSubscr(expr, ExprSlice2(None, None))
-
-@lsd_visitor
-def visit_store_slice_en(
-    self,
-    op: (OpcodeSliceEN, OpcodeStoreSliceEN, OpcodeDeleteSliceEN),
-    expr: Expr,
-    start: Expr,
-):
-    return ExprSubscr(expr, ExprSlice2(start, None))
-
-@lsd_visitor
-def visit_store_slice_ne(
-    self,
-    op: (OpcodeSliceNE, OpcodeStoreSliceNE, OpcodeDeleteSliceNE),
-    expr: Expr,
-    end: Expr
-):
-    return ExprSubscr(expr, ExprSlice2(None, end))
-
-@lsd_visitor
-def visit_store_slice_ee(
-    self,
-    op: (OpcodeSliceEE, OpcodeStoreSliceEE, OpcodeDeleteSliceEE),
-    expr: Expr,
-    start: Expr,
-    end: Expr,
+    start: WantIfOp(Expr, (
+        OpcodeSliceEN, OpcodeStoreSliceEN, OpcodeDeleteSliceEN,
+        OpcodeSliceEE, OpcodeStoreSliceEE, OpcodeDeleteSliceEE,
+    )),
+    end: WantIfOp(Expr, (
+        OpcodeSliceNE, OpcodeStoreSliceNE, OpcodeDeleteSliceNE,
+        OpcodeSliceEE, OpcodeStoreSliceEE, OpcodeDeleteSliceEE,
+    )),
 ):
     return ExprSubscr(expr, ExprSlice2(start, end))
 

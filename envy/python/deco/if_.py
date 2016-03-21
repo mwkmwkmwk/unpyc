@@ -221,6 +221,34 @@ def _visit_ifexpr_true(self, op: JumpSkipJunk, expr: Expr):
     ]
 
 @visitor
+def _visit_if_and(
+    self,
+    op: FwdFlow,
+    start: IfStart,
+    block: Block,
+    want: WantFlow,
+):
+    if len(block.stmts) != 1:
+        raise NoMatch
+    if not start.pop:
+        raise NoMatch
+    stmt = block.stmts[0]
+    if not isinstance(stmt, StmtIfRaw):
+        raise NoMatch
+    if stmt.else_.stmts:
+        raise NoMatch
+    if start.neg:
+        expr = ExprBoolOr(start.expr, stmt.cond)
+    else:
+        expr = ExprBoolAnd(start.expr, stmt.cond)
+    return [
+        FinalElse(want.any + want.true + want.false, FinalIf(expr, stmt.body)),
+        Block([]),
+        WantFlow(start.flow, [], []),
+        op,
+    ]
+
+@visitor
 def _visit_dead_if(
     self,
     op: FwdFlow,

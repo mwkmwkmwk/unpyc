@@ -383,6 +383,8 @@ TESTS_27.update({
     'opt/logic': '27',
     'expr/logic_const': '27',
     'stmt/while_const': '27',
+    'stmt/if_logic_const': '27',
+    'opt/if_and': '27',
 })
 
 TESTS_30 = TESTS_26.copy()

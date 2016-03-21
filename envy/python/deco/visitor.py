@@ -2,7 +2,7 @@ import inspect
 
 from ..stmt import *
 
-from . import TRACE
+from .. import deco as top
 from .want import *
 from .stack import *
 
@@ -30,7 +30,7 @@ class _Visitor:
             cur, pos = want.get(deco.stack, pos, opcode, prev, self.wanted[idx+1:])
             prev.append(cur)
         newstack = self.func(deco, opcode, *reversed(prev))
-        if TRACE:
+        if top.TRACE:
             print("\tVISIT {} [{} -> {}] {}".format(
                 ', '.join(type(x).__name__ for x in deco.stack[:pos]),
                 ', '.join(type(x).__name__ for x in deco.stack[pos:]),

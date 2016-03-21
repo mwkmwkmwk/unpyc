@@ -1,6 +1,6 @@
 from ..helpers import PythonError
 
-from . import TRACE
+from .. import deco as top
 
 from ..stmt import *
 from ..expr import *
@@ -19,7 +19,7 @@ class DecoCtx:
             self.varnames = code.varnames
         else:
             self.varnames = None
-        if TRACE:
+        if top.TRACE:
             print("START {} {}".format(code.name, code.firstlineno))
         ops, inflow = self.preproc(code.ops)
         for op in ops:
@@ -143,7 +143,7 @@ class DecoCtx:
                         else:
                             self.stack.append(item)
                     return
-        if TRACE:
+        if top.TRACE:
             for x in self.stack:
                 print(x)
             print(op)
